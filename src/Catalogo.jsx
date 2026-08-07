@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react';
 import { supabase } from './supabaseClient';
+import { useEmpresaInfo } from './utils/useEmpresa';
 
-export default function GestorCompras({ onCompraRegistrada }) {
+export default function Gestalo() {
+  const { id: empresaId, nombre: nombreEmpresa } = useEmpresaInfo();
   const [compras, setCompras] = useState([]);
   const [mostrarFormulario, setMostrarFormulario] = useState(false);
   
@@ -21,16 +23,18 @@ export default function GestorCompras({ onCompraRegistrada }) {
   }, []);
 
   const cargarCatalogo = async () => {
-    const { data } = await supabase.from('productos').select('*').order('nombre');
+    if (!empresaId) return;
+    const { data } = await supabase.from('productos').select('*').eq('empresa_id', empresaId).order('nombre');
     if (data) setProductos(data);
   };
 
   const cargarTodasLasCompras = async () => {
-    // Ahora traemos TODAS las compras, no solo las pendientes
-    const { data, error } = await supabase
+    let query = supabase
       .from('compras')
       .select('*')
       .order('fecha', { ascending: false });
+    if (empresaId) query = query.eq('empresa_id', empresaId);
+    const { data, error } = await query;
     if (!error && data) setCompras(data);
   };
 
@@ -53,13 +57,14 @@ export default function GestorCompras({ onCompraRegistrada }) {
     const saldo = estadoPago === 'pagado' ? 0 : totalCalculado;
 
     const { error } = await supabase.from('compras').insert([{
+      empresa_id: empresaId,
       proveedor_nombre: proveedor, nro_factura: nroFactura,
       total: totalCalculado, saldo_pendiente: saldo, estado: estadoPago
     }]);
 
     if (!error) {
       for (const item of itemsCompra) {
-        await supabase.from('productos').update({ stock_actual: item.stock_actual + item.cantidad }).eq('id', item.id);
+        await supabase.from('productos').update({ stock_actual: item.stock_actual + item.cantidad }).eq('id', item.id).eq('empresa_id', empresaId);
       }
       alert('Compra registrada');
       setMostrarFormulario(false);
@@ -86,7 +91,7 @@ export default function GestorCompras({ onCompraRegistrada }) {
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4 text-sm">
           <div>
             <label className="block text-gray-500 font-bold mb-1">Ubicación de la empresa:</label>
-            <select className="w-full border rounded p-1"><option>G.D.A - Repuestos y Servicios</option></select>
+            <select className="w-full border rounded p-1"><option>{nombreEmpresa}</option></select>
           </div>
           <div>
             <label className="block text-gray-500 font-bold mb-1">Proveedor:</label>
@@ -180,7 +185,7 @@ export default function GestorCompras({ onCompraRegistrada }) {
                           </td>
                           <td className="p-3">{new Date(compra.fecha).toLocaleDateString('es-PY')}</td>
                           <td className="p-3">{compra.nro_factura || `PO2026/00${compra.id}`}</td>
-                          <td className="p-3">G.D.A - Repuestos y Servicios</td>
+                          <td className="p-3">{nombreEmpresa}</td>
                           <td className="p-3 font-medium">{compra.proveedor_nombre}</td>
                           <td className="p-3">
                             <span className="bg-[#85c850] text-white px-2 py-1 rounded-sm text-[11px] font-bold">Recibido</span>
@@ -192,7 +197,7 @@ export default function GestorCompras({ onCompraRegistrada }) {
                           <td className="p-3 text-center text-red-600 font-bold">
                             {compra.saldo_pendiente > 0 ? `Compra: ${Number(compra.saldo_pendiente).toLocaleString('es-PY')} Gs` : '-'}
                           </td>
-                          <td className="p-3">GDA Repuesto</td>
+                          <td className="p-3">{nombreEmpresa}</td>
                         </tr>
                       );
                     })

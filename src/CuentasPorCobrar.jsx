@@ -1,18 +1,22 @@
 import { useEffect, useState } from 'react';
 import { supabase } from './supabaseClient';
+import { useEmpresaInfo } from './utils/useEmpresa';
 
 export default function CuentasPorCobrar() {
+  const { id: empresaId } = useEmpresaInfo();
   const [deudas, setDeudas] = useState([]);
   const [montoPago, setMontoPago] = useState({}); // Para guardar lo que se escribe en cada fila
 
   useEffect(() => {
-    cargarDeudas();
-  }, []);
+    if (empresaId) cargarDeudas();
+  }, [empresaId]);
 
   const cargarDeudas = async () => {
+    if (!empresaId) return;
     const { data, error } = await supabase
       .from('ventas')
       .select('*')
+      .eq('empresa_id', empresaId)
       .eq('estado', 'pendiente')
       .order('fecha', { ascending: false });
 
@@ -41,7 +45,8 @@ export default function CuentasPorCobrar() {
         saldo_pendiente: saldoFinal, 
         estado: nuevoEstado 
       })
-      .eq('id', venta.id);
+      .eq('id', venta.id)
+      .eq('empresa_id', empresaId);
 
     if (error) {
       alert('Error al registrar el pago: ' + error.message);

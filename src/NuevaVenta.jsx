@@ -1,7 +1,9 @@
 import { useState } from 'react';
 import { supabase } from './supabaseClient';
+import { useEmpresaInfo } from './utils/useEmpresa';
 
 export default function NuevaVenta({ onVentaCreada }) {
+  const { id: empresaId } = useEmpresaInfo();
   const [cliente, setCliente] = useState('');
   const [monto, setMonto] = useState('');
 
@@ -10,6 +12,7 @@ export default function NuevaVenta({ onVentaCreada }) {
     const { data, error } = await supabase
       .from('ventas')
       .insert([{ 
+        empresa_id: empresaId,
         cliente_nombre: cliente, 
         total: parseFloat(monto),
         saldo_pendiente: parseFloat(monto)

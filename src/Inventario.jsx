@@ -1,17 +1,21 @@
 import { useEffect, useState } from 'react';
 import { supabase } from './supabaseClient';
+import { useEmpresaInfo } from './utils/useEmpresa';
 
 export default function Inventario() {
+  const { id: empresaId } = useEmpresaInfo();
   const [productos, setProductos] = useState([]);
 
   useEffect(() => {
-    cargarInventario();
-  }, []);
+    if (empresaId) cargarInventario();
+  }, [empresaId]);
 
   const cargarInventario = async () => {
+    if (!empresaId) return;
     const { data, error } = await supabase
       .from('productos')
       .select('*')
+      .eq('empresa_id', empresaId)
       .order('nombre', { ascending: true }); // Ordena alfabéticamente
 
     if (error) {

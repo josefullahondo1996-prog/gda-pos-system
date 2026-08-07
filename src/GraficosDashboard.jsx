@@ -1,19 +1,23 @@
 import { useEffect, useState } from 'react';
 import { supabase } from './supabaseClient';
+import { useEmpresaInfo } from './utils/useEmpresa';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 
 export default function GraficosDashboard() {
+  const { id: empresaId } = useEmpresaInfo();
   const [datosVentas, setDatosVentas] = useState([]);
 
   useEffect(() => {
-    cargarDatosGrafico();
-  }, []);
+    if (empresaId) cargarDatosGrafico();
+  }, [empresaId]);
 
   const cargarDatosGrafico = async () => {
+    if (!empresaId) return;
     // Traemos las ventas reales de Supabase
     const { data, error } = await supabase
       .from('ventas')
       .select('fecha, total')
+      .eq('empresa_id', empresaId)
       .order('fecha', { ascending: true });
 
     if (!error && data) {

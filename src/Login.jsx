@@ -1,66 +1,134 @@
-import { useState } from 'react';
-import { supabase } from './supabaseClient';
+import React, { useState } from 'react';
+import { supabase } from './supabaseClient'; // Asegurate de que la ruta a tu cliente de Supabase sea la correcta
+import LogoPyPos from './LogoPyPos';
 
-function Login() {
+const Login = ({ setSession, onCrearNegocio, errorExterno }) => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [rememberMe, setRememberMe] = useState(false);
+  const [error, setError] = useState(null);
   const [loading, setLoading] = useState(false);
-  const [message, setMessage] = useState('');
+
+  const mensajeError = error || errorExterno;
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
-    setMessage('');
+    setError(null);
 
-    const { error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
+    // Autenticación real contra la base de datos
+    const { data, error } = await supabase.auth.signInWithPassword({
+      email: email,
+      password: password,
     });
 
     if (error) {
-      setMessage(error.message);
+      setError('Correo o contraseña incorrectos. Por favor, verificá tus datos.');
+      setLoading(false);
     } else {
-      setMessage('Inicio de sesión correcto');
+      // Si la autenticación es exitosa, actualizamos el estado de sesión
+      if (data?.session) {
+        setSession(data.session);
+      }
+      setLoading(false);
     }
-
-    setLoading(false);
   };
 
   return (
-    <div style={{ maxWidth: '400px', margin: '80px auto', padding: '24px', borderRadius: '12px', boxShadow: '0 4px 16px rgba(0,0,0,0.1)', fontFamily: 'Arial, sans-serif' }}>
-      <h2 style={{ marginBottom: '16px' }}>Iniciar sesión</h2>
-      <form onSubmit={handleSubmit}>
-        <div style={{ marginBottom: '12px' }}>
-          <label>Email</label>
-          <input
-            type="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            required
-            style={{ display: 'block', width: '100%', padding: '8px', marginTop: '4px' }}
-          />
+    <div className="min-h-screen bg-gray-50 flex flex-col justify-center items-center p-4">
+      <div className="bg-white p-8 rounded-2xl shadow-lg w-full max-w-md text-center border border-gray-100">
+        
+        <div className="flex justify-center items-center mb-6">
+          <LogoPyPos size={52} />
         </div>
-        <div style={{ marginBottom: '12px' }}>
-          <label>Contraseña</label>
-          <input
-            type="password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            required
-            style={{ display: 'block', width: '100%', padding: '8px', marginTop: '4px' }}
-          />
-        </div>
-        <button
-          type="submit"
-          disabled={loading}
-          style={{ width: '100%', padding: '10px', background: '#2563eb', color: 'white', border: 'none', borderRadius: '8px', cursor: loading ? 'wait' : 'pointer' }}
-        >
-          {loading ? 'Ingresando...' : 'Entrar'}
-        </button>
-      </form>
-      {message && <p style={{ marginTop: '12px', color: message.includes('correcto') ? 'green' : 'crimson' }}>{message}</p>}
+
+        <h2 className="text-2xl font-bold text-gray-800 mb-1">Iniciar sesión</h2>
+        <p className="text-sm text-gray-400 mb-6">PYpos</p>
+
+        {/* Muestra errores de inicio de sesión si los hay */}
+        {mensajeError && (
+          <div className="mb-4 p-3 bg-red-100 text-red-700 text-sm rounded-lg text-left">
+            {mensajeError}
+            {errorExterno && !error && (
+              <>
+                {' '}
+                <button type="button" onClick={onCrearNegocio} className="font-bold underline hover:no-underline">
+                  Creá tu cuenta acá.
+                </button>
+              </>
+            )}
+          </div>
+        )}
+
+        <form onSubmit={handleSubmit} className="space-y-4 text-left">
+          <div className="relative">
+            <span className="absolute inset-y-0 left-0 flex items-center pl-3 text-gray-400">
+              <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+              </svg>
+            </span>
+            <input
+              type="email"
+              placeholder="Correo electrónico *"
+              required
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              className="w-full pl-10 pr-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-orange-500 focus:bg-white transition-all text-sm"
+            />
+          </div>
+
+          <div className="relative">
+            <span className="absolute inset-y-0 left-0 flex items-center pl-3 text-gray-400">
+              <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+              </svg>
+            </span>
+            <input
+              type="password"
+              placeholder="Contraseña *"
+              required
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              className="w-full pl-10 pr-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-orange-500 focus:bg-white transition-all text-sm"
+            />
+          </div>
+
+          <div className="flex items-center justify-between text-xs pt-1">
+            <label className="flex items-center gap-2 text-gray-600 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={rememberMe}
+                onChange={(e) => setRememberMe(e.target.checked)}
+                className="rounded border-gray-300 text-orange-500 focus:ring-orange-500 w-4 h-4"
+              />
+              Recuérdame
+            </label>
+            <a href="#recuperar" className="text-orange-500 hover:underline font-medium">
+              ¿Olvidaste tu contraseña?
+            </a>
+          </div>
+
+          <button
+            type="submit"
+            disabled={loading}
+            className={`w-full py-3 text-white font-bold rounded-xl shadow-md transition-colors uppercase tracking-wider text-sm mt-4 ${
+              loading ? 'bg-gray-400 cursor-not-allowed' : 'bg-orange-500 hover:bg-orange-600'
+            }`}
+          >
+            {loading ? 'Validando...' : 'INICIAR SESIÓN'}
+          </button>
+        </form>
+
+        {onCrearNegocio && (
+          <button onClick={onCrearNegocio} className="text-xs text-orange-500 hover:underline mt-6 font-medium">
+            ¿Sos un negocio nuevo? Creá tu cuenta
+          </button>
+        )}
+
+        <p className="text-xs text-gray-400 mt-8">© 2026 PYpos</p>
+      </div>
     </div>
   );
-}
+};
 
 export default Login;

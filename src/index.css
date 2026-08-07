@@ -9,3 +9,43 @@ body {
   min-height: 100vh;
   background: #f8fafc;
 }
+
+/* ============================================================
+   EFECTO "DINÁMICO" AL PASAR EL MOUSE — GLOBAL PARA TODA LA APP
+   No hace falta tocar ningún componente .jsx: esto se aplica
+   solo a cualquier botón, tarjeta o fila que ya exista o que
+   agregues después.
+   ============================================================ */
+
+/* Todos los botones (menos los deshabilitados) se "levantan" un poco */
+button:not(:disabled) {
+  transition: transform 0.15s ease, filter 0.15s ease, box-shadow 0.15s ease;
+}
+button:not(:disabled):hover {
+  filter: brightness(1.07);
+  transform: translateY(-1px);
+}
+button:not(:disabled):active {
+  transform: translateY(0) scale(0.97);
+}
+
+/* Todo lo que ya marcás como clickeable (tarjetas, checkboxes, filas) */
+.cursor-pointer {
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+.cursor-pointer:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 14px rgba(0, 0, 0, 0.08);
+}
+
+/* Filas de tablas: resaltado suave */
+table tbody tr {
+  transition: background-color 0.15s ease;
+}
+
+/* Inputs/selects: foco más suave */
+input,
+select,
+textarea {
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}

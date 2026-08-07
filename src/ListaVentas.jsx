@@ -1,21 +1,29 @@
 import { useEffect, useState } from 'react';
 import { supabase } from './supabaseClient';
+import { useEmpresaInfo } from './utils/useEmpresa';
 import { generateReceipt } from './utils/generateReceipt';
 
 export default function ListaVentas() {
+  const { id: empresaId, nombre: nombreEmpresa, direccion: direccionEmpresa, telefono: telefonoEmpresa, ruc: rucEmpresa } = useEmpresaInfo();
   const [ventas, setVentas] = useState([]);
 
   // useEffect hace que la función obtenerVentas se ejecute apenas carga la pantalla
   useEffect(() => {
-    obtenerVentas();
-  }, []);
+    if (empresaId) obtenerVentas();
+  }, [empresaId]);
 
   const obtenerVentas = async () => {
-    const { data, error } = await supabase
+    if (!empresaId) {
+      setVentas([]);
+      return;
+    }
+    const query = supabase
       .from('ventas')
       .select('*')
+      .eq('empresa_id', empresaId)
       .order('fecha', { ascending: false }) // Las más nuevas primero
       .limit(10); // Mostrar solo las últimas 10 para no saturar
+    const { data, error } = await query;
 
     if (error) {
       console.error('Error al cargar ventas:', error.message);
@@ -69,7 +77,7 @@ export default function ListaVentas() {
                   </td>
                   <td className="py-3">
                     <button 
-                      onClick={() => generateReceipt(venta)}
+                      onClick={() => generateReceipt(venta, { nombre: nombreEmpresa, direccion: direccionEmpresa, telefono: telefonoEmpresa, ruc: rucEmpresa })}
                       className="bg-blue-50 text-[#004284] border border-blue-200 px-3 py-1 rounded text-xs font-bold hover:bg-blue-100 flex items-center gap-1 transition"
                     >
                       🖨️ Imprimir
