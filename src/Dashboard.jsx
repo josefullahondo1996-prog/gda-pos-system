@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { supabase } from './supabaseClient';
 import { useNotificacion } from './NotificacionContext';
 import {
@@ -10,7 +10,7 @@ import {
 import ConfiguracionEmpresa from './ConfiguracionEmpresa';
 import OT from './OT';
 import UbicacionesComerciales from './UbicacionesComerciales';
-import TodasLasVentas from './TodasLasVentas';
+import ListaVentas from './ListaVentas';
 
 // 1. IMPORTACIÓN DE TODOS LOS MÓDULOS DEL ERP
 import Inicio from './Inicio';
@@ -53,6 +53,8 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
   const soloPOS = !esAdmin && !!permisosRol?.ventas_pos?.['Solo Punto de Venta (bloquea todo lo demás)'];
 
   // Estados de navegación y control de caja
+  const location = useLocation();
+  const navigate = useNavigate();
   const [vistaActiva, setVistaActiva] = useState(soloPOS ? 'pos' : initialView);
   const [menuExpandido, setMenuExpandido] = useState('ventas');
   const [cajaActual, setCajaActual] = useState(null);
@@ -61,9 +63,10 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
   const [refreshKey, setRefreshKey] = useState(0);
 
   // Navega a cualquier vista y fuerza que se recargue de cero, incluso si ya estabas ahí
-  const irA = (vista) => {
+  const irA = (vista, pathname) => {
     setVistaActiva(vista);
     setRefreshKey((k) => k + 1);
+    if (pathname) navigate(pathname, { replace: true });
   };
   const [sidebarColapsado, setSidebarColapsado] = useState(false);
 
@@ -91,6 +94,66 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
     else setMenuExpandido(menu);
   };
 
+  useEffect(() => {
+    const path = location.pathname.toLowerCase();
+    if (soloPOS) {
+      setVistaActiva('pos');
+      return;
+    }
+
+    switch (path) {
+      case '/':
+        setVistaActiva('inicio');
+        break;
+      case '/ot':
+        setVistaActiva('ot');
+        break;
+      case '/configuracion':
+      case '/config_empresa':
+        setVistaActiva('config_empresa');
+        break;
+      case '/ubicaciones':
+      case '/ubicaciones_comerciales':
+        setVistaActiva('ubicaciones_comerciales');
+        break;
+      case '/ventas':
+      case '/todas_ventas':
+        setVistaActiva('todas_ventas');
+        break;
+      case '/pos':
+      case '/punto-venta':
+        setVistaActiva('pos');
+        break;
+      case '/compras':
+        setVistaActiva('compras');
+        break;
+      case '/compras/agregar':
+      case '/agregar_compra':
+        setVistaActiva('agregar_compra');
+        break;
+      case '/clientes':
+        setVistaActiva('clientes');
+        break;
+      case '/proveedores':
+        setVistaActiva('proveedores');
+        break;
+      case '/cobros':
+        setVistaActiva('cobros');
+        break;
+      case '/caja_registradora':
+      case '/caja-registradora':
+        setVistaActiva('caja_registradora');
+        break;
+      case '/ganancias_perdidas':
+      case '/ganancias-perdidas':
+        setVistaActiva('ganancias_perdidas');
+        break;
+      default:
+        setVistaActiva(initialView);
+        break;
+    }
+  }, [location.pathname, initialView, soloPOS]);
+
   // 2. ENRUTADOR DE VISTAS (Aquí se decide qué se dibuja a la derecha)
   const renderizarVista = () => {
     switch (vistaActiva) {
@@ -107,7 +170,7 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
         return <UbicacionesComerciales />;
 
       case 'todas_ventas':
-        return <TodasLasVentas onNuevaVenta={() => setVistaActiva('pos')} />;
+        return <ListaVentas />;
 
       case 'pos':
         // Validación exclusiva: Si la caja está cerrada, obliga a abrirla antes del POS
@@ -288,7 +351,7 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
               <Link
                 to="/proveedores"
                 onClick={() => {
-                  irA('proveedores');
+                  irA('proveedores', '/proveedores');
                   setMenuExpandido(null);
                 }}
                 className={estiloSubItem('proveedores')}

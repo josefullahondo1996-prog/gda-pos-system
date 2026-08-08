@@ -13,7 +13,7 @@ export default function NuevaVenta({ onVentaCreada }) {
       .from('ventas')
       .insert([{ 
         empresa_id: empresaId,
-        cliente_nombre: cliente, 
+        cliente: cliente,
         total: parseFloat(monto),
         saldo_pendiente: parseFloat(monto)
       }]);

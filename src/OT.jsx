@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+﻿import { useEffect, useMemo, useState } from 'react';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { supabase } from './supabaseClient';
@@ -34,7 +34,6 @@ export default function OT({ perfilUsuario }) {
 
   const [subTab, setSubTab] = useState('lista');
 
-  // Datos compartidos entre pestañas
   const [ordenes, setOrdenes] = useState([]);
   const [clientes, setClientes] = useState([]);
   const [ubicaciones, setUbicaciones] = useState([]);
@@ -469,7 +468,7 @@ function AgregarHojaDeTrabajo({ clientes, ubicaciones, marcasVehiculo, categoria
         {!clienteId && (
           <div>
             <label className="text-xs text-gray-500">Nombre del cliente ocasional</label>
-            <input value={clienteNombreLibre} onChange={(e) => setClienteNombreLibre(e.target.value)} placeholder="Ej: CLIENTE OCACIONAL" className="w-full border border-gray-300 rounded p-2 text-sm mt-1" />
+            <input value={clienteNombreLibre} onChange={(e) => setClienteNombreLibre(e.target.value)} placeholder="Ej: CLIENTE OCASIONAL" className="w-full border border-gray-300 rounded p-2 text-sm mt-1" />
           </div>
         )}
         <div>
@@ -556,12 +555,13 @@ function ListarFacturas({ facturas, ordenes, nombreDelNegocio, notificar, confir
 }
 
 // ============================================================================
-// AGREGAR FACTURA
+// AGREGAR FACTURA (Con impacto en Ventas Generales)
 // ============================================================================
 function AgregarFactura({ ordenes, empresaId, notificar, onGuardado }) {
   const [otId, setOtId] = useState('');
   const [numeroFactura, setNumeroFactura] = useState('');
   const [monto, setMonto] = useState('');
+  const [metodoPago, setMetodoPago] = useState('Efectivo');
   const [notas, setNotas] = useState('');
   const [guardando, setGuardando] = useState(false);
 
@@ -569,27 +569,50 @@ function AgregarFactura({ ordenes, empresaId, notificar, onGuardado }) {
     e.preventDefault();
     if (!numeroFactura.trim()) return notificar.info('Ingresá el número de factura.');
     setGuardando(true);
+    
     try {
       const orden = ordenes.find((o) => String(o.id) === String(otId));
-      const { error } = await supabase.from('ot_facturas').insert([{
+      const montoNum = Number(monto) || 0;
+
+      // 1. Guardar en ot_facturas
+      const { error: errorFactura } = await supabase.from('ot_facturas').insert([{
         empresa_id: empresaId,
         ot_id: otId || null,
         numero_factura: numeroFactura,
         cliente_nombre: orden?.cliente_nombre || null,
-        monto: Number(monto) || 0,
+        monto: montoNum,
         notas,
       }]);
-      if (error) throw error;
+      if (errorFactura) throw errorFactura;
 
+      // 2. Guardar en la tabla general de VENTAS
+      const { error: errorVenta } = await supabase.from('ventas').insert([{
+        empresa_id: empresaId,
+        cliente: orden?.cliente_nombre || 'Cliente Ocasional',
+        total: montoNum,
+        metodo_pago: metodoPago,
+        estado_pago: 'Pagado',
+        monto_pagado: montoNum,
+        saldo_pendiente: 0,
+        articulos: 1,
+        nota_venta: `Factura de Taller N° ${numeroFactura} - OT N° ${orden?.numero_ot || 'S/N'}`,
+        fecha: new Date().toISOString()
+      }]);
+      if (errorVenta) throw errorVenta;
+
+      // 3. Actualizar la orden de trabajo con el número de factura
       if (otId) {
-        await supabase.from('ordenes_trabajo').update({ factura_numero: numeroFactura }).eq('id', otId).eq('empresa_id', empresaId);
+        await supabase.from('ordenes_trabajo')
+          .update({ factura_numero: numeroFactura })
+          .eq('id', otId)
+          .eq('empresa_id', empresaId);
       }
 
-      notificar.exito('Factura registrada con éxito.');
-      setOtId(''); setNumeroFactura(''); setMonto(''); setNotas('');
+      notificar.exito('Factura registrada y añadida a las ventas con éxito.');
+      setOtId(''); setNumeroFactura(''); setMonto(''); setNotas(''); setMetodoPago('Efectivo');
       onGuardado();
     } catch (err) {
-      notificar.error('Error al guardar la factura: ' + err.message);
+      notificar.error('Error al guardar: ' + err.message);
     } finally {
       setGuardando(false);
     }
@@ -598,26 +621,42 @@ function AgregarFactura({ ordenes, empresaId, notificar, onGuardado }) {
   return (
     <form onSubmit={guardar} className="bg-white border border-gray-200 rounded-xl p-5 max-w-xl space-y-4">
       <div>
-        <label className="text-xs text-gray-500">Orden de trabajo relacionada</label>
+        <label className="text-xs font-semibold text-gray-500">Orden de trabajo relacionada</label>
         <select value={otId} onChange={(e) => setOtId(e.target.value)} className="w-full border border-gray-300 rounded p-2 text-sm mt-1">
           <option value="">Sin relacionar</option>
           {ordenes.map((o) => <option key={o.id} value={o.id}>{o.numero_ot} — {o.cliente_nombre}</option>)}
         </select>
       </div>
-      <div>
-        <label className="text-xs text-gray-500">Número de factura</label>
-        <input value={numeroFactura} onChange={(e) => setNumeroFactura(e.target.value)} className="w-full border border-gray-300 rounded p-2 text-sm mt-1" />
+      
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div>
+          <label className="text-xs font-semibold text-gray-500">Número de factura</label>
+          <input value={numeroFactura} onChange={(e) => setNumeroFactura(e.target.value)} className="w-full border border-gray-300 rounded p-2 text-sm mt-1" required />
+        </div>
+        <div>
+          <label className="text-xs font-semibold text-gray-500">Monto total a cobrar (Gs)</label>
+          <input type="number" value={monto} onChange={(e) => setMonto(e.target.value)} className="w-full border border-gray-300 rounded p-2 text-sm mt-1" required />
+        </div>
       </div>
+
       <div>
-        <label className="text-xs text-gray-500">Monto</label>
-        <input type="number" value={monto} onChange={(e) => setMonto(e.target.value)} className="w-full border border-gray-300 rounded p-2 text-sm mt-1" />
+        <label className="text-xs font-semibold text-gray-500">Método de pago</label>
+        <select value={metodoPago} onChange={(e) => setMetodoPago(e.target.value)} className="w-full border border-gray-300 rounded p-2 text-sm mt-1">
+          <option value="Efectivo">Efectivo</option>
+          <option value="Tarjeta de Crédito">Tarjeta de Crédito</option>
+          <option value="Tarjeta de Débito">Tarjeta de Débito</option>
+          <option value="Transferencia Bancaria">Transferencia Bancaria</option>
+          <option value="QR">Pago con QR</option>
+        </select>
       </div>
+
       <div>
-        <label className="text-xs text-gray-500">Notas</label>
-        <textarea value={notas} onChange={(e) => setNotas(e.target.value)} rows={3} className="w-full border border-gray-300 rounded p-2 text-sm mt-1" />
+        <label className="text-xs font-semibold text-gray-500">Notas adicionales</label>
+        <textarea value={notas} onChange={(e) => setNotas(e.target.value)} rows={2} className="w-full border border-gray-300 rounded p-2 text-sm mt-1" />
       </div>
-      <button disabled={guardando} type="submit" className="bg-orange-500 hover:bg-orange-600 disabled:opacity-50 text-white font-bold px-6 py-2.5 rounded-lg text-sm">
-        {guardando ? 'Guardando...' : 'Registrar factura'}
+
+      <button disabled={guardando} type="submit" className="bg-orange-500 hover:bg-orange-600 disabled:opacity-50 text-white font-bold px-6 py-3 rounded-lg text-sm w-full transition-colors mt-2">
+        {guardando ? 'Guardando y registrando...' : 'Registrar Factura y Cobrar'}
       </button>
     </form>
   );
