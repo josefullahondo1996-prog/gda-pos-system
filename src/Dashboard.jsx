@@ -11,6 +11,7 @@ import ConfiguracionEmpresa from './ConfiguracionEmpresa';
 import OT from './OT';
 import UbicacionesComerciales from './UbicacionesComerciales';
 import ListaVentas from './ListaVentas';
+import TodasLasVentas from './TodasLasVentas';
 
 // 1. IMPORTACIÓN DE TODOS LOS MÓDULOS DEL ERP
 import Inicio from './Inicio';
@@ -170,7 +171,7 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
         return <UbicacionesComerciales />;
 
       case 'todas_ventas':
-        return <ListaVentas />;
+        return <TodasLasVentas />;
 
       case 'pos':
         // Validación exclusiva: Si la caja está cerrada, obliga a abrirla antes del POS

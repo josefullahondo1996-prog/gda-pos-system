@@ -142,7 +142,7 @@ export default function Categorias() {
 
   const exportarCSV = () => {
     const filas = [columnasExport.map((c) => c.label).join(',')];
-    filtradas.forEach((c) => filas.push(columnasExport.map((col) => `"${String(('--'.repeat(c.nivel)) + (col.key === 'nombre' ? c[col.key] : c[col.key]) ?? '').replace(/"/g, '""')}"`).join(',')));
+    filtradas.forEach((c) => filas.push(columnasExport.map((col) => `"${String(col.key === 'nombre' ? '--'.repeat(c.nivel) + (c.nombre ?? '') : (c[col.key] ?? '')).replace(/"/g, '""')}"`).join(',')));
     descargarArchivo(filas.join('\n'), 'categorias.csv', 'text/csv;charset=utf-8;');
   };
 

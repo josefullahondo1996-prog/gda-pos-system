@@ -4,6 +4,7 @@ import { useEmpresaInfo } from './utils/useEmpresa';
 import { generateReceipt } from './utils/generateReceipt';
 import { generateNotaRemision } from './utils/generateNotaRemision';
 import { ajustarStockUbicacion } from './utils/stockUbicacion';
+import FiltroFecha from './FiltroFecha';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 
@@ -26,13 +27,6 @@ export default function TodasLasVentas({ onNuevaVenta }) {
     const [busqueda, setBusqueda] = useState('');
     const [menuAbiertoId, setMenuAbiertoId] = useState(null);
 
-    // Filtros tipo CDEpos
-    const [filtroUbicacion, setFiltroUbicacion] = useState('');
-    const [filtroCliente, setFiltroCliente] = useState('');
-    const [filtroEstadoPago, setFiltroEstadoPago] = useState('');
-    const [fechaDesde, setFechaDesde] = useState('');
-    const [fechaHasta, setFechaHasta] = useState('');
-
     // Toolbar tipo CDEpos: entradas por página, paginación y columnas visibles
     const [entradasPorPagina, setEntradasPorPagina] = useState(25);
     const [paginaActual, setPaginaActual] = useState(1);
@@ -41,11 +35,25 @@ export default function TodasLasVentas({ onNuevaVenta }) {
         facturaNo: true, numeroContacto: true, ubicacion: true, sifen: true,
         metodoPago: true, gsPyg: true, creditosOtorgados: true,
         creditoDevolucion: true, estadoEnvio: true, totalArticulos: true,
+        tipoServicio: true, campoPersonalizado1: true, añadidoPor: true,
+        notaVenta: true, notaPersonal: true, detallesEnvio: true, personalServicio: true,
     });
+
+    // Filtros tipo CDEpos (panel "Filtros" con desplegables + rango de fechas)
+    const [mostrarFiltros, setMostrarFiltros] = useState(true);
+    const [filtroUbicacion, setFiltroUbicacion] = useState('');
+    const [filtroCliente, setFiltroCliente] = useState('');
+    const [filtroEstadoPago, setFiltroEstadoPago] = useState('');
+    const [filtroUsuario, setFiltroUsuario] = useState('');
+    const [rangoFecha, setRangoFecha] = useState({ desde: null, hasta: null, label: 'Todo' });
 
     const [ventaDetalle, setVentaDetalle] = useState(null); // { venta, items, modo: 'ver'|'pagos' }
     const [ventaEditando, setVentaEditando] = useState(null);
-    const [formEdit, setFormEdit] = useState({ cliente: '', metodo_pago: '', nota_venta: '' });
+    const [formEdit, setFormEdit] = useState({
+        cliente: '', metodo_pago: '', nota_venta: '',
+        tipo_servicio: '', campo_personalizado_1: '', nota_personal: '',
+        detalles_envio: '', personal_servicio: '',
+    });
     const [ventaAAnular, setVentaAAnular] = useState(null);
     const [motivoAnulacion, setMotivoAnulacion] = useState('');
     const [anulando, setAnulando] = useState(false);
@@ -53,6 +61,10 @@ export default function TodasLasVentas({ onNuevaVenta }) {
     useEffect(() => {
         if (empresaId) cargarTodo();
     }, [empresaId]);
+
+    useEffect(() => {
+        setPaginaActual(1);
+    }, [filtroUbicacion, filtroCliente, filtroEstadoPago, filtroUsuario, rangoFecha]);
 
     const cargarTodo = async () => {
         setCargando(true);
@@ -82,25 +94,34 @@ export default function TodasLasVentas({ onNuevaVenta }) {
         const coincideBusqueda = [v.cliente, v.metodo_pago, v.estado_pago].join(' ').toLowerCase().includes(busqueda.toLowerCase());
         const coincideUbicacion = !filtroUbicacion || String(v.ubicacion_id) === filtroUbicacion;
         const coincideCliente = !filtroCliente || v.cliente === filtroCliente;
-        const coincideEstado = !filtroEstadoPago || v.estado_pago === filtroEstadoPago;
-        const fechaVenta = v.fecha ? v.fecha.slice(0, 10) : '';
-        const coincideDesde = !fechaDesde || fechaVenta >= fechaDesde;
-        const coincideHasta = !fechaHasta || fechaVenta <= fechaHasta;
-        return coincideBusqueda && coincideUbicacion && coincideCliente && coincideEstado && coincideDesde && coincideHasta;
+        const coincideEstadoPago = !filtroEstadoPago || v.estado_pago === filtroEstadoPago;
+        const coincideUsuario = !filtroUsuario || v.usuario_nombre === filtroUsuario;
+        const fechaVenta = v.fecha ? new Date(v.fecha) : null;
+        const coincideDesde = !rangoFecha.desde || (fechaVenta && fechaVenta >= rangoFecha.desde);
+        const coincideHasta = !rangoFecha.hasta || (fechaVenta && fechaVenta <= rangoFecha.hasta);
+        return coincideBusqueda && coincideUbicacion && coincideCliente && coincideEstadoPago && coincideUsuario && coincideDesde && coincideHasta;
     });
 
-    const clientesDisponibles = [...new Set(ventas.map((v) => v.cliente).filter(Boolean))].sort();
-    const estadosDisponibles = [...new Set(ventas.map((v) => v.estado_pago).filter(Boolean))].sort();
+    // Opciones de los desplegables, calculadas a partir de los datos ya cargados (sin pedir nada nuevo al servidor)
+    const clientesUnicos = [...new Set(ventas.map((v) => v.cliente).filter(Boolean))].sort();
+    const usuariosUnicos = [...new Set(ventas.map((v) => v.usuario_nombre).filter(Boolean))].sort();
+    const estadosPagoUnicos = [...new Set(ventas.map((v) => v.estado_pago).filter(Boolean))].sort();
+
+    // Tarjetas de resumen ("Cobrado PYG" / "Total ventas") sobre lo ya filtrado
+    const totalCobrado = ventasFiltradas.reduce((acc, v) => acc + Number(v.monto_pagado || 0), 0);
+    const totalVentasFiltradas = ventasFiltradas.length;
+
+    const limpiarFiltros = () => {
+        setFiltroUbicacion(''); setFiltroCliente(''); setFiltroEstadoPago('');
+        setFiltroUsuario(''); setRangoFecha({ desde: null, hasta: null, label: 'Todo' });
+        setBusqueda('');
+    };
 
     const totalPaginas = Math.max(1, Math.ceil(ventasFiltradas.length / entradasPorPagina));
     const paginaSegura = Math.min(paginaActual, totalPaginas);
     const ventasPagina = ventasFiltradas.slice((paginaSegura - 1) * entradasPorPagina, paginaSegura * entradasPorPagina);
 
     const cambiarBusqueda = (valor) => { setBusqueda(valor); setPaginaActual(1); };
-
-    useEffect(() => {
-        setPaginaActual(1);
-    }, [filtroUbicacion, filtroCliente, filtroEstadoPago, fechaDesde, fechaHasta]);
 
     const cargarDetalleVenta = async (venta) => {
         const { data } = await supabase.from('detalle_ventas').select('*').eq('venta_id', venta.id);
@@ -189,7 +210,12 @@ export default function TodasLasVentas({ onNuevaVenta }) {
     const abrirEditar = (venta) => {
         setMenuAbiertoId(null);
         setVentaEditando(venta);
-        setFormEdit({ cliente: venta.cliente || '', metodo_pago: venta.metodo_pago || '', nota_venta: venta.nota_venta || '' });
+        setFormEdit({
+            cliente: venta.cliente || '', metodo_pago: venta.metodo_pago || '', nota_venta: venta.nota_venta || '',
+            tipo_servicio: venta.tipo_servicio || '', campo_personalizado_1: venta.campo_personalizado_1 || '',
+            nota_personal: venta.nota_personal || '', detalles_envio: venta.detalles_envio || '',
+            personal_servicio: venta.personal_servicio || '',
+        });
     };
 
     const guardarEdicion = async (e) => {
@@ -242,6 +268,13 @@ export default function TodasLasVentas({ onNuevaVenta }) {
         { key: 'creditoDevolucion', label: 'Credito por Devolucion' },
         { key: 'estadoEnvio', label: 'Estado del Envio' },
         { key: 'articulos', label: 'Total Articulos' },
+        { key: 'tipoServicio', label: 'Tipos de Servicio' },
+        { key: 'campoPersonalizado1', label: 'Campo Personalizado 1' },
+        { key: 'añadidoPor', label: 'Añadido por' },
+        { key: 'notaVenta', label: 'Nota de Venta' },
+        { key: 'notaPersonal', label: 'Nota del Personal' },
+        { key: 'detallesEnvio', label: 'Detalles de Envio' },
+        { key: 'personalServicio', label: 'Personal de Servicio' },
     ];
 
     const filaExport = (v) => ({
@@ -258,6 +291,13 @@ export default function TodasLasVentas({ onNuevaVenta }) {
         creditoDevolucion: 0,
         estadoEnvio: '',
         articulos: v.articulos ?? 0,
+        tipoServicio: v.tipo_servicio || '',
+        campoPersonalizado1: v.campo_personalizado_1 || '',
+        añadidoPor: v.usuario_nombre || '',
+        notaVenta: v.nota_venta || '',
+        notaPersonal: v.nota_personal || '',
+        detallesEnvio: v.detalles_envio || '',
+        personalServicio: v.personal_servicio || '',
     });
 
     const descargarArchivo = (contenido, nombreArchivo, tipo) => {
@@ -319,8 +359,6 @@ export default function TodasLasVentas({ onNuevaVenta }) {
     const totalPagadoGeneral = ventasFiltradas.reduce((acc, v) => acc + ((Number(v.total) || 0) - (Number(v.saldo_pendiente) || 0)), 0);
     const totalCreditosGeneral = ventasFiltradas.reduce((acc, v) => acc + (Number(v.saldo_pendiente) || 0), 0);
     const totalArticulosGeneral = ventasFiltradas.reduce((acc, v) => acc + (Number(v.articulos) || 0), 0);
-    const totalCobradoGeneral = ventasFiltradas.reduce((acc, v) => acc + (Number(v.monto_pagado) || 0), 0);
-    const cantidadPagos = ventasFiltradas.filter((v) => (Number(v.monto_pagado) || 0) > 0).length;
 
     return (
         <div className="bg-transparent text-sm text-gray-700" onClick={() => { menuAbiertoId && setMenuAbiertoId(null); mostrarMenuColumnas && setMostrarMenuColumnas(false); }}>
@@ -337,102 +375,85 @@ export default function TodasLasVentas({ onNuevaVenta }) {
                 </button>
             </div>
 
-            {/* Panel de Filtros (clonado de CDEpos). Los que no tienen datos reales detrás
-                (Usuario, Estado del envío, SIFEN, Suscripciones, Fuentes) quedan visibles
-                pero solo con "Todos" — no filtran nada porque tu sistema todavía no registra
-                esa información, para no simular una función que en realidad no hace nada. */}
-            <div className="bg-white rounded-lg shadow-sm mb-4">
-                <div className="px-4 py-3 border-b border-gray-100 font-bold text-[#004284] text-sm flex items-center gap-2">
-                    <span>▾</span> Filtros
-                </div>
-                <div className="p-4 grid grid-cols-1 md:grid-cols-4 gap-4" onClick={(e) => e.stopPropagation()}>
-                    <div>
-                        <label className="block text-xs font-bold text-gray-600 mb-1">Ubicación de la empresa:</label>
-                        <select className="w-full border border-gray-300 rounded p-2 text-sm bg-white" value={filtroUbicacion} onChange={(e) => setFiltroUbicacion(e.target.value)}>
-                            <option value="">Todos</option>
-                            {Object.entries(ubicaciones).map(([id, nombre]) => <option key={id} value={id}>{nombre}</option>)}
-                        </select>
-                    </div>
-                    <div>
-                        <label className="block text-xs font-bold text-gray-600 mb-1">Cliente:</label>
-                        <select className="w-full border border-gray-300 rounded p-2 text-sm bg-white" value={filtroCliente} onChange={(e) => setFiltroCliente(e.target.value)}>
-                            <option value="">Todos</option>
-                            {clientesDisponibles.map((c) => <option key={c} value={c}>{c}</option>)}
-                        </select>
-                    </div>
-                    <div>
-                        <label className="block text-xs font-bold text-gray-600 mb-1">Estado de pago:</label>
-                        <select className="w-full border border-gray-300 rounded p-2 text-sm bg-white" value={filtroEstadoPago} onChange={(e) => setFiltroEstadoPago(e.target.value)}>
-                            <option value="">Todos</option>
-                            {estadosDisponibles.map((e) => <option key={e} value={e}>{e}</option>)}
-                        </select>
-                    </div>
-                    <div>
-                        <label className="block text-xs font-bold text-gray-600 mb-1">Rango de fechas:</label>
-                        <div className="flex gap-1">
-                            <input type="date" className="w-full border border-gray-300 rounded p-2 text-xs" value={fechaDesde} onChange={(e) => setFechaDesde(e.target.value)} />
-                            <input type="date" className="w-full border border-gray-300 rounded p-2 text-xs" value={fechaHasta} onChange={(e) => setFechaHasta(e.target.value)} />
+            {/* Panel de Filtros, tipo CDEpos */}
+            <div className="bg-white rounded-lg shadow-sm p-4 mb-4" onClick={(e) => e.stopPropagation()}>
+                <button
+                    onClick={() => setMostrarFiltros((v) => !v)}
+                    className="flex items-center gap-2 text-gray-700 font-bold text-sm mb-1"
+                >
+                    <span>🔽</span> Filtros
+                </button>
+                {mostrarFiltros && (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mt-3">
+                        <div>
+                            <label className="block text-xs font-bold text-gray-500 mb-1">Ubicación de la empresa:</label>
+                            <select className="border rounded p-2 w-full text-xs" value={filtroUbicacion} onChange={(e) => setFiltroUbicacion(e.target.value)}>
+                                <option value="">Todos</option>
+                                {Object.entries(ubicaciones).map(([id, nombre]) => (
+                                    <option key={id} value={id}>{nombre}</option>
+                                ))}
+                            </select>
                         </div>
-                    </div>
-
-                    <div title="Tu sistema todavía no registra qué usuario hizo cada venta">
-                        <label className="block text-xs font-bold text-gray-400 mb-1">Usuario:</label>
-                        <select disabled className="w-full border border-gray-200 rounded p-2 text-sm bg-gray-50 text-gray-400 cursor-not-allowed">
-                            <option>Todos</option>
-                        </select>
-                    </div>
-                    <div title="Tu sistema todavía no tiene seguimiento de envíos conectado">
-                        <label className="block text-xs font-bold text-gray-400 mb-1">Estado del envío:</label>
-                        <select disabled className="w-full border border-gray-200 rounded p-2 text-sm bg-gray-50 text-gray-400 cursor-not-allowed">
-                            <option>Todos</option>
-                        </select>
-                    </div>
-                    <div title="Tu sistema todavía no tiene facturación electrónica SIFEN conectada">
-                        <label className="block text-xs font-bold text-gray-400 mb-1">SIFEN:</label>
-                        <select disabled className="w-full border border-gray-200 rounded p-2 text-sm bg-gray-50 text-gray-400 cursor-not-allowed">
-                            <option>Todos</option>
-                        </select>
-                    </div>
-                    <div title="Tu sistema todavía no maneja ventas por suscripción">
-                        <label className="block text-xs font-bold text-gray-400 mb-1">Fuentes:</label>
-                        <select disabled className="w-full border border-gray-200 rounded p-2 text-sm bg-gray-50 text-gray-400 cursor-not-allowed">
-                            <option>Todos</option>
-                        </select>
-                    </div>
-                    <div className="flex items-end pb-2" title="Tu sistema todavía no maneja ventas por suscripción">
-                        <label className="flex items-center gap-2 text-xs font-bold text-gray-400 cursor-not-allowed">
-                            <input type="checkbox" disabled /> Suscripciones
-                        </label>
-                    </div>
-                    {(filtroUbicacion || filtroCliente || filtroEstadoPago || fechaDesde || fechaHasta) && (
+                        <div>
+                            <label className="block text-xs font-bold text-gray-500 mb-1">Cliente:</label>
+                            <select className="border rounded p-2 w-full text-xs" value={filtroCliente} onChange={(e) => setFiltroCliente(e.target.value)}>
+                                <option value="">Todos</option>
+                                {clientesUnicos.map((c) => <option key={c} value={c}>{c}</option>)}
+                            </select>
+                        </div>
+                        <div>
+                            <label className="block text-xs font-bold text-gray-500 mb-1">Estado de pago:</label>
+                            <select className="border rounded p-2 w-full text-xs" value={filtroEstadoPago} onChange={(e) => setFiltroEstadoPago(e.target.value)}>
+                                <option value="">Todos</option>
+                                {estadosPagoUnicos.map((e2) => <option key={e2} value={e2}>{e2}</option>)}
+                            </select>
+                        </div>
+                        <div>
+                            <label className="block text-xs font-bold text-gray-500 mb-1">Rango de fechas:</label>
+                            <FiltroFecha value={rangoFecha} onChange={(nuevoRango) => setRangoFecha(nuevoRango)} />
+                        </div>
+                        <div>
+                            <label className="block text-xs font-bold text-gray-500 mb-1">Usuario:</label>
+                            <select className="border rounded p-2 w-full text-xs" value={filtroUsuario} onChange={(e) => setFiltroUsuario(e.target.value)}>
+                                <option value="">Todos</option>
+                                {usuariosUnicos.map((u) => <option key={u} value={u}>{u}</option>)}
+                            </select>
+                        </div>
+                        <div>
+                            <label className="block text-xs font-bold text-gray-500 mb-1" title="Aún no hay módulo de envíos conectado">Estado del envío:</label>
+                            <select className="border rounded p-2 w-full text-xs text-gray-400" disabled>
+                                <option>Todos</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label className="block text-xs font-bold text-gray-500 mb-1" title="Aún no tenés facturación electrónica SIFEN conectada">SIFEN:</label>
+                            <select className="border rounded p-2 w-full text-xs text-gray-400" disabled>
+                                <option>Todos</option>
+                            </select>
+                        </div>
                         <div className="flex items-end">
-                            <button
-                                onClick={() => { setFiltroUbicacion(''); setFiltroCliente(''); setFiltroEstadoPago(''); setFechaDesde(''); setFechaHasta(''); }}
-                                className="text-xs font-bold text-red-600 hover:underline"
-                            >
+                            <button onClick={limpiarFiltros} className="text-xs font-bold text-orange-600 hover:text-orange-700 border border-orange-200 rounded px-3 py-2 w-full">
                                 ✕ Limpiar filtros
                             </button>
                         </div>
-                    )}
-                </div>
+                    </div>
+                )}
             </div>
 
             {/* Tarjetas de resumen */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
                 <div className="bg-white rounded-lg shadow-sm p-4 flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center font-bold">Gs</div>
+                    <div className="w-10 h-10 rounded-full bg-green-100 text-green-700 flex items-center justify-center font-bold">Gs</div>
                     <div>
-                        <p className="text-[10px] font-bold text-gray-400 uppercase">Cobrado PYG</p>
-                        <p className="text-xl font-bold text-gray-800">{formatGs(totalCobradoGeneral)}</p>
-                        <p className="text-[10px] text-gray-400">{cantidadPagos} pagos</p>
+                        <p className="text-[10px] text-gray-400 uppercase font-bold">Cobrado PYG</p>
+                        <p className="text-lg font-bold text-gray-800">{formatGs(totalCobrado)}</p>
                     </div>
                 </div>
                 <div className="bg-white rounded-lg shadow-sm p-4 flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-full bg-yellow-100 text-yellow-600 flex items-center justify-center font-bold">📋</div>
+                    <div className="w-10 h-10 rounded-full bg-orange-100 text-orange-700 flex items-center justify-center">📋</div>
                     <div>
-                        <p className="text-[10px] font-bold text-gray-400 uppercase">Total Ventas</p>
-                        <p className="text-xl font-bold text-gray-800">{ventasFiltradas.length}</p>
-                        <p className="text-[10px] text-gray-400">transacciones</p>
+                        <p className="text-[10px] text-gray-400 uppercase font-bold">Total ventas</p>
+                        <p className="text-lg font-bold text-gray-800">{totalVentasFiltradas} <span className="text-xs font-normal text-gray-400">transacciones</span></p>
                     </div>
                 </div>
             </div>
@@ -469,6 +490,9 @@ export default function TodasLasVentas({ onNuevaVenta }) {
                                         sifen: 'SIFEN', metodoPago: 'Método de Pago', gsPyg: 'GS PYG',
                                         creditosOtorgados: 'Creditos Ortogados', creditoDevolucion: 'Credito por Devolucion',
                                         estadoEnvio: 'Estado del Envío', totalArticulos: 'Total Artículos',
+                                        tipoServicio: 'Tipos de Servicio', campoPersonalizado1: 'Campo Personalizado 1',
+                                        añadidoPor: 'Añadido por', notaVenta: 'Nota de Venta', notaPersonal: 'Nota del Personal',
+                                        detallesEnvio: 'Detalles de Envío', personalServicio: 'Personal de Servicio',
                                     }).map(([key, label]) => (
                                         <label key={key} className="flex items-center gap-2 text-xs py-1 cursor-pointer">
                                             <input
@@ -515,13 +539,20 @@ export default function TodasLasVentas({ onNuevaVenta }) {
                                 {columnasVisibles.creditoDevolucion && <th className="p-3 text-right">Credito por Devolucion</th>}
                                 {columnasVisibles.estadoEnvio && <th className="p-3">Estado del Envío</th>}
                                 {columnasVisibles.totalArticulos && <th className="p-3 text-right">Total Artículos</th>}
+                                {columnasVisibles.tipoServicio && <th className="p-3">Tipos de Servicio</th>}
+                                {columnasVisibles.campoPersonalizado1 && <th className="p-3">Campo Personalizado 1</th>}
+                                {columnasVisibles.añadidoPor && <th className="p-3">Añadido por</th>}
+                                {columnasVisibles.notaVenta && <th className="p-3">Nota de Venta</th>}
+                                {columnasVisibles.notaPersonal && <th className="p-3">Nota del Personal</th>}
+                                {columnasVisibles.detallesEnvio && <th className="p-3">Detalles de Envío</th>}
+                                {columnasVisibles.personalServicio && <th className="p-3">Personal de Servicio</th>}
                             </tr>
                         </thead>
                         <tbody>
                             {cargando ? (
-                                <tr><td colSpan={16} className="text-center py-8 text-gray-400">Cargando...</td></tr>
+                                <tr><td colSpan={23} className="text-center py-8 text-gray-400">Cargando...</td></tr>
                             ) : ventasPagina.length === 0 ? (
-                                <tr><td colSpan={16} className="text-center py-8 text-gray-400 font-medium">No hay datos disponibles en la tabla</td></tr>
+                                <tr><td colSpan={23} className="text-center py-8 text-gray-400 font-medium">No hay datos disponibles en la tabla</td></tr>
                             ) : (
                                 ventasPagina.map((venta) => {
                                     const totalPagadoReal = (Number(venta.total) || 0) - (Number(venta.saldo_pendiente) || 0);
@@ -572,6 +603,13 @@ export default function TodasLasVentas({ onNuevaVenta }) {
                                             {columnasVisibles.creditoDevolucion && <td className="p-3 text-right text-gray-400">{formatGs(0)}</td>}
                                             {columnasVisibles.estadoEnvio && <td className="p-3 text-gray-400">—</td>}
                                             {columnasVisibles.totalArticulos && <td className="p-3 text-right">{venta.articulos ?? 0}</td>}
+                                            {columnasVisibles.tipoServicio && <td className="p-3 text-gray-500">{venta.tipo_servicio || '—'}</td>}
+                                            {columnasVisibles.campoPersonalizado1 && <td className="p-3 text-gray-500">{venta.campo_personalizado_1 || '—'}</td>}
+                                            {columnasVisibles.añadidoPor && <td className="p-3 text-gray-500">{venta.usuario_nombre || '—'}</td>}
+                                            {columnasVisibles.notaVenta && <td className="p-3 text-gray-500 max-w-[180px] truncate" title={venta.nota_venta || ''}>{venta.nota_venta || '—'}</td>}
+                                            {columnasVisibles.notaPersonal && <td className="p-3 text-gray-500 max-w-[180px] truncate" title={venta.nota_personal || ''}>{venta.nota_personal || '—'}</td>}
+                                            {columnasVisibles.detallesEnvio && <td className="p-3 text-gray-500 max-w-[180px] truncate" title={venta.detalles_envio || ''}>{venta.detalles_envio || '—'}</td>}
+                                            {columnasVisibles.personalServicio && <td className="p-3 text-gray-500">{venta.personal_servicio || '—'}</td>}
                                         </tr>
                                     );
                                 })
@@ -595,6 +633,13 @@ export default function TodasLasVentas({ onNuevaVenta }) {
                                     {columnasVisibles.creditoDevolucion && <td className="p-3 text-right">{formatGs(0)}</td>}
                                     {columnasVisibles.estadoEnvio && <td className="p-3" />}
                                     {columnasVisibles.totalArticulos && <td className="p-3 text-right">{totalArticulosGeneral}</td>}
+                                    {columnasVisibles.tipoServicio && <td className="p-3" />}
+                                    {columnasVisibles.campoPersonalizado1 && <td className="p-3" />}
+                                    {columnasVisibles.añadidoPor && <td className="p-3" />}
+                                    {columnasVisibles.notaVenta && <td className="p-3" />}
+                                    {columnasVisibles.notaPersonal && <td className="p-3" />}
+                                    {columnasVisibles.detallesEnvio && <td className="p-3" />}
+                                    {columnasVisibles.personalServicio && <td className="p-3" />}
                                 </tr>
                             </tfoot>
                         )}
@@ -682,7 +727,7 @@ export default function TodasLasVentas({ onNuevaVenta }) {
                             <h3 className="text-white font-bold text-lg">Editar venta</h3>
                             <button onClick={() => setVentaEditando(null)} className="text-white/80 hover:text-white text-xl leading-none">✕</button>
                         </div>
-                        <form onSubmit={guardarEdicion} className="p-6 flex flex-col gap-4">
+                        <form onSubmit={guardarEdicion} className="p-6 flex flex-col gap-4 max-h-[75vh] overflow-y-auto">
                             <p className="text-[11px] text-gray-400 -mt-2">Por seguridad de stock, acá solo se editan datos de la venta. Para cambiar productos, anulá esta venta y registrá una nueva.</p>
                             <div>
                                 <label className="block text-sm font-bold text-gray-700 mb-1">Cliente:</label>
@@ -693,8 +738,28 @@ export default function TodasLasVentas({ onNuevaVenta }) {
                                 <input className="w-full border border-gray-300 rounded p-2.5 text-sm" value={formEdit.metodo_pago} onChange={(e) => setFormEdit({ ...formEdit, metodo_pago: e.target.value })} />
                             </div>
                             <div>
-                                <label className="block text-sm font-bold text-gray-700 mb-1">Nota:</label>
-                                <textarea className="w-full border border-gray-300 rounded p-2.5 text-sm" rows={3} value={formEdit.nota_venta} onChange={(e) => setFormEdit({ ...formEdit, nota_venta: e.target.value })} />
+                                <label className="block text-sm font-bold text-gray-700 mb-1">Tipo de servicio:</label>
+                                <input className="w-full border border-gray-300 rounded p-2.5 text-sm" value={formEdit.tipo_servicio} onChange={(e) => setFormEdit({ ...formEdit, tipo_servicio: e.target.value })} placeholder="Ej: Reparación, Instalación, Venta directa..." />
+                            </div>
+                            <div>
+                                <label className="block text-sm font-bold text-gray-700 mb-1">Personal de servicio:</label>
+                                <input className="w-full border border-gray-300 rounded p-2.5 text-sm" value={formEdit.personal_servicio} onChange={(e) => setFormEdit({ ...formEdit, personal_servicio: e.target.value })} placeholder="Quién atendió/realizó el servicio" />
+                            </div>
+                            <div>
+                                <label className="block text-sm font-bold text-gray-700 mb-1">Detalles de envío:</label>
+                                <input className="w-full border border-gray-300 rounded p-2.5 text-sm" value={formEdit.detalles_envio} onChange={(e) => setFormEdit({ ...formEdit, detalles_envio: e.target.value })} placeholder="Dirección, transportista, etc." />
+                            </div>
+                            <div>
+                                <label className="block text-sm font-bold text-gray-700 mb-1">Campo personalizado 1:</label>
+                                <input className="w-full border border-gray-300 rounded p-2.5 text-sm" value={formEdit.campo_personalizado_1} onChange={(e) => setFormEdit({ ...formEdit, campo_personalizado_1: e.target.value })} />
+                            </div>
+                            <div>
+                                <label className="block text-sm font-bold text-gray-700 mb-1">Nota de venta (visible para el cliente):</label>
+                                <textarea className="w-full border border-gray-300 rounded p-2.5 text-sm" rows={2} value={formEdit.nota_venta} onChange={(e) => setFormEdit({ ...formEdit, nota_venta: e.target.value })} />
+                            </div>
+                            <div>
+                                <label className="block text-sm font-bold text-gray-700 mb-1">Nota del personal (uso interno):</label>
+                                <textarea className="w-full border border-gray-300 rounded p-2.5 text-sm" rows={2} value={formEdit.nota_personal} onChange={(e) => setFormEdit({ ...formEdit, nota_personal: e.target.value })} />
                             </div>
                             <div className="flex gap-2 justify-end pt-2 border-t border-gray-100">
                                 <button type="submit" className="bg-orange-500 hover:bg-orange-600 text-white font-bold text-sm px-5 py-2 rounded">Guardar</button>
