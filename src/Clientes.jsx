@@ -749,6 +749,7 @@ export default function Clientes() {
                       <td className="p-2 relative">
                         <button
                           onClick={(e) => {
+                            e.stopPropagation();
                             if (menuAccionesAbierto === cliente.id) {
                               setMenuAccionesAbierto(null);
                             } else {
