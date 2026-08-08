@@ -26,6 +26,13 @@ export default function TodasLasVentas({ onNuevaVenta }) {
     const [busqueda, setBusqueda] = useState('');
     const [menuAbiertoId, setMenuAbiertoId] = useState(null);
 
+    // Filtros tipo CDEpos
+    const [filtroUbicacion, setFiltroUbicacion] = useState('');
+    const [filtroCliente, setFiltroCliente] = useState('');
+    const [filtroEstadoPago, setFiltroEstadoPago] = useState('');
+    const [fechaDesde, setFechaDesde] = useState('');
+    const [fechaHasta, setFechaHasta] = useState('');
+
     // Toolbar tipo CDEpos: entradas por página, paginación y columnas visibles
     const [entradasPorPagina, setEntradasPorPagina] = useState(25);
     const [paginaActual, setPaginaActual] = useState(1);
@@ -71,15 +78,29 @@ export default function TodasLasVentas({ onNuevaVenta }) {
         setCargando(false);
     };
 
-    const ventasFiltradas = ventas.filter((v) =>
-        [v.cliente, v.metodo_pago, v.estado_pago].join(' ').toLowerCase().includes(busqueda.toLowerCase())
-    );
+    const ventasFiltradas = ventas.filter((v) => {
+        const coincideBusqueda = [v.cliente, v.metodo_pago, v.estado_pago].join(' ').toLowerCase().includes(busqueda.toLowerCase());
+        const coincideUbicacion = !filtroUbicacion || String(v.ubicacion_id) === filtroUbicacion;
+        const coincideCliente = !filtroCliente || v.cliente === filtroCliente;
+        const coincideEstado = !filtroEstadoPago || v.estado_pago === filtroEstadoPago;
+        const fechaVenta = v.fecha ? v.fecha.slice(0, 10) : '';
+        const coincideDesde = !fechaDesde || fechaVenta >= fechaDesde;
+        const coincideHasta = !fechaHasta || fechaVenta <= fechaHasta;
+        return coincideBusqueda && coincideUbicacion && coincideCliente && coincideEstado && coincideDesde && coincideHasta;
+    });
+
+    const clientesDisponibles = [...new Set(ventas.map((v) => v.cliente).filter(Boolean))].sort();
+    const estadosDisponibles = [...new Set(ventas.map((v) => v.estado_pago).filter(Boolean))].sort();
 
     const totalPaginas = Math.max(1, Math.ceil(ventasFiltradas.length / entradasPorPagina));
     const paginaSegura = Math.min(paginaActual, totalPaginas);
     const ventasPagina = ventasFiltradas.slice((paginaSegura - 1) * entradasPorPagina, paginaSegura * entradasPorPagina);
 
     const cambiarBusqueda = (valor) => { setBusqueda(valor); setPaginaActual(1); };
+
+    useEffect(() => {
+        setPaginaActual(1);
+    }, [filtroUbicacion, filtroCliente, filtroEstadoPago, fechaDesde, fechaHasta]);
 
     const cargarDetalleVenta = async (venta) => {
         const { data } = await supabase.from('detalle_ventas').select('*').eq('venta_id', venta.id);
@@ -298,6 +319,8 @@ export default function TodasLasVentas({ onNuevaVenta }) {
     const totalPagadoGeneral = ventasFiltradas.reduce((acc, v) => acc + ((Number(v.total) || 0) - (Number(v.saldo_pendiente) || 0)), 0);
     const totalCreditosGeneral = ventasFiltradas.reduce((acc, v) => acc + (Number(v.saldo_pendiente) || 0), 0);
     const totalArticulosGeneral = ventasFiltradas.reduce((acc, v) => acc + (Number(v.articulos) || 0), 0);
+    const totalCobradoGeneral = ventasFiltradas.reduce((acc, v) => acc + (Number(v.monto_pagado) || 0), 0);
+    const cantidadPagos = ventasFiltradas.filter((v) => (Number(v.monto_pagado) || 0) > 0).length;
 
     return (
         <div className="bg-transparent text-sm text-gray-700" onClick={() => { menuAbiertoId && setMenuAbiertoId(null); mostrarMenuColumnas && setMostrarMenuColumnas(false); }}>
@@ -312,6 +335,106 @@ export default function TodasLasVentas({ onNuevaVenta }) {
                 >
                     <span className="text-xl leading-none">+</span> Añadir
                 </button>
+            </div>
+
+            {/* Panel de Filtros (clonado de CDEpos). Los que no tienen datos reales detrás
+                (Usuario, Estado del envío, SIFEN, Suscripciones, Fuentes) quedan visibles
+                pero solo con "Todos" — no filtran nada porque tu sistema todavía no registra
+                esa información, para no simular una función que en realidad no hace nada. */}
+            <div className="bg-white rounded-lg shadow-sm mb-4">
+                <div className="px-4 py-3 border-b border-gray-100 font-bold text-[#004284] text-sm flex items-center gap-2">
+                    <span>▾</span> Filtros
+                </div>
+                <div className="p-4 grid grid-cols-1 md:grid-cols-4 gap-4" onClick={(e) => e.stopPropagation()}>
+                    <div>
+                        <label className="block text-xs font-bold text-gray-600 mb-1">Ubicación de la empresa:</label>
+                        <select className="w-full border border-gray-300 rounded p-2 text-sm bg-white" value={filtroUbicacion} onChange={(e) => setFiltroUbicacion(e.target.value)}>
+                            <option value="">Todos</option>
+                            {Object.entries(ubicaciones).map(([id, nombre]) => <option key={id} value={id}>{nombre}</option>)}
+                        </select>
+                    </div>
+                    <div>
+                        <label className="block text-xs font-bold text-gray-600 mb-1">Cliente:</label>
+                        <select className="w-full border border-gray-300 rounded p-2 text-sm bg-white" value={filtroCliente} onChange={(e) => setFiltroCliente(e.target.value)}>
+                            <option value="">Todos</option>
+                            {clientesDisponibles.map((c) => <option key={c} value={c}>{c}</option>)}
+                        </select>
+                    </div>
+                    <div>
+                        <label className="block text-xs font-bold text-gray-600 mb-1">Estado de pago:</label>
+                        <select className="w-full border border-gray-300 rounded p-2 text-sm bg-white" value={filtroEstadoPago} onChange={(e) => setFiltroEstadoPago(e.target.value)}>
+                            <option value="">Todos</option>
+                            {estadosDisponibles.map((e) => <option key={e} value={e}>{e}</option>)}
+                        </select>
+                    </div>
+                    <div>
+                        <label className="block text-xs font-bold text-gray-600 mb-1">Rango de fechas:</label>
+                        <div className="flex gap-1">
+                            <input type="date" className="w-full border border-gray-300 rounded p-2 text-xs" value={fechaDesde} onChange={(e) => setFechaDesde(e.target.value)} />
+                            <input type="date" className="w-full border border-gray-300 rounded p-2 text-xs" value={fechaHasta} onChange={(e) => setFechaHasta(e.target.value)} />
+                        </div>
+                    </div>
+
+                    <div title="Tu sistema todavía no registra qué usuario hizo cada venta">
+                        <label className="block text-xs font-bold text-gray-400 mb-1">Usuario:</label>
+                        <select disabled className="w-full border border-gray-200 rounded p-2 text-sm bg-gray-50 text-gray-400 cursor-not-allowed">
+                            <option>Todos</option>
+                        </select>
+                    </div>
+                    <div title="Tu sistema todavía no tiene seguimiento de envíos conectado">
+                        <label className="block text-xs font-bold text-gray-400 mb-1">Estado del envío:</label>
+                        <select disabled className="w-full border border-gray-200 rounded p-2 text-sm bg-gray-50 text-gray-400 cursor-not-allowed">
+                            <option>Todos</option>
+                        </select>
+                    </div>
+                    <div title="Tu sistema todavía no tiene facturación electrónica SIFEN conectada">
+                        <label className="block text-xs font-bold text-gray-400 mb-1">SIFEN:</label>
+                        <select disabled className="w-full border border-gray-200 rounded p-2 text-sm bg-gray-50 text-gray-400 cursor-not-allowed">
+                            <option>Todos</option>
+                        </select>
+                    </div>
+                    <div title="Tu sistema todavía no maneja ventas por suscripción">
+                        <label className="block text-xs font-bold text-gray-400 mb-1">Fuentes:</label>
+                        <select disabled className="w-full border border-gray-200 rounded p-2 text-sm bg-gray-50 text-gray-400 cursor-not-allowed">
+                            <option>Todos</option>
+                        </select>
+                    </div>
+                    <div className="flex items-end pb-2" title="Tu sistema todavía no maneja ventas por suscripción">
+                        <label className="flex items-center gap-2 text-xs font-bold text-gray-400 cursor-not-allowed">
+                            <input type="checkbox" disabled /> Suscripciones
+                        </label>
+                    </div>
+                    {(filtroUbicacion || filtroCliente || filtroEstadoPago || fechaDesde || fechaHasta) && (
+                        <div className="flex items-end">
+                            <button
+                                onClick={() => { setFiltroUbicacion(''); setFiltroCliente(''); setFiltroEstadoPago(''); setFechaDesde(''); setFechaHasta(''); }}
+                                className="text-xs font-bold text-red-600 hover:underline"
+                            >
+                                ✕ Limpiar filtros
+                            </button>
+                        </div>
+                    )}
+                </div>
+            </div>
+
+            {/* Tarjetas de resumen */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                <div className="bg-white rounded-lg shadow-sm p-4 flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center font-bold">Gs</div>
+                    <div>
+                        <p className="text-[10px] font-bold text-gray-400 uppercase">Cobrado PYG</p>
+                        <p className="text-xl font-bold text-gray-800">{formatGs(totalCobradoGeneral)}</p>
+                        <p className="text-[10px] text-gray-400">{cantidadPagos} pagos</p>
+                    </div>
+                </div>
+                <div className="bg-white rounded-lg shadow-sm p-4 flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-full bg-yellow-100 text-yellow-600 flex items-center justify-center font-bold">📋</div>
+                    <div>
+                        <p className="text-[10px] font-bold text-gray-400 uppercase">Total Ventas</p>
+                        <p className="text-xl font-bold text-gray-800">{ventasFiltradas.length}</p>
+                        <p className="text-[10px] text-gray-400">transacciones</p>
+                    </div>
+                </div>
             </div>
 
             <div className="bg-white rounded-lg shadow-sm border-t-2 border-[#004284]">
