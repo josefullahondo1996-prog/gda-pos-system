@@ -187,13 +187,26 @@ export default function TodasLasVentas({ onNuevaVenta }) {
 
     const borrarVenta = async (venta) => {
         if (!confirm(`Esto borra la venta #${venta.id} de forma permanente. ${venta.estado_pago !== 'Anulada' && venta.estado_pago !== 'Devuelta' ? 'También se repondrá el stock de sus productos. ' : ''}¿Confirmás?`)) return;
-        if (venta.estado_pago !== 'Anulada' && venta.estado_pago !== 'Devuelta') {
-            await reponerStockDeVenta(venta);
+        
+        setCargando(true);
+        try {
+            if (venta.estado_pago !== 'Anulada' && venta.estado_pago !== 'Devuelta') {
+                await reponerStockDeVenta(venta);
+            }
+            // Borrar detalles y pagos asociados para no dejar registros huérfanos
+            await supabase.from('detalle_ventas').delete().eq('venta_id', venta.id);
+            await supabase.from('pagos_clientes').delete().eq('venta_id', venta.id);
+            
+            const { error } = await supabase.from('ventas').delete().eq('id', venta.id).eq('empresa_id', empresaId);
+            if (error) throw error;
+            
+            alert(`Venta #${venta.id} eliminada correctamente y el stock fue devuelto.`);
+            cargarTodo();
+        } catch (error) {
+            alert('Error al borrar la venta: ' + error.message);
+        } finally {
+            setCargando(false);
         }
-        await supabase.from('detalle_ventas').delete().eq('venta_id', venta.id);
-        const { error } = await supabase.from('ventas').delete().eq('id', venta.id).eq('empresa_id', empresaId);
-        if (error) return alert('Error al borrar la venta: ' + error.message);
-        cargarTodo();
     };
 
     const verVenta = async (venta) => {

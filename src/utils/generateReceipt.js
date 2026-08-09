@@ -1,10 +1,7 @@
-import { jsPDF } from 'jspdf';
-
 const formatGs = (v) => `${Number(v || 0).toLocaleString('es-PY')}`;
 
 // Normaliza los ítems vengan del carrito del POS (nombre, precio_venta/precio) o
-// de detalle_ventas ya guardado (nombre_producto, subtotal). No rompe ningún llamado
-// existente: si no hay ítems, cae al resumen de una sola línea como antes.
+// de detalle_ventas ya guardado (nombre_producto, subtotal).
 const normalizarItems = (venta) => {
   const items = venta.items || venta.detalle || [];
   return items.map((it) => {
@@ -12,158 +9,211 @@ const normalizarItems = (venta) => {
     const cantidad = Number(it.cantidad) || 1;
     const precioUnitario = it.precio_venta ?? it.precio ?? it.precio_unitario ?? (it.subtotal ? it.subtotal / cantidad : 0);
     const subtotal = it.subtotal ?? precioUnitario * cantidad;
-    return { nombre, cantidad, subtotal };
+    return { nombre, cantidad, precioUnitario, subtotal };
   });
 };
 
 /**
- * Genera (y opcionalmente imprime automáticamente) el ticket de venta para impresora térmica.
- * @param {object} venta - venta guardada, con .items (carrito) o .detalle (detalle_ventas) si hay
+ * Genera el ticket en HTML (usando CSS @page para 80mm/58mm) y lanza la impresión.
+ * @param {object} venta - venta guardada, con .items o .detalle
  * @param {object} empresa - { nombre, direccion, telefono, ruc }
  * @param {'80mm'|'58mm'} formato
- * @param {boolean} autoImprimir - si true, abre el diálogo de impresión del navegador automáticamente
- *                                  (para imprimir directo en la térmica sin tener que abrir el PDF a mano).
- *                                  Si false (o se omite), descarga el PDF como siempre.
+ * @param {boolean} autoImprimir - (Con HTML siempre se lanza el modal de impresión de Chrome)
  */
 export const generateReceipt = (venta, empresa = {}, formato = '80mm', autoImprimir = false) => {
   try {
     const es58 = formato === '58mm';
-    const anchoPagina = es58 ? 58 : 80;
-    const margen = es58 ? 3 : 5;
-    const anchoUtil = anchoPagina - margen * 2;
-    const centro = anchoPagina / 2;
-
-    const fTitulo = es58 ? 10 : 12;
-    const fSub = es58 ? 6.5 : 8;
-    const fTexto = es58 ? 7 : 8.5;
-    const fTotal = es58 ? 9 : 10.5;
-
+    const paperWidth = es58 ? '58mm' : '80mm';
+    const containerWidth = es58 ? '180px' : '280px';
     const nombreNegocio = (empresa.nombre || 'MI EMPRESA').toUpperCase();
     const items = normalizarItems(venta);
-    const lineasProducto = items.length > 0 ? items.length : 1;
+    
+    // Construir filas de ítems
+    let itemsHtml = '';
+    items.forEach(it => {
+       itemsHtml += `
+         <div style="margin-bottom: 6px;">
+            <div style="font-size: 11px; text-transform: uppercase;">${it.nombre}</div>
+            <div class="flex-between" style="font-size: 11px;">
+               <span>${it.cantidad} X ${formatGs(it.precioUnitario)}</span>
+               <span>${formatGs(it.subtotal)}</span>
+            </div>
+         </div>
+       `;
+    });
 
-    // Altura dinámica según cantidad de productos
-    const alturaBase = es58 ? 60 : 65;
-    const altura = alturaBase + lineasProducto * (es58 ? 7 : 6);
-
-    const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: [anchoPagina, altura] });
-
-    let y = es58 ? 7 : 9;
-
-    doc.setFont('Helvetica', 'bold');
-    doc.setFontSize(fTitulo);
-    doc.setTextColor(0, 66, 132);
-    doc.text(nombreNegocio, centro, y, { align: 'center' });
-    y += es58 ? 4.5 : 5.5;
-
-    doc.setFont('Helvetica', 'normal');
-    doc.setFontSize(fSub);
-    doc.setTextColor(100);
-    if (empresa.direccion) { doc.text(empresa.direccion, centro, y, { align: 'center' }); y += es58 ? 3.2 : 4; }
-    if (empresa.telefono) { doc.text(`Tel: ${empresa.telefono}`, centro, y, { align: 'center' }); y += es58 ? 3.2 : 4; }
-    if (empresa.ruc) { doc.text(`RUC: ${empresa.ruc}`, centro, y, { align: 'center' }); y += es58 ? 3.2 : 4; }
-
-    y += 0.5;
-    doc.setDrawColor(180);
-    doc.line(margen, y, anchoPagina - margen, y);
-    y += es58 ? 4 : 5;
-
-    doc.setFont('Helvetica', 'bold');
-    doc.setFontSize(fTexto);
-    doc.setTextColor(60);
-    doc.text(`Cliente: ${venta.cliente_nombre || venta.cliente || 'Cliente Ocasional'}`, margen, y);
-    y += es58 ? 3.6 : 4.4;
-
-    doc.setFont('Helvetica', 'normal');
-    doc.setTextColor(90);
-    doc.text(`Fecha: ${venta.fecha ? new Date(venta.fecha).toLocaleDateString('es-PY') : new Date().toLocaleDateString('es-PY')}`, margen, y);
-    y += es58 ? 3.6 : 4.4;
-    doc.text(`Comprobante: TICKET-${String(venta.id || '0').padStart(4, '0')}`, margen, y);
-    y += es58 ? 4 : 4.8;
-
-    doc.setDrawColor(180);
-    doc.line(margen, y, anchoPagina - margen, y);
-    y += es58 ? 3.6 : 4.4;
-
-    // --- Ítems (uno por producto si hay carrito/detalle; si no, resumen genérico) ---
-    doc.setFont('Helvetica', 'bold');
-    doc.setFontSize(fTexto);
-    doc.setTextColor(30);
-    doc.text('Producto', margen, y);
-    doc.text('Total', anchoPagina - margen, y, { align: 'right' });
-    y += es58 ? 3.4 : 4;
-    doc.setDrawColor(220);
-    doc.line(margen, y, anchoPagina - margen, y);
-    y += es58 ? 3.2 : 3.8;
-
-    doc.setFont('Helvetica', 'normal');
-    doc.setFontSize(fTexto);
-    doc.setTextColor(60);
-
-    if (items.length > 0) {
-      items.forEach((it) => {
-        const nombreCorto = doc.splitTextToSize(`${it.cantidad}x ${it.nombre}`, anchoUtil - (es58 ? 14 : 18));
-        doc.text(nombreCorto, margen, y);
-        doc.text(`Gs ${formatGs(it.subtotal)}`, anchoPagina - margen, y, { align: 'right' });
-        y += nombreCorto.length * (es58 ? 3.2 : 3.8);
-      });
-    } else {
-      doc.text('Venta de Repuestos / Servicios', margen, y);
-      doc.text(`Gs ${formatGs(venta.total)}`, anchoPagina - margen, y, { align: 'right' });
-      y += es58 ? 3.6 : 4.2;
+    if (items.length === 0) {
+      itemsHtml = `
+         <div class="flex-between" style="font-size: 11px;">
+            <span>Venta de Repuestos / Servicios</span>
+            <span>${formatGs(venta.total)}</span>
+         </div>
+      `;
     }
 
-    y += 1;
-    doc.setDrawColor(180);
-    doc.line(margen, y, anchoPagina - margen, y);
-    y += es58 ? 4.2 : 5;
+    const fechaStr = venta.fecha ? new Date(venta.fecha).toLocaleString('es-PY') : new Date().toLocaleString('es-PY');
+    const condicionVenta = venta.metodo_pago?.includes('Crédito') ? 'CRÉDITO' : 'CONTADO';
+    const clienteStr = venta.cliente_nombre || venta.cliente || 'SIN NOMBRE';
+    const ticketId = String(venta.id || '0').padStart(8, '0');
 
-    doc.setFont('Helvetica', 'bold');
-    doc.setFontSize(fTotal);
-    doc.setTextColor(0, 0, 0);
-    doc.text('TOTAL:', margen, y);
-    doc.text(`Gs ${formatGs(venta.total)}`, anchoPagina - margen, y, { align: 'right' });
-    y += es58 ? 4.5 : 5.5;
-
-    if (venta.saldo_pendiente !== undefined && Number(venta.saldo_pendiente) > 0) {
-      doc.setFont('Helvetica', 'bold');
-      doc.setFontSize(fTexto);
-      doc.setTextColor(200, 0, 0);
-      doc.text(`SALDO PENDIENTE: Gs ${formatGs(venta.saldo_pendiente)}`, margen, y);
-      y += es58 ? 4 : 4.8;
-    }
-
-    y += 1;
-    doc.setDrawColor(180);
-    doc.line(margen, y, anchoPagina - margen, y);
-    y += es58 ? 4 : 5;
-
-    doc.setFont('Helvetica', 'italic');
-    doc.setFontSize(fSub);
-    doc.setTextColor(120);
-    doc.text('¡Gracias por su confianza!', centro, y, { align: 'center' });
-    y += es58 ? 3.4 : 4;
-    doc.setFont('Helvetica', 'normal');
-    doc.text('Sistema POS', centro, y, { align: 'center' });
-
-    const nombreArchivo = `Ticket_${venta.id || 'NUEVO'}.pdf`;
-
-    if (autoImprimir) {
-      // Dispara el diálogo de impresión del navegador apenas se abre el PDF,
-      // para poder imprimir directo en la térmica sin tener que abrir el archivo a mano.
-      doc.autoPrint();
-      const blobUrl = doc.output('bloburl');
-      const ventana = window.open(blobUrl, '_blank');
-      if (!ventana) {
-        // Si el navegador bloqueó el popup, no se pierde el ticket: se descarga igual.
-        alert('Tu navegador bloqueó la ventana de impresión automática. Habilitá los popups para este sitio, o descargá el ticket manualmente.');
-        doc.save(nombreArchivo);
+    let pagoHtml = '';
+    if (venta.monto_pagado !== undefined) {
+      pagoHtml += `
+        <div class="flex-between" style="font-size: 11px; margin-top: 5px;">
+           <span>Formas de Pago: EFECTIVO / OTRO</span>
+           <span>${formatGs(venta.monto_pagado)}</span>
+        </div>
+      `;
+      const vuelto = Number(venta.monto_pagado) - Number(venta.total);
+      if (vuelto > 0) {
+        pagoHtml += `
+          <div class="flex-between bold" style="font-size: 11px; margin-top: 2px;">
+             <span>VUELTO</span>
+             <span>${formatGs(vuelto)}</span>
+          </div>
+        `;
       }
-    } else {
-      doc.save(nombreArchivo);
     }
+
+    let saldoPendienteHtml = '';
+    if (venta.saldo_pendiente !== undefined && Number(venta.saldo_pendiente) > 0) {
+       saldoPendienteHtml = `
+          <div class="flex-between bold" style="font-size: 11px; margin-top: 2px;">
+             <span>SALDO PENDIENTE</span>
+             <span>${formatGs(venta.saldo_pendiente)}</span>
+          </div>
+       `;
+    }
+
+    // HTML completo a inyectar en la nueva ventana
+    const htmlContent = `
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title>Ticket_${ticketId}</title>
+  <style>
+    /* Estilos base para la pantalla y la impresión */
+    body {
+      font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+      margin: 0;
+      padding: 0;
+      color: #000;
+      background: #f0f0f0;
+    }
+    
+    /* MAGIA PARA LA IMPRESORA TÉRMICA */
+    @media print {
+      @page {
+        size: ${paperWidth} auto;
+        margin: 0;
+      }
+      body {
+        margin: 0;
+        padding: 0;
+        width: 100%;
+        display: flex;
+        justify-content: center;
+        background: #fff;
+      }
+    }
+
+    .ticket {
+      width: ${containerWidth};
+      margin: 0 auto;
+      padding: 15px 10px;
+      background: #fff;
+      box-sizing: border-box;
+    }
+    
+    .text-center { text-align: center; }
+    .bold { font-weight: bold; }
+    .text-sm { font-size: 11px; }
+    .text-xs { font-size: 9px; }
+    .divider {
+      border-top: 1px dashed #000;
+      margin: 8px 0;
+    }
+    .flex-between {
+      display: flex;
+      justify-content: space-between;
+    }
+    .mb-1 { margin-bottom: 4px; }
+  </style>
+</head>
+<body>
+  <div class="ticket">
+    <!-- Cabecera -->
+    <div class="text-center bold" style="font-size: 15px; margin-bottom: 5px;">${nombreNegocio}</div>
+    ${empresa.ruc ? `<div class="text-center text-xs mb-1">RUC: ${empresa.ruc}</div>` : ''}
+    ${empresa.direccion ? `<div class="text-center text-xs mb-1">${empresa.direccion}</div>` : ''}
+    ${empresa.telefono ? `<div class="text-center text-xs mb-1">Tel: ${empresa.telefono}</div>` : ''}
+    
+    <div class="divider"></div>
+    
+    <!-- Info Venta -->
+    <div class="text-center bold text-sm mb-1">TICKET Nº: ${ticketId}</div>
+    <div class="text-sm mb-1">Fecha de Emisión: ${fechaStr}</div>
+    <div class="text-sm mb-1">Cond. de Venta: ${condicionVenta}</div>
+    <div class="text-sm mb-1">Cliente: ${clienteStr}</div>
+    
+    <div class="divider"></div>
+    
+    <!-- Encabezado Ítems -->
+    <div class="flex-between bold text-xs mb-1">
+      <span>Descripción</span>
+      <span>Total Item</span>
+    </div>
+    <div class="divider"></div>
+    
+    <!-- Ítems -->
+    ${itemsHtml}
+    
+    <div class="divider"></div>
+    
+    <!-- Totales -->
+    <div class="flex-between bold" style="font-size: 14px; margin-bottom: 5px;">
+      <span>TOTAL:</span>
+      <span>Gs ${formatGs(venta.total)}</span>
+    </div>
+    
+    ${pagoHtml}
+    ${saldoPendienteHtml}
+    
+    <div class="divider"></div>
+    <div class="text-center text-xs mb-1" style="font-style: italic;">¡Gracias por su confianza!</div>
+    <div class="text-center text-xs">Sistema POS</div>
+  </div>
+  
+  <script>
+    // Inicia la impresión ni bien cargue la ventanita
+    window.onload = function() {
+      setTimeout(() => {
+         window.print();
+      }, 300);
+    };
+    
+    // Cierra la ventanita sola cuando el usuario cancela o termina de imprimir
+    window.onafterprint = function() {
+      window.close();
+    };
+  </script>
+</body>
+</html>
+    `;
+
+    // Abrimos una ventana emergente ("popup")
+    const printWindow = window.open('', '_blank', 'width=350,height=600');
+    if (printWindow) {
+      printWindow.document.open();
+      printWindow.document.write(htmlContent);
+      printWindow.document.close();
+    } else {
+      alert('Tu navegador bloqueó la ventana emergente. Por favor permite los "Pop-ups" para este sitio para poder imprimir tickets.');
+    }
+
   } catch (error) {
-    console.error('Error al generar el ticket:', error);
+    console.error('Error al generar el ticket HTML:', error);
     alert('Error al generar el ticket: ' + error.message);
   }
 };

@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo } from 'react';
+import { useEffect, useState, useMemo, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { supabase } from './supabaseClient';
 import { sonidoExito, sonidoError } from './utils/sonido';
@@ -66,6 +66,7 @@ export default function Clientes() {
   const [libroMayorDesde, setLibroMayorDesde] = useState('');
   const [libroMayorHasta, setLibroMayorHasta] = useState('');
   const [libroMayorFormato, setLibroMayorFormato] = useState('Format 1');
+  const [fotoAmpliada, setFotoAmpliada] = useState(null);
 
   // Controles de la pestaña "Ventas" dentro del modal (clon de app.micdepos.com)
   const [ventasFiltroEstado, setVentasFiltroEstado] = useState('Todos');
@@ -96,6 +97,10 @@ export default function Clientes() {
   const [acordeonFoto, setAcordeonFoto] = useState(false);
   const [imagenClientePreview, setImagenClientePreview] = useState(null);
   const [subiendoImagenCliente, setSubiendoImagenCliente] = useState(false);
+  const [camaraClienteAbierta, setCamaraClienteAbierta] = useState(false);
+  const videoClienteRef = useRef(null);
+  const canvasClienteRef = useRef(null);
+  const streamClienteRef = useRef(null);
   const [acordeonDocumentos, setAcordeonDocumentos] = useState(false);
 
   // --- ESTADOS DEL FORMULARIO ---
@@ -376,6 +381,48 @@ export default function Clientes() {
     } finally {
       setSubiendoImagenCliente(false);
     }
+  };
+
+  const abrirCamaraCliente = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' } });
+      streamClienteRef.current = stream;
+      setCamaraClienteAbierta(true);
+      setTimeout(() => { if (videoClienteRef.current) videoClienteRef.current.srcObject = stream; }, 0);
+    } catch (error) {
+      alert('No se pudo acceder a la cámara: ' + error.message);
+    }
+  };
+
+  const cerrarCamaraCliente = () => {
+    streamClienteRef.current?.getTracks().forEach((t) => t.stop());
+    streamClienteRef.current = null;
+    setCamaraClienteAbierta(false);
+  };
+
+  const capturarFotoCliente = () => {
+    const video = videoClienteRef.current;
+    const canvas = canvasClienteRef.current;
+    if (!video || !canvas) return;
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    canvas.getContext('2d').drawImage(video, 0, 0);
+    canvas.toBlob(async (blob) => {
+      if (!blob) return;
+      cerrarCamaraCliente();
+      setSubiendoImagenCliente(true);
+      try {
+        const nombreArchivo = `${crypto.randomUUID()}.jpg`;
+        const { error: errorSubida } = await supabase.storage.from('clientes').upload(nombreArchivo, blob);
+        if (errorSubida) throw errorSubida;
+        const { data: urlData } = supabase.storage.from('clientes').getPublicUrl(nombreArchivo);
+        setImagenClientePreview(urlData.publicUrl);
+      } catch (error) {
+        alert('Error al subir la foto: ' + error.message);
+      } finally {
+        setSubiendoImagenCliente(false);
+      }
+    }, 'image/jpeg', 0.9);
   };
 
   const guardarCliente = async (e) => {
@@ -1067,7 +1114,7 @@ export default function Clientes() {
                   )}
                 </div>
 
-                {/* ACORDEONES: FOTO Y DOCUMENTOS (visuales por ahora, sin subida real) */}
+                {/* ACORDEONES: FOTO Y DOCUMENTOS */}
                 <div className="bg-white border rounded-lg mb-3 overflow-hidden shadow-sm">
                   <div className="p-3 bg-white flex justify-between items-center cursor-pointer border-b" onClick={() => setAcordeonFoto(!acordeonFoto)}>
                     <h4 className="font-bold text-gray-600 flex items-center gap-1"><span>📷</span> Foto del Cliente</h4>
@@ -1075,25 +1122,50 @@ export default function Clientes() {
                   </div>
                   {acordeonFoto && (
                     <div className="p-4">
-                      <div className="border-2 border-dashed border-gray-200 rounded-lg flex flex-col items-center justify-center py-8">
-                        {imagenClientePreview ? (
-                          <img src={imagenClientePreview} alt="preview" className="h-24 w-24 object-cover rounded-full mb-3" />
-                        ) : (
-                          <div className="text-4xl mb-3 text-gray-300">🧑</div>
-                        )}
-                        <p className="text-sm text-gray-500 mb-3">Subí una foto del cliente (opcional)</p>
-                        <div className="flex gap-2">
-                          <label className={`bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold px-4 py-2 rounded cursor-pointer flex items-center gap-1 ${subiendoImagenCliente ? 'opacity-60 pointer-events-none' : ''}`}>
-                            {subiendoImagenCliente ? '⏳ Subiendo...' : '⬆️ Subir foto'}
-                            <input type="file" accept="image/*" className="hidden" onChange={manejarImagenCliente} disabled={subiendoImagenCliente} />
+                      <div className="flex flex-col items-center gap-3">
+                        <div className="w-24 h-24 rounded-full bg-gray-100 border border-gray-200 flex items-center justify-center overflow-hidden">
+                          {imagenClientePreview ? (
+                            <img src={imagenClientePreview} alt="preview" className="w-full h-full object-cover" />
+                          ) : (
+                            <span className="text-4xl text-gray-300">👤</span>
+                          )}
+                        </div>
+
+                        <div className="flex gap-2 flex-wrap justify-center">
+                          <label className={`border rounded px-4 py-2 text-xs font-bold text-gray-700 cursor-pointer hover:bg-gray-50 flex items-center gap-1 ${subiendoImagenCliente ? 'opacity-60 pointer-events-none' : ''}`}>
+                            ⬆️ {subiendoImagenCliente ? 'Subiendo...' : 'Subir archivo'}
+                            <input type="file" accept="image/jpeg,image/png" className="hidden" onChange={manejarImagenCliente} disabled={subiendoImagenCliente} />
                           </label>
+                          <button type="button" onClick={abrirCamaraCliente} className="border rounded px-4 py-2 text-xs font-bold text-gray-700 hover:bg-gray-50 flex items-center gap-1" disabled={subiendoImagenCliente}>
+                            📷 Camara Web
+                          </button>
                           {imagenClientePreview && (
                             <button type="button" onClick={() => setImagenClientePreview(null)} className="bg-gray-100 hover:bg-gray-200 text-gray-600 text-xs font-bold px-4 py-2 rounded">
                               Quitar foto
                             </button>
                           )}
                         </div>
+
+                        <label className="w-full max-w-xs border-2 border-dashed border-gray-300 rounded-lg py-4 text-center cursor-pointer hover:border-orange-400 hover:bg-orange-50/30 transition-colors">
+                          <span className="text-xs font-bold text-gray-500">🖼️ Seleccionar imagen</span>
+                          <input type="file" accept="image/jpeg,image/png" className="hidden" onChange={manejarImagenCliente} disabled={subiendoImagenCliente} />
+                        </label>
+                        <p className="text-[10px] text-gray-400">JPG o PNG, max 5MB</p>
                       </div>
+
+                      {/* Modal de cámara web */}
+                      {camaraClienteAbierta && (
+                        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-[10000] p-4">
+                          <div className="bg-white rounded-xl shadow-2xl p-4 flex flex-col items-center gap-3 max-w-sm w-full">
+                            <video ref={videoClienteRef} autoPlay playsInline className="w-full rounded-lg bg-black" />
+                            <canvas ref={canvasClienteRef} className="hidden" />
+                            <div className="flex gap-2 w-full">
+                              <button type="button" onClick={capturarFotoCliente} className="flex-1 bg-orange-500 hover:bg-orange-600 text-white font-bold py-2 rounded-lg text-sm">📸 Capturar</button>
+                              <button type="button" onClick={cerrarCamaraCliente} className="flex-1 border text-gray-600 font-bold py-2 rounded-lg text-sm hover:bg-gray-50">Cancelar</button>
+                            </div>
+                          </div>
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>
@@ -1415,7 +1487,20 @@ export default function Clientes() {
                 {/* Tarjeta del contacto */}
                 <div className="border rounded-lg p-4 flex flex-wrap justify-between items-center gap-4 mb-4">
                   <div className="flex items-center gap-4">
-                    <div className="w-16 h-16 rounded-full bg-[#004284] text-white flex items-center justify-center font-bold text-xl flex-shrink-0">
+                    {cliente.foto_url ? (
+                      <img
+                        src={cliente.foto_url}
+                        alt={cliente.nombre}
+                        className="w-16 h-16 rounded-full object-cover flex-shrink-0 border-2 border-[#004284] cursor-zoom-in hover:opacity-90 transition-opacity"
+                        onClick={() => setFotoAmpliada(cliente.foto_url)}
+                        title="Clic para ampliar foto"
+                        onError={(e) => { e.target.onerror = null; e.target.style.display = 'none'; e.target.nextSibling.style.display = 'flex'; }}
+                      />
+                    ) : null}
+                    <div
+                      className="w-16 h-16 rounded-full bg-[#004284] text-white flex items-center justify-center font-bold text-xl flex-shrink-0"
+                      style={{ display: cliente.foto_url ? 'none' : 'flex' }}
+                    >
                       {iniciales}
                     </div>
                     <div>
@@ -2014,6 +2099,28 @@ export default function Clientes() {
                 <button type="button" disabled={guardandoNotas} onClick={() => setClienteDocumentos(null)} className="border text-gray-600 font-bold text-sm px-5 py-2 rounded hover:bg-gray-50">Cerrar</button>
               </div>
             </div>
+          </div>
+        </div>
+      )}
+      {/* LIGHTBOX: Foto ampliada del cliente */}
+      {fotoAmpliada && (
+        <div
+          className="fixed inset-0 bg-black/80 flex items-center justify-center z-[99999] p-4"
+          onClick={() => setFotoAmpliada(null)}
+        >
+          <div className="relative max-w-lg w-full" onClick={(e) => e.stopPropagation()}>
+            <button
+              onClick={() => setFotoAmpliada(null)}
+              className="absolute -top-10 right-0 text-white text-3xl font-bold hover:text-gray-300"
+              title="Cerrar"
+            >
+              ✕
+            </button>
+            <img
+              src={fotoAmpliada}
+              alt="Foto del cliente"
+              className="w-full max-h-[80vh] object-contain rounded-xl shadow-2xl"
+            />
           </div>
         </div>
       )}

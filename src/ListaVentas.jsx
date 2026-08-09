@@ -2,6 +2,7 @@ import { useEffect, useState, useMemo } from 'react';
 import { supabase } from './supabaseClient';
 import { useEmpresaInfo } from './utils/useEmpresa';
 import { generateReceipt } from './utils/generateReceipt';
+import { ajustarStockUbicacion } from './utils/stockUbicacion';
 
 export default function ListaVentas() {
   const { id: empresaId, nombre: nombreEmpresa, direccion: direccionEmpresa, telefono: telefonoEmpresa, ruc: rucEmpresa } = useEmpresaInfo();
@@ -49,6 +50,45 @@ export default function ListaVentas() {
       setVentas(data || []);
     }
     setCargando(false);
+  };
+
+  const reponerStockDeVenta = async (venta) => {
+    const { data: items } = await supabase.from('detalle_ventas').select('*').eq('venta_id', venta.id);
+    if (!items) return;
+    for (const item of items) {
+      if (!item.producto_id) continue;
+      const { data: prod } = await supabase.from('productos').select('stock_actual').eq('id', item.producto_id).eq('empresa_id', empresaId).single();
+      const nuevoStock = (Number(prod?.stock_actual) || 0) + Number(item.cantidad || 0);
+      await supabase.from('productos').update({ stock_actual: nuevoStock }).eq('id', item.producto_id).eq('empresa_id', empresaId);
+      if (venta.ubicacion_id) {
+        try {
+          await ajustarStockUbicacion({ empresaId, productoId: item.producto_id, ubicacionId: venta.ubicacion_id, delta: Number(item.cantidad || 0) });
+        } catch (e) {
+          console.warn('No se pudo reponer stock:', e.message);
+        }
+      }
+    }
+  };
+
+  const borrarVenta = async (venta) => {
+    if (!confirm(`Esto borrará la venta #${venta.id} permanentemente y repondrá el stock de los productos. ¿Confirmas?`)) return;
+    setCargando(true);
+    try {
+      if ((venta.estado_pago || venta.estado) !== 'Anulada') {
+        await reponerStockDeVenta(venta);
+      }
+      await supabase.from('detalle_ventas').delete().eq('venta_id', venta.id);
+      await supabase.from('pagos_clientes').delete().eq('venta_id', venta.id);
+      
+      const { error } = await supabase.from('ventas').delete().eq('id', venta.id).eq('empresa_id', empresaId);
+      if (error) throw error;
+      
+      alert(`Venta eliminada y stock devuelto correctamente.`);
+      obtenerVentas();
+    } catch (err) {
+      alert('Error al borrar: ' + err.message);
+      setCargando(false);
+    }
   };
 
   // Listas únicas para los desplegables de filtro basados en los datos reales
@@ -256,12 +296,18 @@ export default function ListaVentas() {
                       {(venta.estado_pago || venta.estado || 'Pagado').toUpperCase()}
                     </span>
                   </td>
-                  <td className="p-3">
+                  <td className="p-3 flex items-center gap-2">
                     <button 
                       onClick={() => generateReceipt(venta, { nombre: nombreEmpresa, direccion: direccionEmpresa, telefono: telefonoEmpresa, ruc: rucEmpresa })}
                       className="bg-blue-50 text-[#004284] border border-blue-200 px-3 py-1 rounded text-xs font-bold hover:bg-blue-100 flex items-center gap-1 transition shadow-sm"
                     >
                       🖨️ Imprimir
+                    </button>
+                    <button 
+                      onClick={() => borrarVenta(venta)}
+                      className="bg-red-50 text-red-600 border border-red-200 px-3 py-1 rounded text-xs font-bold hover:bg-red-100 flex items-center gap-1 transition shadow-sm"
+                    >
+                      🗑️ Borrar
                     </button>
                   </td>
                 </tr>
