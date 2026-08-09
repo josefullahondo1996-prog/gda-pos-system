@@ -1,6 +1,7 @@
 import CierreCaja from './CierreCaja';
 import GastosDelTurno from './GastosDelTurno';
 import NuevoClientePOS from './NuevoClientePOS';
+import ModalPagoMultiple from './ModalPagoMultiple';
 import React, { useState, useEffect, useMemo } from 'react';
 import { supabase } from './supabaseClient';
 import { sonidoExito, sonidoError } from './utils/sonido';
@@ -35,6 +36,8 @@ const PuntoDeVenta = ({ cajaInfo, session, perfilUsuario, onVolver, onSolicitarC
   };
   const [mostrarCierreCaja, setMostrarCierreCaja] = useState(false);
   const [mostrarNuevoCliente, setMostrarNuevoCliente] = useState(false);
+  const [mostrarPagoMultiple, setMostrarPagoMultiple] = useState(false);
+  const [cuentasCaja, setCuentasCaja] = useState([]);
   const [clientesDisponibles, setClientesDisponibles] = useState([]);
   // === ESTADOS PRINCIPALES ===
   const [productos, setProductos] = useState([]);
@@ -69,6 +72,22 @@ const PuntoDeVenta = ({ cajaInfo, session, perfilUsuario, onVolver, onSolicitarC
       if (data) setClientesDisponibles(data);
     };
     if (empresaId) cargarClientes();
+  }, [empresaId]);
+
+  // Cuentas de caja reales (las mismas que administrás en "Caja / Banco"),
+  // para el selector "Cuenta de pago" del modal de Pago Múltiple.
+  useEffect(() => {
+    const cargarCuentasCaja = async () => {
+      if (!empresaId) return;
+      const { data, error } = await supabase
+        .from('cuentas_caja')
+        .select('id, nombre, tipo_cuenta')
+        .eq('empresa_id', empresaId)
+        .eq('activo', true)
+        .order('nombre');
+      if (!error && data) setCuentasCaja(data);
+    };
+    cargarCuentasCaja();
   }, [empresaId]);
 
   useEffect(() => {
@@ -170,8 +189,17 @@ const PuntoDeVenta = ({ cajaInfo, session, perfilUsuario, onVolver, onSolicitarC
     ? totalConAjustes - Number(montoPagado)
     : 0;
 
-  const procesarVenta = async (tipoOperacion = 'venta') => {
+  const procesarVenta = async (tipoOperacion = 'venta', datosPagoMultiple = null) => {
     if (carrito.length === 0) return alert('El carrito está vacío');
+
+    // Si viene del modal de Pago Múltiple, usamos esos valores; si no,
+    // seguimos leyendo los mismos estados de siempre (montoPagado, metodoPago,
+    // notaVenta) para no cambiar en nada el comportamiento de los botones existentes.
+    const montoPagadoFinal = datosPagoMultiple ? datosPagoMultiple.montoPagado : Number(montoPagado) || 0;
+    const metodoPagoFinal = datosPagoMultiple ? datosPagoMultiple.metodoPago : metodoPago;
+    const notaVentaFinal = datosPagoMultiple
+      ? [notaVenta, datosPagoMultiple.notaPagos].filter(Boolean).join(' | ')
+      : notaVenta;
 
     // Verificación final de stock antes de cobrar (por si cambió algo mientras armabas el carrito)
     const sinStockSuficiente = carrito.filter((item) => {
@@ -190,23 +218,25 @@ const PuntoDeVenta = ({ cajaInfo, session, perfilUsuario, onVolver, onSolicitarC
     }
 
     let estadoPago = 'Pagado';
-    if (tipoOperacion === 'credito' || Number(montoPagado) === 0) estadoPago = 'Credito';
-    if (Number(montoPagado) > 0 && Number(montoPagado) < totalConAjustes) estadoPago = 'Pago Parcial';
+    if (tipoOperacion === 'credito' || montoPagadoFinal === 0) estadoPago = 'Credito';
+    if (montoPagadoFinal > 0 && montoPagadoFinal < totalConAjustes) estadoPago = 'Pago Parcial';
     if (tipoOperacion === 'cotizacion') estadoPago = 'Cotizacion';
     if (tipoOperacion === 'pendiente') estadoPago = 'Pendiente';
+
+    const saldoPendienteFinal = datosPagoMultiple ? datosPagoMultiple.saldoPendiente : saldoPendiente;
 
     const nuevaVenta = {
       empresa_id: empresaId,
       cliente,
       total: totalConAjustes,
-      metodo_pago: metodoPago,
+      metodo_pago: metodoPagoFinal,
       estado_pago: estadoPago,
-      monto_pagado: Number(montoPagado) || 0,
-      saldo_pendiente: estadoPago === 'Credito' ? totalConAjustes : saldoPendiente,
+      monto_pagado: montoPagadoFinal,
+      saldo_pendiente: estadoPago === 'Credito' ? totalConAjustes : saldoPendienteFinal,
       articulos: totalArticulos,
       descuento: Number(descuento) || 0,
       cargo_embalaje: Number(cargoEmbalaje) || 0,
-      nota_venta: notaVenta || null,
+      nota_venta: notaVentaFinal || null,
       fecha: new Date().toISOString(),
       caja_id: cajaInfo?.id || null,
       ubicacion_id: ubicacionActivaId,
@@ -254,6 +284,7 @@ const PuntoDeVenta = ({ cajaInfo, session, perfilUsuario, onVolver, onSolicitarC
       );
       vaciarCarrito();
       setCliente('Cliente Ocasional');
+      return ventaId;
     } catch (error) {
       sonidoError();
       console.error('Error al guardar venta:', error.message);
@@ -264,7 +295,44 @@ const PuntoDeVenta = ({ cajaInfo, session, perfilUsuario, onVolver, onSolicitarC
           'Error al procesar la venta. No se guardó nada (la operación es atómica). Revisá la consola para más detalle.'
         );
       }
+      return null;
     }
+  };
+
+  // El modal de Pago Múltiple ya calculó cuánto se pagó, con qué método(s) y
+  // cuánto queda pendiente. Acá reusamos EXACTAMENTE la misma función de
+  // siempre (procesarVenta) para que todo lo demás (RPC atómica, descuento
+  // de stock, impresión de ticket, etc.) funcione idéntico a una venta normal.
+  // Si el pago no cubre el total, procesarVenta ya sabe convertir el resto
+  // en "Pago Parcial" / crédito del cliente (misma lógica de siempre).
+  const finalizarPagoMultiple = async (resumen) => {
+    const ventaId = await procesarVenta('venta', resumen);
+    if (!ventaId) return; // la venta falló; procesarVenta ya mostró el error y el modal sigue abierto
+
+    // Guardamos el desglose real de cada fila (monto, método, cuenta, nota)
+    // para poder reportar por método de pago dentro de una misma venta.
+    // Requiere haber corrido database/migration_detalle_pagos_venta.sql una
+    // vez en Supabase. Si todavía no se corrió, la venta ya se guardó bien
+    // igual (esto es un detalle adicional, no rompe el cobro).
+    if (resumen.filas?.length > 0) {
+      const filasParaGuardar = resumen.filas.map((f) => ({
+        empresa_id: empresaId,
+        venta_id: ventaId,
+        monto: f.cantidad,
+        metodo_pago: f.metodo,
+        cuenta_id: f.cuentaId || null,
+        nota: f.nota || null,
+      }));
+      const { error: errorDetalle } = await supabase.from('detalle_pagos_venta').insert(filasParaGuardar);
+      if (errorDetalle) {
+        console.warn(
+          'La venta se guardó bien, pero no se pudo guardar el desglose de pagos (¿corriste la migración?):',
+          errorDetalle.message
+        );
+      }
+    }
+
+    setMostrarPagoMultiple(false);
   };
 
   const cerrarRegistro = () => {
@@ -503,11 +571,12 @@ const PuntoDeVenta = ({ cajaInfo, session, perfilUsuario, onVolver, onSolicitarC
             </div>
           )}
 
-          <div className="border-t border-gray-200 p-3 grid grid-cols-4 gap-2 text-xs font-bold">
+          <div className="border-t border-gray-200 p-3 grid grid-cols-2 gap-2 text-xs font-bold">
             <button onClick={() => procesarVenta('pendiente')} className="bg-gray-100 text-gray-700 py-2 rounded-lg hover:bg-gray-200">Pedido Pendiente</button>
             <button onClick={() => procesarVenta('cotizacion')} className="bg-gray-100 text-gray-700 py-2 rounded-lg hover:bg-gray-200">Cotización</button>
             <button onClick={() => procesarVenta('credito')} className="bg-indigo-50 text-indigo-700 py-2 rounded-lg hover:bg-indigo-100">Venta a crédito</button>
-            <button onClick={vaciarCarrito} className="bg-red-50 text-red-600 py-2 rounded-lg hover:bg-red-100">Cancelar</button>
+            <button onClick={() => setMostrarPagoMultiple(true)} disabled={carrito.length === 0} className="bg-sky-50 text-sky-700 py-2 rounded-lg hover:bg-sky-100 disabled:opacity-50 disabled:cursor-not-allowed">Pago múltiple</button>
+            <button onClick={vaciarCarrito} className="bg-red-50 text-red-600 py-2 rounded-lg hover:bg-red-100 col-span-2">Cancelar</button>
           </div>
           <button
             onClick={() => procesarVenta('venta')}
@@ -585,6 +654,14 @@ const PuntoDeVenta = ({ cajaInfo, session, perfilUsuario, onVolver, onSolicitarC
           }}
         />
       )}
+      <ModalPagoMultiple
+        abierto={mostrarPagoMultiple}
+        onCerrar={() => setMostrarPagoMultiple(false)}
+        totalArticulos={totalArticulos}
+        totalAPagar={totalConAjustes}
+        cuentasCaja={cuentasCaja}
+        onFinalizar={finalizarPagoMultiple}
+      />
       {mostrarCierreCaja && (
         <CierreCaja
           cajaInfo={cajaInfo}

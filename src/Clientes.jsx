@@ -94,6 +94,8 @@ export default function Clientes() {
   const [acordeonUbicacion, setAcordeonUbicacion] = useState(false);
   const [acordeonCredito, setAcordeonCredito] = useState(false);
   const [acordeonFoto, setAcordeonFoto] = useState(false);
+  const [imagenClientePreview, setImagenClientePreview] = useState(null);
+  const [subiendoImagenCliente, setSubiendoImagenCliente] = useState(false);
   const [acordeonDocumentos, setAcordeonDocumentos] = useState(false);
 
   // --- ESTADOS DEL FORMULARIO ---
@@ -350,9 +352,38 @@ export default function Clientes() {
   // ==========================================
   // FUNCIÓN MAESTRA DE GUARDADO (INSERT / UPDATE)
   // ==========================================
+  // Sube la foto elegida al bucket "clientes" en Supabase Storage y guarda
+  // la URL pública en imagenClientePreview (mismo patrón que ya funciona
+  // en AgregarProducto.jsx con el bucket "productos").
+  const manejarImagenCliente = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 5 * 1024 * 1024) return alert('La imagen supera los 5MB.');
+
+    setSubiendoImagenCliente(true);
+    try {
+      const extension = file.name.split('.').pop();
+      const nombreArchivo = `${crypto.randomUUID()}.${extension}`;
+
+      const { error: errorSubida } = await supabase.storage.from('clientes').upload(nombreArchivo, file);
+      if (errorSubida) throw errorSubida;
+
+      const { data: urlData } = supabase.storage.from('clientes').getPublicUrl(nombreArchivo);
+      setImagenClientePreview(urlData.publicUrl);
+    } catch (error) {
+      console.error(error);
+      alert('Error al subir la imagen: ' + error.message + '\n\n¿Ya creaste el bucket "clientes" en Supabase Storage (público)?');
+    } finally {
+      setSubiendoImagenCliente(false);
+    }
+  };
+
   const guardarCliente = async (e) => {
     e.preventDefault();
 
+    // Foto: sube el archivo al bucket público "clientes" en Supabase Storage
+    // (mismo mecanismo que ya usa AgregarProducto.jsx con el bucket "productos")
+    // y devuelve la URL pública lista para guardar.
     // 1. Formatear Nombres (Evita espacios dobles si no tiene segundo nombre)
     const nombreCompleto = `${prefijo} ${nombre} ${segundoNombre} ${apellido}`.replace(/\s+/g, ' ').trim();
     const nombreFinal = esEmpresa ? nombreEmpresa : nombreCompleto;
@@ -389,6 +420,7 @@ export default function Clientes() {
       saldo_apertura: parseFloat(saldoInicial) || 0,
       limite_credito: limiteCredito === '0' || !limiteCredito ? 'Sin límite' : `${limiteCredito} Gs`,
       termino_pago: terminoPagoFinal,
+      imagen_url: imagenClientePreview || null,
     };
 
     // 5. Enviar a Supabase: actualizar si estamos editando, o crear si es nuevo
@@ -414,6 +446,7 @@ export default function Clientes() {
     setTelefono(''); setEmail(''); setFechaNacimiento('');
     setPais('Paraguay'); setDepartamento('-- Depto --'); setCiudad(''); setDireccionCalle(''); setNroCasa(''); setEdificioPiso(''); setCodPostal('7700');
     setVendedorAsignado(nombreDelNegocio); setGrupoClientes('Ninguna'); setSaldoInicial('0'); setTerminoPagoNum(''); setTerminoPagoTipo('Dias'); setLimiteCredito('0');
+    setImagenClientePreview(null);
   };
 
   const abrirEdicionCliente = (cliente) => {
@@ -446,6 +479,7 @@ export default function Clientes() {
     setTerminoPagoNum(cliente.termino_pago ? partesTermino[0] : '');
     setTerminoPagoTipo(cliente.termino_pago ? (partesTermino.slice(1).join(' ') || 'Dias') : 'Dias');
     setLimiteCredito(cliente.limite_credito && cliente.limite_credito !== 'Sin límite' ? cliente.limite_credito.replace(' Gs', '') : '0');
+    setImagenClientePreview(cliente.imagen_url || null);
     setMostrarModalAñadir(true);
   };
 
@@ -773,68 +807,68 @@ export default function Clientes() {
                               className="fixed z-[9999] bg-white border rounded shadow-lg w-44 text-[11px] py-1"
                               style={{ top: menuAccionesPos.top, left: menuAccionesPos.left }}
                             >
-                            <button
-                              onClick={() => { setMenuAccionesAbierto(null); abrirModalPagar(cliente); }}
-                              className="w-full text-left px-3 py-2 hover:bg-gray-100 text-gray-700 flex items-center gap-2"
-                            >
-                              💳 Pagar
-                            </button>
-                            <button
-                              onClick={() => { setMenuAccionesAbierto(null); setClienteVer(cliente); }}
-                              className="w-full text-left px-3 py-2 hover:bg-gray-100 text-gray-700 flex items-center gap-2"
-                            >
-                              👁️ Ver
-                            </button>
-                            <button
-                              onClick={() => { setMenuAccionesAbierto(null); abrirEdicionCliente(cliente); }}
-                              className="w-full text-left px-3 py-2 hover:bg-gray-100 text-gray-700 flex items-center gap-2"
-                            >
-                              ✏️ Editar
-                            </button>
-                            <button
-                              onClick={() => { setMenuAccionesAbierto(null); handleEliminarCliente(cliente); }}
-                              className="w-full text-left px-3 py-2 hover:bg-gray-100 text-red-600 flex items-center gap-2"
-                            >
-                              🗑️ Borrar
-                            </button>
-                            <button
-                              onClick={() => { setMenuAccionesAbierto(null); handleDesactivarCliente(cliente); }}
-                              className="w-full text-left px-3 py-2 hover:bg-gray-100 text-gray-700 flex items-center gap-2"
-                            >
-                              ⏻ {cliente.estado === 'Inactivo' ? 'Activar' : 'Deactivate'}
-                            </button>
-                            <div className="border-t my-1" />
-                            <button
-                              onClick={() => {
-                                setMenuAccionesAbierto(null);
-                                setLibroMayorTab('libro');
-                                const hoy = new Date().toISOString().slice(0, 10);
-                                setLibroMayorDesde(hoy);
-                                setLibroMayorHasta(hoy);
-                                const anio = new Date().getFullYear();
-                                setVentasDesde(`${anio}-01-01`);
-                                setVentasHasta(`${anio}-12-31`);
-                                setVentasFiltroEstado('Todos');
-                                setVentasBusqueda('');
-                                setVentasPaginaActual(1);
-                                setClienteLibroMayor(cliente);
-                              }}
-                              className="w-full text-left px-3 py-2 hover:bg-gray-100 text-gray-700 flex items-center gap-2"
-                            >
-                              📒 Libro mayor
-                            </button>
-                            <button
-                              onClick={() => { setMenuAccionesAbierto(null); setClienteVentas(cliente); }}
-                              className="w-full text-left px-3 py-2 hover:bg-gray-100 text-gray-700 flex items-center gap-2"
-                            >
-                              🧾 Ventas
-                            </button>
-                            <button
-                              onClick={() => { abrirDocumentosNotas(cliente); }}
-                              className="w-full text-left px-3 py-2 hover:bg-gray-100 text-gray-700 flex items-center gap-2"
-                            >
-                              📎 Documentos y notas
-                            </button>
+                              <button
+                                onClick={() => { setMenuAccionesAbierto(null); abrirModalPagar(cliente); }}
+                                className="w-full text-left px-3 py-2 hover:bg-gray-100 text-gray-700 flex items-center gap-2"
+                              >
+                                💳 Pagar
+                              </button>
+                              <button
+                                onClick={() => { setMenuAccionesAbierto(null); setClienteVer(cliente); }}
+                                className="w-full text-left px-3 py-2 hover:bg-gray-100 text-gray-700 flex items-center gap-2"
+                              >
+                                👁️ Ver
+                              </button>
+                              <button
+                                onClick={() => { setMenuAccionesAbierto(null); abrirEdicionCliente(cliente); }}
+                                className="w-full text-left px-3 py-2 hover:bg-gray-100 text-gray-700 flex items-center gap-2"
+                              >
+                                ✏️ Editar
+                              </button>
+                              <button
+                                onClick={() => { setMenuAccionesAbierto(null); handleEliminarCliente(cliente); }}
+                                className="w-full text-left px-3 py-2 hover:bg-gray-100 text-red-600 flex items-center gap-2"
+                              >
+                                🗑️ Borrar
+                              </button>
+                              <button
+                                onClick={() => { setMenuAccionesAbierto(null); handleDesactivarCliente(cliente); }}
+                                className="w-full text-left px-3 py-2 hover:bg-gray-100 text-gray-700 flex items-center gap-2"
+                              >
+                                ⏻ {cliente.estado === 'Inactivo' ? 'Activar' : 'Deactivate'}
+                              </button>
+                              <div className="border-t my-1" />
+                              <button
+                                onClick={() => {
+                                  setMenuAccionesAbierto(null);
+                                  setLibroMayorTab('libro');
+                                  const hoy = new Date().toISOString().slice(0, 10);
+                                  setLibroMayorDesde(hoy);
+                                  setLibroMayorHasta(hoy);
+                                  const anio = new Date().getFullYear();
+                                  setVentasDesde(`${anio}-01-01`);
+                                  setVentasHasta(`${anio}-12-31`);
+                                  setVentasFiltroEstado('Todos');
+                                  setVentasBusqueda('');
+                                  setVentasPaginaActual(1);
+                                  setClienteLibroMayor(cliente);
+                                }}
+                                className="w-full text-left px-3 py-2 hover:bg-gray-100 text-gray-700 flex items-center gap-2"
+                              >
+                                📒 Libro mayor
+                              </button>
+                              <button
+                                onClick={() => { setMenuAccionesAbierto(null); setClienteVentas(cliente); }}
+                                className="w-full text-left px-3 py-2 hover:bg-gray-100 text-gray-700 flex items-center gap-2"
+                              >
+                                🧾 Ventas
+                              </button>
+                              <button
+                                onClick={() => { abrirDocumentosNotas(cliente); }}
+                                className="w-full text-left px-3 py-2 hover:bg-gray-100 text-gray-700 flex items-center gap-2"
+                              >
+                                📎 Documentos y notas
+                              </button>
                             </div>
                           </>,
                           document.body
@@ -842,7 +876,18 @@ export default function Clientes() {
                       </td>
                       <td className="p-3 font-mono">{cliente.codigo_cliente}</td>
                       {columnasVisibles.empresa && <td className="p-3">{cliente.nombre_empresa || '-'}</td>}
-                      <td className="p-3 font-bold text-gray-800">{cliente.nombre}</td>
+                      <td className="p-3 font-bold text-gray-800">
+                        <div className="flex items-center gap-2">
+                          {cliente.imagen_url ? (
+                            <img src={cliente.imagen_url} alt={cliente.nombre} className="w-7 h-7 rounded-full object-cover flex-shrink-0" />
+                          ) : (
+                            <span className="w-7 h-7 rounded-full bg-orange-100 text-orange-600 text-[10px] font-bold flex items-center justify-center flex-shrink-0">
+                              {(cliente.nombre || '?').charAt(0).toUpperCase()}
+                            </span>
+                          )}
+                          {cliente.nombre}
+                        </div>
+                      </td>
                       {columnasVisibles.email && <td className="p-3">{cliente.email || '-'}</td>}
                       {columnasVisibles.documento && <td className="p-3">{cliente.documento_nro || '-'}</td>}
                       {columnasVisibles.limiteCredito && <td className="p-3">{cliente.limite_credito}</td>}
@@ -1024,7 +1069,27 @@ export default function Clientes() {
                     <span className="text-gray-400 font-bold">{acordeonFoto ? '▲' : '▼'}</span>
                   </div>
                   {acordeonFoto && (
-                    <div className="p-4 text-gray-400 italic">La carga de fotos todavía no está conectada — próximamente.</div>
+                    <div className="p-4">
+                      <div className="border-2 border-dashed border-gray-200 rounded-lg flex flex-col items-center justify-center py-8">
+                        {imagenClientePreview ? (
+                          <img src={imagenClientePreview} alt="preview" className="h-24 w-24 object-cover rounded-full mb-3" />
+                        ) : (
+                          <div className="text-4xl mb-3 text-gray-300">🧑</div>
+                        )}
+                        <p className="text-sm text-gray-500 mb-3">Subí una foto del cliente (opcional)</p>
+                        <div className="flex gap-2">
+                          <label className={`bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold px-4 py-2 rounded cursor-pointer flex items-center gap-1 ${subiendoImagenCliente ? 'opacity-60 pointer-events-none' : ''}`}>
+                            {subiendoImagenCliente ? '⏳ Subiendo...' : '⬆️ Subir foto'}
+                            <input type="file" accept="image/*" className="hidden" onChange={manejarImagenCliente} disabled={subiendoImagenCliente} />
+                          </label>
+                          {imagenClientePreview && (
+                            <button type="button" onClick={() => setImagenClientePreview(null)} className="bg-gray-100 hover:bg-gray-200 text-gray-600 text-xs font-bold px-4 py-2 rounded">
+                              Quitar foto
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    </div>
                   )}
                 </div>
 
