@@ -85,7 +85,7 @@ const CierreCaja = ({ cajaInfo, session, perfilUsuario, onClose, onCierreConfirm
   const confirmarCierre = async () => {
     setGuardando(true);
     try {
-      const { error } = await supabase
+      const { data, error } = await supabase
         .from('caja_registros')
         .update({
           estado: 'Cerrada',
@@ -96,9 +96,14 @@ const CierreCaja = ({ cajaInfo, session, perfilUsuario, onClose, onCierreConfirm
           usuario: session?.user?.email || null,
         })
         .eq('id', cajaInfo.id)
-        .eq('empresa_id', empresaId);
+        .eq('empresa_id', empresaId)
+        .select();
 
       if (error && error.code !== '42P01') throw error;
+      
+      if (!data || data.length === 0) {
+        throw new Error("No se pudo actualizar la caja en la base de datos (puede que ya estuviera cerrada o no tengas permisos).");
+      }
 
       const reporte = {
         cajaId: cajaInfo.id,

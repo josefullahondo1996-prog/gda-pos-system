@@ -53,6 +53,8 @@ const Inicio = ({ perfilUsuario }) => {
   const [detalleVentas, setDetalleVentas] = useState([]);
   const [hayDetalleVentas, setHayDetalleVentas] = useState(true);
   const [hayCaducidad, setHayCaducidad] = useState(true);
+  const [cajasAbiertas, setCajasAbiertas] = useState([]);
+  const [ubicacionesMapa, setUbicacionesMapa] = useState({});
 
   const [tabActiva, setTabActiva] = useState('cobrar');
 
@@ -192,12 +194,16 @@ const Inicio = ({ perfilUsuario }) => {
           qGastos = qGastos.eq('ubicacion_id', filtroUbicacion);
           qCompras = qCompras.eq('ubicacion_id', filtroUbicacion);
         }
-        const [rv, rg, rc, rp, rd] = await Promise.all([
+        let qCajas = supabase.from('caja_registros').select('*').eq('empresa_id', empresaId).eq('estado', 'Abierta');
+        if (filtroUbicacion) qCajas = qCajas.eq('ubicacion_id', filtroUbicacion);
+        const [rv, rg, rc, rp, rd, rcajas, rubic] = await Promise.all([
           qVentas,
           qGastos,
           qCompras,
           supabase.from('productos').select('*').eq('empresa_id', empresaId),
           supabase.from('detalle_ventas').select('*').eq('empresa_id', empresaId),
+          qCajas,
+          supabase.from('ubicaciones_comerciales').select('id, nombre').eq('empresa_id', empresaId),
         ]);
         if (!isMounted) return;
 
@@ -206,6 +212,8 @@ const Inicio = ({ perfilUsuario }) => {
         setCompras(rc.data || []);
         setProductos(rp.data || []);
         setDetalleVentas(rd.data || []);
+        setCajasAbiertas(rcajas.data || []);
+        setUbicacionesMapa(Object.fromEntries((rubic.data || []).map((u) => [u.id, u.nombre])));
         if (rd.error) setHayDetalleVentas(false);
         setHayCaducidad((rp.data || []).some((p) => p.fecha_vencimiento));
       } catch (err) {
@@ -217,6 +225,42 @@ const Inicio = ({ perfilUsuario }) => {
     };
     cargarDatos();
     return () => { isMounted = false; };
+  }, [empresaId, filtroUbicacion]);
+
+  // === CAJAS ABIERTAS EN VIVO: se actualiza sola cada 20s, sin recargar todo ===
+  // Así, si otro cajero cierra su caja desde otra máquina, desaparece de acá
+  // sin que este usuario tenga que recargar la página.
+  useEffect(() => {
+    if (!empresaId) return;
+    let cancelado = false;
+
+    const actualizarCajasEnVivo = async () => {
+      let q = supabase.from('caja_registros').select('*').eq('empresa_id', empresaId).eq('estado', 'Abierta');
+      if (filtroUbicacion) q = q.eq('ubicacion_id', filtroUbicacion);
+      const { data: cajas } = await q;
+      if (cancelado) return;
+      setCajasAbiertas(cajas || []);
+
+      // Traemos también las ventas de esas cajas puntuales, para que
+      // Ventas/Efectivo/Tarjeta/Transacc. de cada tarjeta estén al día.
+      if (cajas && cajas.length > 0) {
+        const { data: ventasDeCajas } = await supabase
+          .from('ventas')
+          .select('*')
+          .in('caja_id', cajas.map((c) => c.id));
+        if (cancelado || !ventasDeCajas) return;
+        setVentas((prev) => {
+          const idsCajasAbiertas = new Set(cajas.map((c) => c.id));
+          const restoDeVentas = prev.filter((v) => !idsCajasAbiertas.has(v.caja_id));
+          return [...restoDeVentas, ...ventasDeCajas];
+        });
+      }
+    };
+
+    actualizarCajasEnVivo(); // primera carga inmediata
+    const intervalo = setInterval(actualizarCajasEnVivo, 20000); // y después, cada 20s
+
+    return () => { cancelado = true; clearInterval(intervalo); };
   }, [empresaId, filtroUbicacion]);
 
   const dentroDelRango = (fecha) => {
@@ -340,6 +384,49 @@ const Inicio = ({ perfilUsuario }) => {
       .slice(0, 5);
   }, [detalleF]);
 
+  // === CAJAS ABIERTAS: ventas/efectivo/tarjeta/transacciones de cada una ===
+  const cajasAbiertasConDatos = useMemo(() => {
+    const formatDuracion = (fechaApertura) => {
+      // Forzar que se trate como UTC si no tiene la Z al final
+      const apStr = fechaApertura?.endsWith('Z') ? fechaApertura : `${fechaApertura}Z`;
+      const ap = new Date(apStr);
+      if (isNaN(ap.getTime())) return '';
+      const ms = Date.now() - ap.getTime();
+      const horas = Math.floor(Math.abs(ms) / 3600000);
+      const minutos = Math.floor((Math.abs(ms) % 3600000) / 60000);
+      const hora = ap.toLocaleTimeString('es-PY', { hour: '2-digit', minute: '2-digit' });
+      return `Abierta hace ${horas}h ${minutos}min (desde ${hora})`;
+    };
+    return cajasAbiertas.map((caja) => {
+      const ventasDeCaja = ventas.filter((v) => v.caja_id === caja.id);
+      const totalVentasCaja = ventasDeCaja.reduce((a, v) => a + getNumericValue(v, ['total', 'monto', 'valor']), 0);
+      const totalEfectivo = ventasDeCaja.filter((v) => (v.metodo_pago || '').toLowerCase() === 'efectivo').reduce((a, v) => a + getNumericValue(v, ['total']), 0);
+      const totalTarjeta = ventasDeCaja.filter((v) => (v.metodo_pago || '').toLowerCase() === 'tarjeta').reduce((a, v) => a + getNumericValue(v, ['total']), 0);
+      return {
+        ...caja,
+        usuarioMostrado: caja.usuario || 'Sin usuario registrado',
+        ubicacionNombre: ubicacionesMapa[caja.ubicacion_id] || nombreDelNegocio || '—',
+        duracion: formatDuracion(caja.fecha_apertura),
+        totalVentasCaja,
+        totalEfectivo,
+        totalTarjeta,
+        transacciones: ventasDeCaja.length,
+      };
+    });
+  }, [cajasAbiertas, ventas, ubicacionesMapa, nombreDelNegocio]);
+
+  const forzarCierreCaja = async (idCaja) => {
+    if (!window.confirm("¿Estás seguro de forzar el cierre de esta caja? (Usar solo si quedó atascada)")) return;
+    try {
+      const { error } = await supabase.from('caja_registros').update({ estado: 'Cerrada', nota_cierre: 'Cierre forzado desde Inicio' }).eq('id', idCaja);
+      if (error) throw error;
+      setCajasAbiertas(prev => prev.filter(c => c.id !== idCaja));
+      alert("Caja cerrada correctamente.");
+    } catch (err) {
+      alert("Error al cerrar la caja: " + err.message);
+    }
+  };
+
   // === DEUDAS POR COBRAR / PAGAR / STOCK BAJO (estado actual) ===
   const deudasCobrar = ventasConCredito
     .map((v) => ({
@@ -451,323 +538,378 @@ const Inicio = ({ perfilUsuario }) => {
 
   return (
     <>
-    <div className="bg-[#f4f7fa] min-h-screen w-full">
+      <div className="bg-[#f4f7fa] min-h-screen w-full">
 
-      {/* HEADER */}
-      <div className="bg-[#1e293b] p-8 rounded-3xl text-white mb-6 relative overflow-hidden shadow-xl">
-        <div className="relative z-10 flex flex-wrap justify-between items-end gap-4">
-          <div>
-            <h1 className="text-3xl font-extrabold mb-1">{saludo}, {perfilUsuario?.empresas?.nombre || 'tu negocio'} 👋</h1>
-            <p className="text-slate-400 text-sm font-medium">Resumen de tu negocio — <span className="capitalize">{fechaHoy}</span></p>
-          </div>
-          <FiltroFecha value={rango} onChange={(nuevoRango) => setRango(nuevoRango)} />
-        </div>
-        <div className="absolute top-0 right-0 w-64 h-64 bg-white/5 rounded-full -mr-20 -mt-20 blur-3xl"></div>
-      </div>
-
-      {/* KPIs FILA 1 */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-6">
-        <CardKpi icon={ShoppingCart} gradient="from-blue-500 to-blue-700" label="Ventas Totales" value={totalVentas} trend={variacionVsAnterior} />
-        <CardKpi icon={TrendingUp} gradient="from-teal-400 to-emerald-600" label="Utilidad" value={neto} sublabel="ventas − compras − gastos" />
-        <CardKpi icon={FileWarning} gradient="from-orange-400 to-amber-600" label="Factura a Pagar" value={deudaCompras} sublabel="pendiente a proveedores" />
-        <CardKpi icon={MinusCircle} gradient="from-red-500 to-rose-600" label="Gastos" value={totalGastos} sublabel="del período" />
-      </div>
-
-      {/* KPIs FILA 2 */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
-        <div className="bg-white p-4 rounded-2xl flex items-center gap-4 shadow-sm border border-gray-50 hover:shadow-md transition-shadow">
-          <div className="bg-indigo-50 text-indigo-600 p-2.5 rounded-xl"><Package size={20} strokeWidth={2.2} /></div>
-          <div>
-            <p className="text-[10px] font-bold text-gray-400 uppercase">Compras totales</p>
-            <h4 className="font-bold text-gray-800">{formatCurrency(totalCompras)}</h4>
-          </div>
-        </div>
-        <div className="bg-white p-4 rounded-2xl flex items-center gap-4 shadow-sm border border-gray-50 hover:shadow-md transition-shadow">
-          <div className="bg-orange-50 text-orange-600 p-2.5 rounded-xl"><AlertTriangle size={20} strokeWidth={2.2} /></div>
-          <div>
-            <p className="text-[10px] font-bold text-gray-400 uppercase">Compra adeudada</p>
-            <h4 className="font-bold text-gray-800">{formatCurrency(deudaCompras)}</h4>
-          </div>
-        </div>
-        <div className="bg-white p-4 rounded-2xl flex items-center justify-between shadow-sm border border-gray-50 hover:shadow-md transition-shadow">
-          <div className="flex items-center gap-4">
-            <div className="bg-purple-50 text-purple-600 p-2.5 rounded-xl"><Handshake size={20} strokeWidth={2.2} /></div>
+        {/* HEADER */}
+        <div className="bg-[#1e293b] p-8 rounded-3xl text-white mb-6 relative overflow-hidden shadow-xl">
+          <div className="relative z-10 flex flex-wrap justify-between items-end gap-4">
             <div>
-              <p className="text-[10px] font-bold text-gray-400 uppercase">Créditos otorgados</p>
-              <h4 className="font-bold text-gray-800">{formatCurrency(deudaVentas)}</h4>
+              <h1 className="text-3xl font-extrabold mb-1">{saludo}, {perfilUsuario?.empresas?.nombre || 'tu negocio'} 👋</h1>
+              <p className="text-slate-400 text-sm font-medium">Resumen de tu negocio — <span className="capitalize">{fechaHoy}</span></p>
+            </div>
+            <FiltroFecha value={rango} onChange={(nuevoRango) => setRango(nuevoRango)} />
+          </div>
+          <div className="absolute top-0 right-0 w-64 h-64 bg-white/5 rounded-full -mr-20 -mt-20 blur-3xl"></div>
+        </div>
+
+        {/* KPIs FILA 1 */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-6">
+          <CardKpi icon={ShoppingCart} gradient="from-blue-500 to-blue-700" label="Ventas Totales" value={totalVentas} trend={variacionVsAnterior} />
+          <CardKpi icon={TrendingUp} gradient="from-teal-400 to-emerald-600" label="Utilidad" value={neto} sublabel="ventas − compras − gastos" />
+          <CardKpi icon={FileWarning} gradient="from-orange-400 to-amber-600" label="Factura a Pagar" value={deudaCompras} sublabel="pendiente a proveedores" />
+          <CardKpi icon={MinusCircle} gradient="from-red-500 to-rose-600" label="Gastos" value={totalGastos} sublabel="del período" />
+        </div>
+
+        {/* KPIs FILA 2 */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
+          <div className="bg-white p-4 rounded-2xl flex items-center gap-4 shadow-sm border border-gray-50 hover:shadow-md transition-shadow">
+            <div className="bg-indigo-50 text-indigo-600 p-2.5 rounded-xl"><Package size={20} strokeWidth={2.2} /></div>
+            <div>
+              <p className="text-[10px] font-bold text-gray-400 uppercase">Compras totales</p>
+              <h4 className="font-bold text-gray-800">{formatCurrency(totalCompras)}</h4>
             </div>
           </div>
-          <button onClick={() => setTabActiva('cobrar')} className="text-xs font-bold text-blue-600 hover:underline">
-            {ventasConCredito.length} ventas · Ver
-          </button>
-        </div>
-      </div>
-
-      {/* GRÁFICO ÚLTIMOS DÍAS + COMPOSICIÓN */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
-        <div className="lg:col-span-2 bg-white p-6 rounded-3xl shadow-sm border border-gray-50 transition-all duration-300 hover:shadow-xl hover:border-gray-200">
-          <h3 className="font-black text-gray-800 mb-6 flex items-center gap-2"><LineChart size={20} className="text-blue-500" /> Ventas ({rango.label})</h3>
-          <div className="h-[300px] w-full">
-            {datosLinea.some((d) => d.total > 0) ? (
-              <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={datosLinea}>
-                  <defs>
-                    <linearGradient id="colorUv" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.3} />
-                      <stop offset="95%" stopColor="#3b82f6" stopOpacity={0} />
-                    </linearGradient>
-                  </defs>
-                  <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 10 }} interval="preserveStartEnd" />
-                  <Tooltip formatter={(value) => formatCurrency(value)} />
-                  <Area type="monotone" dataKey="total" stroke="#3b82f6" strokeWidth={3} fillOpacity={1} fill="url(#colorUv)" />
-                </AreaChart>
-              </ResponsiveContainer>
-            ) : (
-              <div className="flex h-full items-center justify-center text-gray-400">No hay ventas en este período.</div>
-            )}
-          </div>
-        </div>
-
-        <div className="bg-white p-6 rounded-3xl shadow-sm border border-gray-50 transition-all duration-300 hover:shadow-xl hover:border-gray-200">
-          <h3 className="font-black text-gray-800 mb-6 flex items-center gap-2"><PieChartIcon size={20} className="text-blue-500" /> Composición</h3>
-          <div className="h-[300px] w-full">
-            {datosPie.length > 0 ? (
-              <ResponsiveContainer width="100%" height="100%">
-                <PieChart>
-                  <Pie data={datosPie} innerRadius={60} outerRadius={80} paddingAngle={5} dataKey="value">
-                    {datosPie.map((entry, index) => <Cell key={entry.name} fill={COLORS[index % COLORS.length]} />)}
-                  </Pie>
-                  <Tooltip formatter={(value) => formatCurrency(value)} />
-                  <Legend verticalAlign="bottom" height={36} />
-                </PieChart>
-              </ResponsiveContainer>
-            ) : (
-              <div className="flex h-full items-center justify-center text-gray-400">Sin datos en este período.</div>
-            )}
-          </div>
-        </div>
-      </div>
-
-      {/* VENTAS VS COMPRAS VS GASTOS + TOP PRODUCTOS */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
-        <div className="lg:col-span-2 bg-white p-6 rounded-3xl shadow-sm border border-gray-50 transition-all duration-300 hover:shadow-xl hover:border-gray-200">
-          <h3 className="font-black text-gray-800 mb-6 flex items-center gap-2"><BarChart3 size={20} className="text-blue-500" /> Ventas vs Compras vs Gastos (6 meses)</h3>
-          <div className="h-[280px] w-full">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={datos6meses}>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 11 }} />
-                <Tooltip formatter={(value) => formatCurrency(value)} />
-                <Legend />
-                <Bar dataKey="Ventas" fill="#3b82f6" radius={[4, 4, 0, 0]} />
-                <Bar dataKey="Compras" fill="#f59e0b" radius={[4, 4, 0, 0]} />
-                <Bar dataKey="Gastos" fill="#ef4444" radius={[4, 4, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
-
-        <div className="bg-white p-6 rounded-3xl shadow-sm border border-gray-50 transition-all duration-300 hover:shadow-xl hover:border-gray-200">
-          <h3 className="font-black text-gray-800 mb-4 flex items-center gap-2"><Trophy size={20} className="text-yellow-500" /> Top 5 Productos</h3>
-          {!hayDetalleVentas || topProductos.length === 0 ? (
-            <div className="text-center text-gray-400 text-sm py-10">
-              Aún no hay ventas con detalle en este período.
+          <div className="bg-white p-4 rounded-2xl flex items-center gap-4 shadow-sm border border-gray-50 hover:shadow-md transition-shadow">
+            <div className="bg-orange-50 text-orange-600 p-2.5 rounded-xl"><AlertTriangle size={20} strokeWidth={2.2} /></div>
+            <div>
+              <p className="text-[10px] font-bold text-gray-400 uppercase">Compra adeudada</p>
+              <h4 className="font-bold text-gray-800">{formatCurrency(deudaCompras)}</h4>
             </div>
+          </div>
+          <div className="bg-white p-4 rounded-2xl flex items-center justify-between shadow-sm border border-gray-50 hover:shadow-md transition-shadow">
+            <div className="flex items-center gap-4">
+              <div className="bg-purple-50 text-purple-600 p-2.5 rounded-xl"><Handshake size={20} strokeWidth={2.2} /></div>
+              <div>
+                <p className="text-[10px] font-bold text-gray-400 uppercase">Créditos otorgados</p>
+                <h4 className="font-bold text-gray-800">{formatCurrency(deudaVentas)}</h4>
+              </div>
+            </div>
+            <button onClick={() => setTabActiva('cobrar')} className="text-xs font-bold text-blue-600 hover:underline">
+              {ventasConCredito.length} ventas · Ver
+            </button>
+          </div>
+        </div>
+
+        {/* CAJAS ABIERTAS */}
+        <div className="bg-white p-6 rounded-3xl shadow-sm border border-gray-50 mb-6 transition-all duration-300 hover:shadow-xl hover:border-gray-200">
+          <h3 className="font-black text-gray-800 mb-1 flex items-center gap-2">
+            <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 inline-block animate-pulse" />
+            <Wallet size={20} className="text-emerald-600" /> Cajas Abiertas
+            {cajasAbiertasConDatos.length > 0 && (
+              <span className="bg-emerald-100 text-emerald-700 text-xs font-black px-2 py-0.5 rounded-full">{cajasAbiertasConDatos.length}</span>
+            )}
+          </h3>
+          <p className="text-[10px] text-gray-400 mb-4">Se actualiza sola cada 20 segundos — no hace falta recargar la página.</p>
+          {cajasAbiertasConDatos.length === 0 ? (
+            <p className="text-center text-gray-400 text-sm py-8">No hay ninguna caja abierta en este momento.</p>
           ) : (
-            <div className="flex flex-col gap-3">
-              {topProductos.map((p, i) => (
-                <div key={p.nombre} className="flex items-center gap-3 p-2 -mx-2 rounded-xl transition-all duration-200 hover:bg-slate-50 hover:translate-x-1 cursor-pointer">
-                  <span className={`w-6 h-6 rounded-full flex items-center justify-center text-[11px] font-black text-white ${i === 0 ? 'bg-yellow-400' : i === 1 ? 'bg-gray-400' : i === 2 ? 'bg-orange-400' : 'bg-gray-300'
-                    }`}>{i + 1}</span>
-                  <span className="text-sm font-medium text-gray-700 flex-1 truncate">{p.nombre}</span>
-                  <span className="text-xs font-bold text-gray-400">{p.cantidad} u.</span>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {cajasAbiertasConDatos.map((caja) => (
+                <div key={caja.id} className="border border-emerald-100 bg-emerald-50/40 rounded-2xl p-4">
+                  <p className="font-bold text-gray-800 text-sm flex items-center gap-1.5">
+                    <span className="text-emerald-600">👤</span> {caja.usuarioMostrado}
+                  </p>
+                  <div className="flex justify-between items-start mt-0.5">
+                    <div>
+                      <p className="text-xs text-gray-500 flex items-center gap-1">📍 {caja.ubicacionNombre}</p>
+                      <p className="text-[11px] text-gray-400 mt-1">⏱ {caja.duracion}</p>
+                    </div>
+                    <button 
+                      onClick={() => forzarCierreCaja(caja.id)}
+                      className="text-[10px] bg-red-100 text-red-600 px-2 py-1 rounded hover:bg-red-200 transition-colors font-bold"
+                      title="Cerrar esta caja si quedó abierta por error"
+                    >
+                      Forzar Cierre
+                    </button>
+                  </div>
+                  <div className="grid grid-cols-4 gap-2 mt-3 pt-3 border-t border-emerald-100">
+                    <div>
+                      <p className="text-[9px] font-bold text-gray-400 uppercase">Ventas</p>
+                      <p className="text-xs font-bold text-gray-800">{formatCurrency(caja.totalVentasCaja)}</p>
+                    </div>
+                    <div>
+                      <p className="text-[9px] font-bold text-gray-400 uppercase">Efectivo</p>
+                      <p className="text-xs font-bold text-gray-800">{formatCurrency(caja.totalEfectivo)}</p>
+                    </div>
+                    <div>
+                      <p className="text-[9px] font-bold text-gray-400 uppercase">Tarjeta</p>
+                      <p className="text-xs font-bold text-gray-800">{formatCurrency(caja.totalTarjeta)}</p>
+                    </div>
+                    <div>
+                      <p className="text-[9px] font-bold text-gray-400 uppercase">Transacc.</p>
+                      <p className="text-xs font-bold text-gray-800">{caja.transacciones}</p>
+                    </div>
+                  </div>
                 </div>
               ))}
             </div>
           )}
         </div>
-      </div>
 
-      {/* RECOMENDACIONES */}
-      {recomendaciones.length > 0 && (
-        <div className="bg-white p-6 rounded-3xl shadow-sm border border-gray-50 mb-6 transition-all duration-300 hover:shadow-xl hover:border-gray-200">
-          <h3 className="font-black text-gray-800 mb-4 flex items-center gap-2"><Lightbulb size={20} className="text-amber-500" /> Recomendaciones para tu negocio</h3>
-          <div className="flex flex-col gap-2">
-            {recomendaciones.map((r, i) => (
-              <div key={i} className={`border rounded-lg px-4 py-3 transition-all duration-300 hover:shadow-md hover:-translate-y-1 cursor-pointer ${colorRecomendacion(r.tipo)}`}>
-                <p className="font-bold text-sm flex items-center gap-2">{iconoRecomendacion(r.tipo)} {r.titulo}</p>
-                <p className="text-xs mt-0.5">{r.texto}</p>
-              </div>
-            ))}
+        {/* GRÁFICO ÚLTIMOS DÍAS + COMPOSICIÓN */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+          <div className="lg:col-span-2 bg-white p-6 rounded-3xl shadow-sm border border-gray-50 transition-all duration-300 hover:shadow-xl hover:border-gray-200">
+            <h3 className="font-black text-gray-800 mb-6 flex items-center gap-2"><LineChart size={20} className="text-blue-500" /> Ventas ({rango.label})</h3>
+            <div className="h-[300px] w-full">
+              {datosLinea.some((d) => d.total > 0) ? (
+                <ResponsiveContainer width="100%" height="100%">
+                  <AreaChart data={datosLinea}>
+                    <defs>
+                      <linearGradient id="colorUv" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.3} />
+                        <stop offset="95%" stopColor="#3b82f6" stopOpacity={0} />
+                      </linearGradient>
+                    </defs>
+                    <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 10 }} interval="preserveStartEnd" />
+                    <Tooltip formatter={(value) => formatCurrency(value)} />
+                    <Area type="monotone" dataKey="total" stroke="#3b82f6" strokeWidth={3} fillOpacity={1} fill="url(#colorUv)" />
+                  </AreaChart>
+                </ResponsiveContainer>
+              ) : (
+                <div className="flex h-full items-center justify-center text-gray-400">No hay ventas en este período.</div>
+              )}
+            </div>
+          </div>
+
+          <div className="bg-white p-6 rounded-3xl shadow-sm border border-gray-50 transition-all duration-300 hover:shadow-xl hover:border-gray-200">
+            <h3 className="font-black text-gray-800 mb-6 flex items-center gap-2"><PieChartIcon size={20} className="text-blue-500" /> Composición</h3>
+            <div className="h-[300px] w-full">
+              {datosPie.length > 0 ? (
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie data={datosPie} innerRadius={60} outerRadius={80} paddingAngle={5} dataKey="value">
+                      {datosPie.map((entry, index) => <Cell key={entry.name} fill={COLORS[index % COLORS.length]} />)}
+                    </Pie>
+                    <Tooltip formatter={(value) => formatCurrency(value)} />
+                    <Legend verticalAlign="bottom" height={36} />
+                  </PieChart>
+                </ResponsiveContainer>
+              ) : (
+                <div className="flex h-full items-center justify-center text-gray-400">Sin datos en este período.</div>
+              )}
+            </div>
           </div>
         </div>
-      )}
 
-      {/* AÑO FISCAL ACTUAL */}
-      <div className="bg-white p-6 rounded-3xl shadow-sm border border-gray-50 mb-6 transition-all duration-300 hover:shadow-xl hover:border-gray-200">
-        <h3 className="font-black text-gray-800 mb-6 flex items-center gap-2"><CalendarRange size={20} className="text-blue-500" /> Año fiscal actual de ventas</h3>
-        <div className="h-[280px] w-full">
-          <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={datosAnioFiscal}>
-              <CartesianGrid strokeDasharray="3 3" vertical={false} />
-              <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 10 }} />
-              <Tooltip formatter={(value) => formatCurrency(value)} />
-              <Bar dataKey="total" fill="#3b82f6" radius={[4, 4, 0, 0]} />
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
-      </div>
+        {/* VENTAS VS COMPRAS VS GASTOS + TOP PRODUCTOS */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+          <div className="lg:col-span-2 bg-white p-6 rounded-3xl shadow-sm border border-gray-50 transition-all duration-300 hover:shadow-xl hover:border-gray-200">
+            <h3 className="font-black text-gray-800 mb-6 flex items-center gap-2"><BarChart3 size={20} className="text-blue-500" /> Ventas vs Compras vs Gastos (6 meses)</h3>
+            <div className="h-[280px] w-full">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={datos6meses}>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                  <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 11 }} />
+                  <Tooltip formatter={(value) => formatCurrency(value)} />
+                  <Legend />
+                  <Bar dataKey="Ventas" fill="#3b82f6" radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="Compras" fill="#f59e0b" radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="Gastos" fill="#ef4444" radius={[4, 4, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
 
-      {/* TABS: DEUDAS POR COBRAR / PAGAR / STOCK BAJO */}
-      <div className="bg-white p-6 rounded-3xl shadow-sm border border-gray-50 mb-6 transition-all duration-300 hover:shadow-xl hover:border-gray-200">
-        <div className="flex gap-2 mb-4 border-b border-gray-100">
-          {[
-            { key: 'cobrar', label: 'Deudas por Cobrar', icon: Wallet, count: deudasCobrar.length },
-            { key: 'pagar', label: 'Deudas por Pagar', icon: FileWarning, count: deudasPagar.length },
-            { key: 'stock', label: 'Stock Bajo', icon: Boxes, count: stockBajo.length },
-          ].map((tab) => (
-            <button
-              key={tab.key}
-              onClick={() => setTabActiva(tab.key)}
-              className={`px-4 py-2 text-sm font-bold border-b-2 transition-colors flex items-center gap-2 ${
-                tabActiva === tab.key ? 'border-orange-500 text-orange-600' : 'border-transparent text-gray-400 hover:text-gray-600'
-              }`}
-            >
-              <tab.icon size={16} /> {tab.label} {tab.count > 0 && <span className="ml-1 text-xs">({tab.count})</span>}
-            </button>
-          ))}
-        </div>
-
-        {tabActiva === 'cobrar' && (
-          deudasCobrar.length === 0 ? (
-            <p className="text-center text-gray-400 text-sm py-8">No hay deudas por cobrar. 🎉</p>
-          ) : (
-            <table className="w-full text-sm">
-              <thead className="text-gray-400 text-xs uppercase">
-                <tr>
-                  <th className="text-left py-2">Cliente</th>
-                  <th className="text-left py-2">Factura No.</th>
-                  <th className="text-right py-2">Cantidad Debida</th>
-                  <th className="text-right py-2">Acción</th>
-                </tr>
-              </thead>
-              <tbody>
-                {deudasCobrar.map((d, i) => (
-                  <tr key={i} className="border-t border-gray-50 hover:bg-slate-50 transition-colors">
-                    <td className="py-2 font-medium text-gray-700">{d.cliente}</td>
-                    <td className="py-2 text-blue-600 font-semibold">{String(d.factura).slice(0, 8).toUpperCase()}</td>
-                    <td className="py-2 text-right font-bold text-red-600">{formatCurrency(d.monto)}</td>
-                    <td className="py-2 text-right">
-                      <button
-                        onClick={() => abrirModalPagoInicio(d)}
-                        className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold px-3 py-2 rounded-md inline-flex items-center gap-1.5 transition-colors"
-                      >
-                        💵 Monto total pagado o pago parcial
-                      </button>
-                    </td>
-                  </tr>
+          <div className="bg-white p-6 rounded-3xl shadow-sm border border-gray-50 transition-all duration-300 hover:shadow-xl hover:border-gray-200">
+            <h3 className="font-black text-gray-800 mb-4 flex items-center gap-2"><Trophy size={20} className="text-yellow-500" /> Top 5 Productos</h3>
+            {!hayDetalleVentas || topProductos.length === 0 ? (
+              <div className="text-center text-gray-400 text-sm py-10">
+                Aún no hay ventas con detalle en este período.
+              </div>
+            ) : (
+              <div className="flex flex-col gap-3">
+                {topProductos.map((p, i) => (
+                  <div key={p.nombre} className="flex items-center gap-3 p-2 -mx-2 rounded-xl transition-all duration-200 hover:bg-slate-50 hover:translate-x-1 cursor-pointer">
+                    <span className={`w-6 h-6 rounded-full flex items-center justify-center text-[11px] font-black text-white ${i === 0 ? 'bg-yellow-400' : i === 1 ? 'bg-gray-400' : i === 2 ? 'bg-orange-400' : 'bg-gray-300'
+                      }`}>{i + 1}</span>
+                    <span className="text-sm font-medium text-gray-700 flex-1 truncate">{p.nombre}</span>
+                    <span className="text-xs font-bold text-gray-400">{p.cantidad} u.</span>
+                  </div>
                 ))}
-              </tbody>
-            </table>
-          )
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* RECOMENDACIONES */}
+        {recomendaciones.length > 0 && (
+          <div className="bg-white p-6 rounded-3xl shadow-sm border border-gray-50 mb-6 transition-all duration-300 hover:shadow-xl hover:border-gray-200">
+            <h3 className="font-black text-gray-800 mb-4 flex items-center gap-2"><Lightbulb size={20} className="text-amber-500" /> Recomendaciones para tu negocio</h3>
+            <div className="flex flex-col gap-2">
+              {recomendaciones.map((r, i) => (
+                <div key={i} className={`border rounded-lg px-4 py-3 transition-all duration-300 hover:shadow-md hover:-translate-y-1 cursor-pointer ${colorRecomendacion(r.tipo)}`}>
+                  <p className="font-bold text-sm flex items-center gap-2">{iconoRecomendacion(r.tipo)} {r.titulo}</p>
+                  <p className="text-xs mt-0.5">{r.texto}</p>
+                </div>
+              ))}
+            </div>
+          </div>
         )}
 
-        {tabActiva === 'pagar' && (
-          deudasPagar.length === 0 ? (
-            <p className="text-center text-gray-400 text-sm py-8">No hay deudas con proveedores. 🎉</p>
-          ) : (
-            <table className="w-full text-sm">
-              <thead className="text-gray-400 text-xs uppercase">
-                <tr><th className="text-left py-2">Proveedor</th><th className="text-left py-2">Factura</th><th className="text-right py-2">Monto</th></tr>
-              </thead>
-              <tbody>
-                {deudasPagar.map((d, i) => (
-                  <tr key={i} className="border-t border-gray-50 hover:bg-slate-50 transition-colors cursor-pointer">
-                    <td className="py-2 font-medium text-gray-700">{d.proveedor}</td>
-                    <td className="py-2 text-gray-500">{d.factura}</td>
-                    <td className="py-2 text-right font-bold text-orange-600">{formatCurrency(d.monto)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )
-        )}
+        {/* AÑO FISCAL ACTUAL */}
+        <div className="bg-white p-6 rounded-3xl shadow-sm border border-gray-50 mb-6 transition-all duration-300 hover:shadow-xl hover:border-gray-200">
+          <h3 className="font-black text-gray-800 mb-6 flex items-center gap-2"><CalendarRange size={20} className="text-blue-500" /> Año fiscal actual de ventas</h3>
+          <div className="h-[280px] w-full">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={datosAnioFiscal}>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 10 }} />
+                <Tooltip formatter={(value) => formatCurrency(value)} />
+                <Bar dataKey="total" fill="#3b82f6" radius={[4, 4, 0, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
 
-        {tabActiva === 'stock' && (
-          stockBajo.length === 0 ? (
-            <p className="text-center text-gray-400 text-sm py-8">Todo tu stock está en buen nivel. 🎉</p>
+        {/* TABS: DEUDAS POR COBRAR / PAGAR / STOCK BAJO */}
+        <div className="bg-white p-6 rounded-3xl shadow-sm border border-gray-50 mb-6 transition-all duration-300 hover:shadow-xl hover:border-gray-200">
+          <div className="flex gap-2 mb-4 border-b border-gray-100">
+            {[
+              { key: 'cobrar', label: 'Deudas por Cobrar', icon: Wallet, count: deudasCobrar.length },
+              { key: 'pagar', label: 'Deudas por Pagar', icon: FileWarning, count: deudasPagar.length },
+              { key: 'stock', label: 'Stock Bajo', icon: Boxes, count: stockBajo.length },
+            ].map((tab) => (
+              <button
+                key={tab.key}
+                onClick={() => setTabActiva(tab.key)}
+                className={`px-4 py-2 text-sm font-bold border-b-2 transition-colors flex items-center gap-2 ${tabActiva === tab.key ? 'border-orange-500 text-orange-600' : 'border-transparent text-gray-400 hover:text-gray-600'
+                  }`}
+              >
+                <tab.icon size={16} /> {tab.label} {tab.count > 0 && <span className="ml-1 text-xs">({tab.count})</span>}
+              </button>
+            ))}
+          </div>
+
+          {tabActiva === 'cobrar' && (
+            deudasCobrar.length === 0 ? (
+              <p className="text-center text-gray-400 text-sm py-8">No hay deudas por cobrar. 🎉</p>
+            ) : (
+              <table className="w-full text-sm">
+                <thead className="text-gray-400 text-xs uppercase">
+                  <tr>
+                    <th className="text-left py-2">Cliente</th>
+                    <th className="text-left py-2">Factura No.</th>
+                    <th className="text-right py-2">Cantidad Debida</th>
+                    <th className="text-right py-2">Acción</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {deudasCobrar.map((d, i) => (
+                    <tr key={i} className="border-t border-gray-50 hover:bg-slate-50 transition-colors">
+                      <td className="py-2 font-medium text-gray-700">{d.cliente}</td>
+                      <td className="py-2 text-blue-600 font-semibold">{String(d.factura).slice(0, 8).toUpperCase()}</td>
+                      <td className="py-2 text-right font-bold text-red-600">{formatCurrency(d.monto)}</td>
+                      <td className="py-2 text-right">
+                        <button
+                          onClick={() => abrirModalPagoInicio(d)}
+                          className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold px-3 py-2 rounded-md inline-flex items-center gap-1.5 transition-colors"
+                        >
+                          💵 Monto total pagado o pago parcial
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )
+          )}
+
+          {tabActiva === 'pagar' && (
+            deudasPagar.length === 0 ? (
+              <p className="text-center text-gray-400 text-sm py-8">No hay deudas con proveedores. 🎉</p>
+            ) : (
+              <table className="w-full text-sm">
+                <thead className="text-gray-400 text-xs uppercase">
+                  <tr><th className="text-left py-2">Proveedor</th><th className="text-left py-2">Factura</th><th className="text-right py-2">Monto</th></tr>
+                </thead>
+                <tbody>
+                  {deudasPagar.map((d, i) => (
+                    <tr key={i} className="border-t border-gray-50 hover:bg-slate-50 transition-colors cursor-pointer">
+                      <td className="py-2 font-medium text-gray-700">{d.proveedor}</td>
+                      <td className="py-2 text-gray-500">{d.factura}</td>
+                      <td className="py-2 text-right font-bold text-orange-600">{formatCurrency(d.monto)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )
+          )}
+
+          {tabActiva === 'stock' && (
+            stockBajo.length === 0 ? (
+              <p className="text-center text-gray-400 text-sm py-8">Todo tu stock está en buen nivel. 🎉</p>
+            ) : (
+              <table className="w-full text-sm">
+                <thead className="text-gray-400 text-xs uppercase">
+                  <tr><th className="text-left py-2">Producto</th><th className="text-left py-2">SKU</th><th className="text-right py-2">Stock</th></tr>
+                </thead>
+                <tbody>
+                  {stockBajo.map((p, i) => (
+                    <tr key={i} className="border-t border-gray-50 hover:bg-slate-50 transition-colors cursor-pointer">
+                      <td className="py-2 font-medium text-gray-700">{p.nombre}</td>
+                      <td className="py-2 text-gray-500">{p.sku}</td>
+                      <td className="py-2 text-right font-bold text-red-600">{p.stock} u.</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )
+          )}
+        </div>
+
+        {/* ALERTA DE CADUCIDAD */}
+        <div className="bg-white p-6 rounded-3xl shadow-sm border border-gray-50 mb-6 transition-all duration-300 hover:shadow-xl hover:border-gray-200">
+          <h3 className="font-black text-gray-800 mb-4 flex items-center gap-2"><Clock size={20} className="text-orange-500" /> Alerta de caducidad</h3>
+          {!hayCaducidad ? (
+            <p className="text-center text-gray-400 text-sm py-8">
+              Tus productos todavía no tienen fecha de vencimiento cargada.
+            </p>
+          ) : alertaCaducidad.length === 0 ? (
+            <p className="text-center text-gray-400 text-sm py-8">No hay productos por vencer en los próximos 90 días. 🎉</p>
           ) : (
             <table className="w-full text-sm">
               <thead className="text-gray-400 text-xs uppercase">
-                <tr><th className="text-left py-2">Producto</th><th className="text-left py-2">SKU</th><th className="text-right py-2">Stock</th></tr>
+                <tr><th className="text-left py-2">Producto</th><th className="text-left py-2">Ubicación</th><th className="text-center py-2">Stock</th><th className="text-right py-2">Expira</th></tr>
               </thead>
               <tbody>
-                {stockBajo.map((p, i) => (
+                {alertaCaducidad.map((p, i) => (
                   <tr key={i} className="border-t border-gray-50 hover:bg-slate-50 transition-colors cursor-pointer">
                     <td className="py-2 font-medium text-gray-700">{p.nombre}</td>
-                    <td className="py-2 text-gray-500">{p.sku}</td>
-                    <td className="py-2 text-right font-bold text-red-600">{p.stock} u.</td>
+                    <td className="py-2 text-gray-500">{p.ubicacion}</td>
+                    <td className="py-2 text-center">{p.stock} u.</td>
+                    <td className="py-2 text-right font-bold text-orange-600">{new Date(p.expira).toLocaleDateString('es-PY')}</td>
                   </tr>
                 ))}
               </tbody>
             </table>
-          )
-        )}
-      </div>
+          )}
+        </div>
 
-      {/* ALERTA DE CADUCIDAD */}
-      <div className="bg-white p-6 rounded-3xl shadow-sm border border-gray-50 mb-6 transition-all duration-300 hover:shadow-xl hover:border-gray-200">
-        <h3 className="font-black text-gray-800 mb-4 flex items-center gap-2"><Clock size={20} className="text-orange-500" /> Alerta de caducidad</h3>
-        {!hayCaducidad ? (
-          <p className="text-center text-gray-400 text-sm py-8">
-            Tus productos todavía no tienen fecha de vencimiento cargada.
-          </p>
-        ) : alertaCaducidad.length === 0 ? (
-          <p className="text-center text-gray-400 text-sm py-8">No hay productos por vencer en los próximos 90 días. 🎉</p>
-        ) : (
-          <table className="w-full text-sm">
-            <thead className="text-gray-400 text-xs uppercase">
-              <tr><th className="text-left py-2">Producto</th><th className="text-left py-2">Ubicación</th><th className="text-center py-2">Stock</th><th className="text-right py-2">Expira</th></tr>
-            </thead>
-            <tbody>
-              {alertaCaducidad.map((p, i) => (
-                <tr key={i} className="border-t border-gray-50 hover:bg-slate-50 transition-colors cursor-pointer">
-                  <td className="py-2 font-medium text-gray-700">{p.nombre}</td>
-                  <td className="py-2 text-gray-500">{p.ubicacion}</td>
-                  <td className="py-2 text-center">{p.stock} u.</td>
-                  <td className="py-2 text-right font-bold text-orange-600">{new Date(p.expira).toLocaleDateString('es-PY')}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-      </div>
+        {/* ÓRDENES DE VENTA */}
+        <div className="bg-white p-6 rounded-3xl shadow-sm border border-gray-50 transition-all duration-300 hover:shadow-xl hover:border-gray-200">
+          <h3 className="font-black text-gray-800 mb-4 flex items-center gap-2"><Receipt size={20} className="text-blue-500" /> Órdenes de venta (pedidos pendientes)</h3>
+          {ordenesVenta.length === 0 ? (
+            <p className="text-center text-gray-400 text-sm py-8">No hay órdenes pendientes.</p>
+          ) : (
+            <table className="w-full text-sm">
+              <thead className="text-gray-400 text-xs uppercase">
+                <tr><th className="text-left py-2">Fecha</th><th className="text-left py-2">Cliente</th><th className="text-left py-2">Estado</th><th className="text-right py-2">Artículos</th></tr>
+              </thead>
+              <tbody>
+                {ordenesVenta.map((o, i) => (
+                  <tr key={i} className="border-t border-gray-50 hover:bg-slate-50 transition-colors cursor-pointer">
+                    <td className="py-2 text-gray-500">{o.fecha ? new Date(o.fecha).toLocaleDateString('es-PY') : '—'}</td>
+                    <td className="py-2 font-medium text-gray-700">{o.cliente}</td>
+                    <td className="py-2"><span className="bg-yellow-50 text-yellow-700 text-xs font-bold px-2 py-1 rounded">{o.estado}</span></td>
+                    <td className="py-2 text-right">{o.cantidad}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
 
-      {/* ÓRDENES DE VENTA */}
-      <div className="bg-white p-6 rounded-3xl shadow-sm border border-gray-50 transition-all duration-300 hover:shadow-xl hover:border-gray-200">
-        <h3 className="font-black text-gray-800 mb-4 flex items-center gap-2"><Receipt size={20} className="text-blue-500" /> Órdenes de venta (pedidos pendientes)</h3>
-        {ordenesVenta.length === 0 ? (
-          <p className="text-center text-gray-400 text-sm py-8">No hay órdenes pendientes.</p>
-        ) : (
-          <table className="w-full text-sm">
-            <thead className="text-gray-400 text-xs uppercase">
-              <tr><th className="text-left py-2">Fecha</th><th className="text-left py-2">Cliente</th><th className="text-left py-2">Estado</th><th className="text-right py-2">Artículos</th></tr>
-            </thead>
-            <tbody>
-              {ordenesVenta.map((o, i) => (
-                <tr key={i} className="border-t border-gray-50 hover:bg-slate-50 transition-colors cursor-pointer">
-                  <td className="py-2 text-gray-500">{o.fecha ? new Date(o.fecha).toLocaleDateString('es-PY') : '—'}</td>
-                  <td className="py-2 font-medium text-gray-700">{o.cliente}</td>
-                  <td className="py-2"><span className="bg-yellow-50 text-yellow-700 text-xs font-bold px-2 py-1 rounded">{o.estado}</span></td>
-                  <td className="py-2 text-right">{o.cantidad}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
       </div>
-
-    </div>
 
       {/* MODAL: Monto total pagado o pago parcial */}
       {deudaPagar && (

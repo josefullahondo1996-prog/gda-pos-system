@@ -178,20 +178,9 @@ const ListaCajas = ({ perfilUsuario }) => {
         >
           📄 Cajas
         </button>
-        <button
-          onClick={() => setTab('tipos')}
-          className={`pb-3 px-1 font-bold text-sm flex items-center gap-2 border-b-2 transition-colors ${tab === 'tipos' ? 'border-orange-500 text-gray-800' : 'border-transparent text-gray-400 hover:text-gray-600'}`}
-        >
-          📋 Tipos de cuenta
-        </button>
       </div>
 
-      {tab === 'tipos' ? (
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-10 text-center text-gray-400">
-          Módulo "Tipos de cuenta" en construcción.
-        </div>
-      ) : (
-        <>
+      <>
           {/* Filtro + Añadir */}
           <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-200 mb-6 flex flex-col md:flex-row justify-between items-center gap-4">
             <select
@@ -221,11 +210,7 @@ const ListaCajas = ({ perfilUsuario }) => {
                 <select className="border border-gray-300 rounded p-1 text-sm"><option>25</option></select>
                 <span className="text-sm">entradas</span>
               </div>
-              <button onClick={() => alert('Módulo en construcción')} className="bg-gray-200 hover:bg-gray-300 text-gray-700 px-3 py-1.5 rounded text-xs font-bold flex items-center gap-1">📄 Exportar a CSV</button>
-              <button onClick={() => alert('Módulo en construcción')} className="bg-gray-200 hover:bg-gray-300 text-gray-700 px-3 py-1.5 rounded text-xs font-bold flex items-center gap-1">📊 Exportar a Excel</button>
               <button onClick={() => window.print()} className="bg-gray-200 hover:bg-gray-300 text-gray-700 px-3 py-1.5 rounded text-xs font-bold flex items-center gap-1">🖨️ Imprimir</button>
-              <button onClick={() => alert('Módulo en construcción')} className="bg-gray-200 hover:bg-gray-300 text-gray-700 px-3 py-1.5 rounded text-xs font-bold flex items-center gap-1">📋 Visibilidad de columnas</button>
-              <button onClick={() => alert('Módulo en construcción')} className="bg-gray-200 hover:bg-gray-300 text-gray-700 px-3 py-1.5 rounded text-xs font-bold flex items-center gap-1">📕 Exportar a PDF</button>
               <div className="ml-auto relative">
                 <input
                   type="text"
@@ -280,8 +265,6 @@ const ListaCajas = ({ perfilUsuario }) => {
                           <td className="p-4">
                             <div className="flex flex-wrap gap-1.5">
                               <button onClick={() => abrirEditar(caja)} className="bg-orange-500 hover:bg-orange-600 text-white text-xs font-bold px-2.5 py-1.5 rounded">✎ Editar</button>
-                              <button onClick={() => alert('Módulo "Libro de caja" en construcción')} className="bg-amber-500 hover:bg-amber-600 text-white text-xs font-bold px-2.5 py-1.5 rounded">🗒 Libro de caja</button>
-                              <button onClick={() => alert('Módulo "Transferencia de fondos" en construcción')} className="bg-sky-500 hover:bg-sky-600 text-white text-xs font-bold px-2.5 py-1.5 rounded">Transferencia de fondos</button>
                               {caja.activo ? (
                                 <>
                                   <button onClick={() => { setModalDepositar(caja); setMontoDeposito(''); }} className="bg-emerald-500 hover:bg-emerald-600 text-white text-xs font-bold px-2.5 py-1.5 rounded">📥 Depositar</button>
@@ -300,8 +283,6 @@ const ListaCajas = ({ perfilUsuario }) => {
               </table>
             </div>
           </div>
-        </>
-      )}
 
       {/* MODAL: Añadir / Editar cuenta */}
       {mostrarFormulario && (

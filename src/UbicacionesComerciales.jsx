@@ -168,9 +168,6 @@ export default function UbicacionesComerciales() {
                                                     <button onClick={() => abrirEditar(u)} className="bg-orange-500 hover:bg-orange-600 text-white text-xs font-bold px-3 py-1.5 rounded flex items-center gap-1">
                                                         ✏️ Editar
                                                     </button>
-                                                    <button onClick={() => alert('Configuraciones de la ubicación en construcción')} className="bg-emerald-500 hover:bg-emerald-600 text-white text-xs font-bold px-3 py-1.5 rounded flex items-center gap-1">
-                                                        🔧 Configuraciones
-                                                    </button>
                                                     <button onClick={() => alternarActiva(u)} className={`text-white text-xs font-bold px-3 py-1.5 rounded flex items-center gap-1 ${u.activo ? 'bg-red-600 hover:bg-red-700' : 'bg-gray-500 hover:bg-gray-600'}`}>
                                                         {u.activo ? '⏻ Desactivar ubicación' : '⏻ Activar ubicación'}
                                                     </button>

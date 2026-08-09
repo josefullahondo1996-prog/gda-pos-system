@@ -4,7 +4,7 @@ import { sonidoExito, sonidoError } from './utils/sonido';
 import { useEmpresaInfo } from './utils/useEmpresa';
 import { useUbicacionUsuario } from './utils/useUbicacion';
 
-const AbrirCaja = ({ onCajaAbierta }) => {
+const AbrirCaja = ({ onCajaAbierta, perfilUsuario }) => {
   const { id: empresaId } = useEmpresaInfo();
   const { id: ubicacionUsuarioId, nombre: nombreUbicacionUsuario, ve_todas: usuarioVeTodas, cargando: cargandoUbicacion } = useUbicacionUsuario();
   const [saldoInicial, setSaldoInicial] = useState('');
@@ -33,12 +33,14 @@ const AbrirCaja = ({ onCajaAbierta }) => {
 
     setCargando(true);
     try {
+      const nombreUsuarioActual = [perfilUsuario?.nombre, perfilUsuario?.apellido].filter(Boolean).join(' ') || perfilUsuario?.nombre_usuario || perfilUsuario?.email || 'Usuario sin nombre';
       const nuevaCaja = {
         empresa_id: empresaId,
         saldo_inicial: Number(saldoInicial),
         estado: 'Abierta',
         fecha_apertura: new Date().toISOString(),
         ubicacion_id: ubicacionElegida,
+        usuario: nombreUsuarioActual,
       };
 
       const { data, error } = await supabase
@@ -65,13 +67,13 @@ const AbrirCaja = ({ onCajaAbierta }) => {
 
   return (
     <div className="p-6 bg-[#f4f6f9] min-h-screen w-full font-sans text-gray-800">
-      
+
       <h1 className="text-2xl font-bold text-gray-800 mb-6">Abrir caja registradora</h1>
 
       <div className="bg-white border border-gray-200 rounded-lg shadow-sm p-8 max-w-4xl mx-auto mt-4">
-        
+
         <form onSubmit={handleAbrirCaja}>
-          
+
           <div className="text-center mb-6">
             <h2 className="text-gray-600 text-lg mb-3">Ingrese el saldo inicial en Caja</h2>
             <hr className="border-gray-300 w-3/4 mx-auto" />
@@ -102,15 +104,15 @@ const AbrirCaja = ({ onCajaAbierta }) => {
             <label className="font-bold text-sm text-gray-700 w-full md:w-auto text-right">
               Efectivo en Moneda Base:
             </label>
-            
+
             <div className="flex w-full md:w-96 border border-gray-300 rounded overflow-hidden focus-within:border-blue-500 focus-within:ring-1 focus-within:ring-blue-500">
               <span className="bg-gray-100 text-gray-500 px-3 py-2 border-r border-gray-300 flex items-center justify-center">
                 💵
               </span>
-              <input 
-                type="number" 
+              <input
+                type="number"
                 required
-                placeholder="Ingresar cantidad" 
+                placeholder="Ingresar cantidad"
                 value={saldoInicial}
                 onChange={(e) => setSaldoInicial(e.target.value)}
                 className="w-full px-3 py-2 text-sm outline-none"
@@ -119,8 +121,8 @@ const AbrirCaja = ({ onCajaAbierta }) => {
           </div>
 
           <div className="flex justify-center md:justify-end md:w-[75%] mx-auto">
-            <button 
-              type="submit" 
+            <button
+              type="submit"
               disabled={cargando}
               className={`bg-[#fd7e14] text-white font-bold py-2 px-6 rounded shadow-sm hover:bg-[#e86e04] transition-colors ${cargando ? 'opacity-70 cursor-not-allowed' : ''}`}
             >

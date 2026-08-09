@@ -887,9 +887,7 @@ export default function GestorCompras({ vistaInicial = 'lista' }) {
                   </select>
                   <span>entradas</span>
                   <button onClick={exportarComprasCSV} className="bg-gray-100 border text-gray-600 px-2.5 py-1 rounded text-xs font-semibold hover:bg-gray-200 ml-2">📄 Exportar a CSV</button>
-                  <button onClick={() => notificar.info('En construcción')} className="bg-gray-100 border text-gray-600 px-2.5 py-1 rounded text-xs font-semibold hover:bg-gray-200">📊 Exportar a Excel</button>
                   <button onClick={() => window.print()} className="bg-gray-100 border text-gray-600 px-2.5 py-1 rounded text-xs font-semibold hover:bg-gray-200">🖨️ Imprimir</button>
-                  <button onClick={() => notificar.info('En construcción')} className="bg-gray-100 border text-gray-600 px-2.5 py-1 rounded text-xs font-semibold hover:bg-gray-200">📄 Exportar a PDF</button>
                 </div>
                 <div className="flex items-center gap-2">
                   <input type="text" className="border rounded p-1.5 w-64 outline-none focus:border-blue-500" placeholder="Buscar ..." value={busquedaLista} onChange={(e) => { setBusquedaLista(e.target.value); setPaginaActual(1); }} />
@@ -937,25 +935,6 @@ export default function GestorCompras({ vistaInicial = 'lista' }) {
                                   </button>
                                   <button onClick={() => eliminarCompra(compra.id)} className="w-full text-left px-3 py-1.5 text-xs text-red-600 hover:bg-red-50 flex items-center gap-2">
                                     🗑️ Borrar
-                                  </button>
-                                  <button onClick={() => { notificar.info('Etiquetas: función en construcción.'); setMenuAbierto(null); }} className="w-full text-left px-3 py-1.5 text-xs text-gray-700 hover:bg-gray-50 flex items-center gap-2">
-                                    🏷️ Etiquetas
-                                  </button>
-                                  <div className="border-t border-gray-100 my-1"></div>
-                                  <button onClick={() => { notificar.info('Monto total pagado o pago parcial: función en construcción.'); setMenuAbierto(null); }} className="w-full text-left px-3 py-1.5 text-xs text-gray-700 hover:bg-gray-50 flex items-center gap-2">
-                                    💳 Monto total pagado o pago parcial
-                                  </button>
-                                  <button onClick={() => { notificar.info('Ver pagos: función en construcción.'); setMenuAbierto(null); }} className="w-full text-left px-3 py-1.5 text-xs text-gray-700 hover:bg-gray-50 flex items-center gap-2">
-                                    💳 Ver pagos
-                                  </button>
-                                  <button onClick={() => { notificar.info('Devolución de compra: función en construcción.'); setMenuAbierto(null); }} className="w-full text-left px-3 py-1.5 text-xs text-gray-700 hover:bg-gray-50 flex items-center gap-2">
-                                    ↩️ Devolución de compra
-                                  </button>
-                                  <button onClick={() => { notificar.info('Update Status: función en construcción.'); setMenuAbierto(null); }} className="w-full text-left px-3 py-1.5 text-xs text-gray-700 hover:bg-gray-50 flex items-center gap-2">
-                                    ✏️ Update Status
-                                  </button>
-                                  <button onClick={() => { notificar.info('Elementos recibidos de notificación: función en construcción.'); setMenuAbierto(null); }} className="w-full text-left px-3 py-1.5 text-xs text-gray-700 hover:bg-gray-50 flex items-center gap-2">
-                                    ✉️ Elementos recibidos de notificación
                                   </button>
                                 </div>
                               )}

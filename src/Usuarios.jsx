@@ -8,7 +8,7 @@ const Usuarios = () => {
   const [usuarios, setUsuarios] = useState([]);
   const [cargando, setCargando] = useState(true);
   const [busqueda, setBusqueda] = useState('');
-  
+
   // Estado para mostrar/ocultar el formulario de agregar
   const [mostrarFormulario, setMostrarFormulario] = useState(false);
   const [usuarioEditando, setUsuarioEditando] = useState(null);
@@ -33,7 +33,7 @@ const Usuarios = () => {
       const { data, error } = await query;
 
       if (error && error.code !== '42P01') throw error;
-      
+
       if (data) setUsuarios(data);
     } catch (error) {
       console.error("Error al cargar usuarios:", error.message);
@@ -60,7 +60,7 @@ const Usuarios = () => {
       alert('Usuario agregado correctamente');
       setMostrarFormulario(false);
       setNuevoUsuario({ nombre_usuario: '', nombre: '', rol: 'Cajero', email: '' });
-      cargarUsuarios(); 
+      cargarUsuarios();
     } catch (error) {
       console.error("Error al guardar usuario:", error.message);
       alert('Hubo un error al guardar. Verificá la consola.');
@@ -72,29 +72,26 @@ const Usuarios = () => {
     if (!window.confirm(`¿Eliminar permanentemente a "${usuario.nombre || usuario.nombre_usuario}"? Esta acción no se puede deshacer.`)) return;
 
     try {
-      // 1) Si el usuario tiene acceso al sistema (login), borramos también su cuenta de Auth
-      if (usuario.auth_user_id) {
-        const { data: resultado, error: errorFuncion } = await supabase.functions.invoke('delete-user', {
-          body: { auth_user_id: usuario.auth_user_id },
-        });
+      // Todo el borrado (ficha en "usuarios" + cuenta de acceso en Auth) pasa
+      // por esta función, que corre con permisos de servidor. Así evitamos que
+      // el navegador necesite permiso de DELETE directo sobre la tabla usuarios,
+      // que por seguridad multi-empresa no se lo damos.
+      const { data: resultado, error: errorFuncion } = await supabase.functions.invoke('delete-user', {
+        body: { auth_user_id: usuario.auth_user_id || null, usuario_id: usuario.id, empresa_id: empresaId },
+      });
 
-        if (errorFuncion || resultado?.error) {
-          let mensajeStr = resultado?.error;
-          if (!mensajeStr && errorFuncion) {
-            try {
-              const errBody = await errorFuncion.context.json();
-              mensajeStr = errBody.error || errBody.message;
-            } catch (_) {
-              mensajeStr = errorFuncion.message;
-            }
+      if (errorFuncion || resultado?.error) {
+        let mensajeStr = resultado?.error;
+        if (!mensajeStr && errorFuncion) {
+          try {
+            const errBody = await errorFuncion.context.json();
+            mensajeStr = errBody.error || errBody.message;
+          } catch (_) {
+            mensajeStr = errorFuncion.message;
           }
-          throw new Error(mensajeStr || 'Error al invocar la función de eliminación de usuario');
         }
+        throw new Error(mensajeStr || 'Error al invocar la función de eliminación de usuario');
       }
-
-      // 2) Borramos la ficha de la tabla "usuarios"
-      const { error } = await supabase.from('usuarios').delete().eq('id', usuario.id).eq('empresa_id', empresaId);
-      if (error) throw error;
 
       setUsuarios((prev) => prev.filter((u) => u.id !== usuario.id));
       alert('Usuario eliminado correctamente.');
@@ -105,8 +102,8 @@ const Usuarios = () => {
   };
 
   // Filtrado de la barra de búsqueda
-  const usuariosFiltrados = usuarios.filter(u => 
-    u.nombre?.toLowerCase().includes(busqueda.toLowerCase()) || 
+  const usuariosFiltrados = usuarios.filter(u =>
+    u.nombre?.toLowerCase().includes(busqueda.toLowerCase()) ||
     u.nombre_usuario?.toLowerCase().includes(busqueda.toLowerCase()) ||
     u.email?.toLowerCase().includes(busqueda.toLowerCase())
   );
@@ -123,7 +120,7 @@ const Usuarios = () => {
 
   return (
     <div className="p-4 bg-[#f4f6f9] min-h-screen w-full font-sans text-gray-800">
-      
+
       {/* HEADER: Título y Subtítulo */}
       <div className="mb-4 flex items-baseline gap-2">
         <h1 className="text-2xl font-bold text-gray-800">Usuarios</h1>
@@ -132,11 +129,11 @@ const Usuarios = () => {
 
       {/* CONTENEDOR PRINCIPAL BLANCO */}
       <div className="bg-white rounded-t-lg shadow-sm border border-gray-200">
-        
+
         {/* TOP BAR: Título de tabla y Botón Añadir */}
         <div className="p-4 border-b border-gray-200 flex justify-between items-center">
           <h3 className="text-md font-bold text-gray-700">Todos los usuarios</h3>
-          <button 
+          <button
             onClick={() => setMostrarFormulario(!mostrarFormulario)}
             className="bg-[#fd7e14] hover:bg-[#e86e04] text-white text-sm font-semibold py-1.5 px-3 rounded flex items-center gap-1 transition-colors shadow-sm"
           >
@@ -150,19 +147,19 @@ const Usuarios = () => {
             <form onSubmit={handleGuardarUsuario} className="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
               <div>
                 <label className="block text-xs font-bold text-gray-700 mb-1">Nombre de Usuario:*</label>
-                <input type="text" required value={nuevoUsuario.nombre_usuario} onChange={(e) => setNuevoUsuario({...nuevoUsuario, nombre_usuario: e.target.value})} className="w-full border border-gray-300 rounded p-1.5 text-sm" />
+                <input type="text" required value={nuevoUsuario.nombre_usuario} onChange={(e) => setNuevoUsuario({ ...nuevoUsuario, nombre_usuario: e.target.value })} className="w-full border border-gray-300 rounded p-1.5 text-sm" />
               </div>
               <div>
                 <label className="block text-xs font-bold text-gray-700 mb-1">Nombre:*</label>
-                <input type="text" required value={nuevoUsuario.nombre} onChange={(e) => setNuevoUsuario({...nuevoUsuario, nombre: e.target.value})} className="w-full border border-gray-300 rounded p-1.5 text-sm" />
+                <input type="text" required value={nuevoUsuario.nombre} onChange={(e) => setNuevoUsuario({ ...nuevoUsuario, nombre: e.target.value })} className="w-full border border-gray-300 rounded p-1.5 text-sm" />
               </div>
               <div>
                 <label className="block text-xs font-bold text-gray-700 mb-1">Email:*</label>
-                <input type="email" required value={nuevoUsuario.email} onChange={(e) => setNuevoUsuario({...nuevoUsuario, email: e.target.value})} className="w-full border border-gray-300 rounded p-1.5 text-sm" />
+                <input type="email" required value={nuevoUsuario.email} onChange={(e) => setNuevoUsuario({ ...nuevoUsuario, email: e.target.value })} className="w-full border border-gray-300 rounded p-1.5 text-sm" />
               </div>
               <div>
                 <label className="block text-xs font-bold text-gray-700 mb-1">Rol:*</label>
-                <select value={nuevoUsuario.rol} onChange={(e) => setNuevoUsuario({...nuevoUsuario, rol: e.target.value})} className="w-full border border-gray-300 rounded p-1.5 text-sm bg-white">
+                <select value={nuevoUsuario.rol} onChange={(e) => setNuevoUsuario({ ...nuevoUsuario, rol: e.target.value })} className="w-full border border-gray-300 rounded p-1.5 text-sm bg-white">
                   <option value="Admin">Admin</option>
                   <option value="Gerente">Gerente</option>
                   <option value="Cajero">Cajero</option>
@@ -177,7 +174,7 @@ const Usuarios = () => {
 
         {/* TOOLBAR: Paginación, Botones de Exportación y Buscador */}
         <div className="p-4 flex flex-col lg:flex-row justify-between items-center gap-4">
-          
+
           <div className="flex items-center text-sm text-gray-600">
             <span>Mostrar</span>
             <select className="mx-2 border border-gray-300 rounded p-1 bg-white focus:outline-none focus:border-blue-500">
@@ -198,8 +195,8 @@ const Usuarios = () => {
 
           <div className="flex items-center">
             <label className="text-sm text-gray-600 mr-2">Buscar:</label>
-            <input 
-              type="text" 
+            <input
+              type="text"
               value={busqueda}
               onChange={(e) => setBusqueda(e.target.value)}
               className="border border-gray-300 rounded p-1 text-sm focus:outline-none focus:border-blue-500 w-48"
@@ -237,7 +234,7 @@ const Usuarios = () => {
                     <td className="p-3 border-r border-gray-200">{usuario.roles?.nombre || 'Sin Rol'}</td>
                     <td className="p-3 border-r border-gray-200">{usuario.email}</td>
                     <td className="p-3 flex justify-center gap-1">
-                      <button 
+                      <button
                         onClick={() => { setUsuarioEditando(usuario); setMostrarFormulario(true); }}
                         className="bg-[#fd7e14] hover:bg-[#e86e04] text-white text-xs px-2 py-1 rounded flex items-center gap-1 shadow-sm"
                       >

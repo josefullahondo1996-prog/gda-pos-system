@@ -3,7 +3,7 @@ import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { supabase } from './supabaseClient';
 import { useNotificacion } from './NotificacionContext';
 import {
-  LayoutDashboard, Users, Contact, Package, Wrench,
+  LayoutDashboard, Users, Contact, Package, Factory, Wrench,
   ArrowDownToLine, ArrowUpFromLine, BarChart3, ShoppingCart, LogOut, Settings,
   MapPin, FileText, Barcode, Printer, Percent, ClipboardList, CreditCard,
 } from 'lucide-react';
@@ -11,7 +11,6 @@ import ConfiguracionEmpresa from './ConfiguracionEmpresa';
 import OT from './OT';
 import UbicacionesComerciales from './UbicacionesComerciales';
 import ListaVentas from './ListaVentas';
-import TodasLasVentas from './TodasLasVentas';
 
 // 1. IMPORTACIÓN DE TODOS LOS MÓDULOS DEL ERP
 import Inicio from './Inicio';
@@ -25,7 +24,6 @@ import Categorias from './Categorias';
 import Unidades from './Unidades';
 import GestorCompras from './GestorCompras';
 import CuentasPorCobrar from './CuentasPorCobrar';
-import GruposClientes from './GruposClientes';
 import Clientes from './Clientes';
 import AbrirCaja from './AbrirCaja';
 import AgregarCompra from './AgregarCompra';
@@ -95,14 +93,6 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
     if (menuExpandido === menu) setMenuExpandido(null);
     else setMenuExpandido(menu);
   };
-
-  // Al iniciar sesión, siempre redirigir al Inicio (/)
-  useEffect(() => {
-    if (!soloPOS) {
-      navigate('/', { replace: true });
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
 
   useEffect(() => {
     const path = location.pathname.toLowerCase();
@@ -180,12 +170,12 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
         return <UbicacionesComerciales />;
 
       case 'todas_ventas':
-        return <TodasLasVentas />;
+        return <ListaVentas />;
 
       case 'pos':
         // Validación exclusiva: Si la caja está cerrada, obliga a abrirla antes del POS
         if (!cajaActual) {
-          return <AbrirCaja onCajaAbierta={(caja) => setCajaActual(caja)} />;
+          return <AbrirCaja onCajaAbierta={(caja) => setCajaActual(caja)} perfilUsuario={perfilUsuario} />;
         }
         return (
           <PuntoDeVenta
@@ -196,6 +186,8 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
             onSolicitarCierre={(reporte) => {
               setReporteCierre(reporte);
               setCajaActual(null);
+              // Invalidar el caché de Inicio para que al volver muestre la caja ya cerrada
+              setRefreshInicio((prev) => prev + 1);
               setVistaActiva('reporte_cierre');
             }}
             onNuevoGasto={() => setVistaActiva('nuevo_gasto')}
@@ -258,9 +250,6 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
       case 'proveedores':
         return <Proveedores />;
 
-      case 'grupos_clientes':
-        return <GruposClientes />;
-
       case 'cobros':
         return <CuentasPorCobrar />;
 
@@ -322,6 +311,8 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
                   <LayoutDashboard size={18} strokeWidth={2} /> {!sidebarColapsado && 'Inicio'}
                 </button>
 
+
+
                 <button onClick={() => irA('ot')} className={estiloBotonSimple('ot')} title="OT">
                   <Wrench size={18} strokeWidth={2} /> {!sidebarColapsado && 'OT'}
                 </button>
@@ -368,7 +359,7 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
                       🠖 Proveedores
                     </Link>
                     <button onClick={() => irA('clientes')} className={estiloSubItem('clientes')}>🠖 Clientes</button>
-                    <button onClick={() => irA('grupos_clientes')} className={estiloSubItem('grupos_clientes')}>🠖 Grupos de clientes</button>
+
                   </div>
                 )}
               </>
