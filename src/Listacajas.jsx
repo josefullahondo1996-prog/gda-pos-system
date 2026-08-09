@@ -283,6 +283,7 @@ const ListaCajas = ({ perfilUsuario }) => {
               </table>
             </div>
           </div>
+        </>
 
       {/* MODAL: Añadir / Editar cuenta */}
       {mostrarFormulario && (

@@ -34,6 +34,7 @@ import CajaRegistradora from './CajaRegistradora';
 import GananciasPerdidas from './GananciasPerdidas';
 import Usuarios from './Usuarios';
 import Roles from './Roles';
+import ListaCajas from './Listacajas';
 
 export default function Dashboard({ session, perfilUsuario, initialView = 'inicio' }) {
   const { notificar } = useNotificacion();
@@ -143,6 +144,10 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
       case '/caja_registradora':
       case '/caja-registradora':
         setVistaActiva('caja_registradora');
+        break;
+      case '/cajas':
+      case '/caja_banco':
+        setVistaActiva('cajas');
         break;
       case '/ganancias_perdidas':
       case '/ganancias-perdidas':
@@ -258,6 +263,9 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
 
       case 'ganancias_perdidas':
         return <GananciasPerdidas />;
+
+      case 'cajas':
+        return <ListaCajas perfilUsuario={perfilUsuario} />;
 
       default:
         return <GraficosDashboard />;
@@ -434,6 +442,21 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
               </button>
             )}
 
+            {/* MENÚ: CAJA / BANCO */}
+            {tieneCategoria('caja') && (
+              <>
+                <button onClick={() => toggleMenu('caja_banco')} className={estiloBotonDesplegable('caja_banco')} title="Caja / Banco">
+                  <div className="flex items-center gap-3"><CreditCard size={18} strokeWidth={2} /> {!sidebarColapsado && 'Caja / Banco'}</div>
+                  {!sidebarColapsado && <span className="text-[10px]">{menuExpandido === 'caja_banco' ? '▼' : '◀'}</span>}
+                </button>
+                {menuExpandido === 'caja_banco' && !sidebarColapsado && (
+                  <div className="bg-[#151521] py-1 flex flex-col">
+                    <button onClick={() => irA('cajas')} className={estiloSubItem('cajas')}>🠖 Lista de cajas</button>
+                  </div>
+                )}
+              </>
+            )}
+
             {/* MENÚ: INFORMES */}
             {tieneCategoria('informes') && (
               <>
@@ -520,6 +543,7 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
                 {vistaActiva === 'config_empresa' && 'Configuración de la Empresa'}
                 {vistaActiva === 'ubicaciones_comerciales' && 'Ubicaciones comerciales'}
                 {vistaActiva === 'todas_ventas' && 'Todas las ventas'}
+                {vistaActiva === 'cajas' && 'Caja / Banco'}
               </h2>
             </div>
             <div className="flex items-center gap-4">
