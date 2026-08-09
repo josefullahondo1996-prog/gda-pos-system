@@ -2,9 +2,22 @@ import { useEffect, useState } from 'react';
 import { supabase } from './supabaseClient';
 import { useEmpresaInfo } from './utils/useEmpresa';
 import { sonidoExito, sonidoError } from './utils/sonido';
+import { useNotificacion } from './NotificacionContext';
+
+const descargarArchivo = (contenido, nombreArchivo, tipo) => {
+    const blob = new Blob([contenido], { type: tipo });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = nombreArchivo;
+    a.click();
+    URL.revokeObjectURL(url);
+};
 
 export default function GruposClientes() {
-    const { id: empresaId } = useEmpresaInfo();
+    const { id: empresaId, nombre: nombreDelNegocio } = useEmpresaInfo();
+    const { notificar, confirmar } = useNotificacion();
+
     const [grupos, setGrupos] = useState([]);
     const [busqueda, setBusqueda] = useState('');
     const [cargando, setCargando] = useState(true);
@@ -15,13 +28,13 @@ export default function GruposClientes() {
     const [mostrarForm, setMostrarForm] = useState(false);
     const [editando, setEditando] = useState(null);
     const [nombreForm, setNombreForm] = useState('');
-    const [tipoCalculoForm, setTipoCalculoForm] = useState('porcentaje');
+    const [descripcionForm, setDescripcionForm] = useState('');
     const [porcentajeForm, setPorcentajeForm] = useState('');
-    const [grupoPrecioForm, setGrupoPrecioForm] = useState('');
     const [guardando, setGuardando] = useState(false);
 
     useEffect(() => {
         if (empresaId) cargarGrupos();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [empresaId]);
 
     const cargarGrupos = async () => {
@@ -43,83 +56,94 @@ export default function GruposClientes() {
     const abrirNuevo = () => {
         setEditando(null);
         setNombreForm('');
-        setTipoCalculoForm('porcentaje');
+        setDescripcionForm('');
         setPorcentajeForm('');
-        setGrupoPrecioForm('');
         setMostrarForm(true);
     };
 
     const abrirEditar = (grupo) => {
         setEditando(grupo);
         setNombreForm(grupo.nombre);
-        setTipoCalculoForm(grupo.tipo_calculo || 'porcentaje');
+        setDescripcionForm(grupo.descripcion || '');
         setPorcentajeForm(grupo.porcentaje ?? '');
-        setGrupoPrecioForm(grupo.grupo_precio_venta || '');
         setMostrarForm(true);
     };
 
     const guardarGrupo = async (e) => {
         e.preventDefault();
-        if (!nombreForm.trim()) return alert('El nombre del grupo de clientes es obligatorio.');
+        if (!nombreForm.trim()) return notificar.info('El nombre del grupo de clientes es obligatorio.');
 
         setGuardando(true);
         try {
             const datos = {
                 nombre: nombreForm.trim(),
-                tipo_calculo: tipoCalculoForm,
-                porcentaje: tipoCalculoForm === 'porcentaje' ? (porcentajeForm === '' ? null : Number(porcentajeForm)) : null,
-                grupo_precio_venta: tipoCalculoForm === 'grupo_precio' ? (grupoPrecioForm || null) : null,
+                descripcion: descripcionForm || null,
+                tipo_calculo: 'porcentaje',
+                porcentaje: porcentajeForm === '' ? null : Number(porcentajeForm),
             };
 
             if (editando) {
                 const { error } = await supabase.from('grupos_clientes').update(datos).eq('id', editando.id).eq('empresa_id', empresaId);
                 if (error) throw error;
+                notificar.exito('Grupo de clientes actualizado.');
             } else {
-                const { error } = await supabase.from('grupos_clientes').insert([{ ...datos, empresa_id: empresaId }]);
+                const { error } = await supabase.from('grupos_clientes').insert([{ ...datos, empresa_id: empresaId, activo: true }]);
                 if (error) throw error;
+                notificar.exito('Grupo de clientes creado.');
             }
             sonidoExito();
             setMostrarForm(false);
             cargarGrupos();
         } catch (error) {
             sonidoError();
-            alert('Error al guardar: ' + error.message);
+            notificar.error('Error al guardar: ' + error.message);
         } finally {
             setGuardando(false);
         }
     };
 
     const eliminarGrupo = async (grupo) => {
-        if (!window.confirm(`¿Eliminar el grupo de clientes "${grupo.nombre}"?`)) return;
+        if (!(await confirmar(`¿Eliminar permanentemente el grupo "${grupo.nombre}"? Esta acción no se puede deshacer.`))) return;
         const { error } = await supabase.from('grupos_clientes').delete().eq('id', grupo.id).eq('empresa_id', empresaId);
-        if (error) return alert('Error al eliminar: ' + error.message);
+        if (error) return notificar.error('Error al eliminar: ' + error.message);
         sonidoExito();
+        notificar.exito('Grupo eliminado.');
         setGrupos(grupos.filter((g) => g.id !== grupo.id));
     };
 
+    const alternarActivo = async (grupo) => {
+        const nuevoEstado = !grupo.activo;
+        const { error } = await supabase.from('grupos_clientes').update({ activo: nuevoEstado }).eq('id', grupo.id).eq('empresa_id', empresaId);
+        if (error) return notificar.error('Error: ' + error.message);
+        notificar.exito(nuevoEstado ? 'Grupo activado.' : 'Grupo desactivado.');
+        cargarGrupos();
+    };
+
+    const columnasExport = [
+        { key: 'nombre', label: 'Nombre' }, { key: 'descripcion', label: 'Descripción' }, { key: 'porcentaje', label: 'Descuento por defecto (%)' },
+    ];
+
     const exportarCSV = () => {
-        const filas = [
-            ['Nombre del grupo de clientes', 'Porcentaje de cálculo (%)', 'Grupo de precios de venta'],
-            ...gruposFiltrados.map((g) => [g.nombre, g.tipo_calculo === 'porcentaje' ? (g.porcentaje ?? '') : '--', g.tipo_calculo === 'grupo_precio' ? (g.grupo_precio_venta || '') : '--']),
-        ];
-        const csv = filas.map((f) => f.join(',')).join('\n');
-        const blob = new Blob([csv], { type: 'text/csv' });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = 'grupos_clientes.csv';
-        a.click();
-        URL.revokeObjectURL(url);
+        const filas = [columnasExport.map((c) => c.label).join(',')];
+        gruposFiltrados.forEach((g) => filas.push(columnasExport.map((c) => `"${String(g[c.key] ?? '').replace(/"/g, '""')}"`).join(',')));
+        descargarArchivo(filas.join('\n'), 'grupos_clientes.csv', 'text/csv;charset=utf-8;');
+    };
+
+    const exportarExcel = () => {
+        let html = '<table><tr>' + columnasExport.map((c) => `<th>${c.label}</th>`).join('') + '</tr>';
+        gruposFiltrados.forEach((g) => { html += '<tr>' + columnasExport.map((c) => `<td>${g[c.key] ?? ''}</td>`).join('') + '</tr>'; });
+        html += '</table>';
+        descargarArchivo(html, 'grupos_clientes.xls', 'application/vnd.ms-excel');
     };
 
     return (
         <div className="bg-transparent text-sm text-gray-700">
             <h2 className="text-2xl font-bold text-gray-800 mb-1">Grupos de clientes</h2>
-            <p className="text-gray-400 text-xs mb-4">Gestiona tus grupos de clientes</p>
+            <p className="text-gray-400 text-xs mb-4">Administra tus grupos de clientes</p>
 
             <div className="bg-white rounded-lg shadow-sm border-t-2 border-[#004284]">
                 <div className="p-4 border-b border-gray-100 flex justify-between items-center">
-                    <h3 className="font-bold text-gray-700">Todos los grupos de clientes</h3>
+                    <h3 className="font-bold text-gray-700">Grupos de clientes total</h3>
                     <button onClick={abrirNuevo} className="bg-orange-500 hover:bg-orange-600 text-white font-bold px-4 py-2 rounded text-sm">
                         + Añadir
                     </button>
@@ -129,6 +153,7 @@ export default function GruposClientes() {
                     <div className="flex flex-wrap justify-between items-center gap-3 mb-4">
                         <div className="flex gap-1 flex-wrap items-center">
                             <button onClick={exportarCSV} className="bg-gray-100 border text-gray-600 px-2.5 py-1 rounded text-xs font-semibold hover:bg-gray-200">📄 Exportar a CSV</button>
+                            <button onClick={exportarExcel} className="bg-gray-100 border text-gray-600 px-2.5 py-1 rounded text-xs font-semibold hover:bg-gray-200">📊 Exportar a Excel</button>
                             <button onClick={() => window.print()} className="bg-gray-100 border text-gray-600 px-2.5 py-1 rounded text-xs font-semibold hover:bg-gray-200">🖨️ Imprimir</button>
                             <select value={porPagina} onChange={(e) => setPorPagina(Number(e.target.value))} className="border rounded p-1.5 text-xs font-semibold bg-white ml-2">
                                 <option value={10}>Mostrar 10</option>
@@ -149,23 +174,24 @@ export default function GruposClientes() {
                     <table className="w-full text-left text-sm border-collapse">
                         <thead>
                             <tr className="border-b border-gray-200 bg-gray-50 text-gray-500 font-bold uppercase text-xs">
-                                <th className="p-3">Nombre del grupo de clientes</th>
-                                <th className="p-3">Porcentaje de cálculo (%)</th>
-                                <th className="p-3">Grupo de precios de venta</th>
-                                <th className="p-3 w-56">Acción</th>
+                                <th className="p-3">Nombre</th>
+                                <th className="p-3">Descripción</th>
+                                <th className="p-3 w-72">Acción</th>
                             </tr>
                         </thead>
                         <tbody>
                             {cargando ? (
-                                <tr><td colSpan={4} className="text-center py-8 text-gray-400">Cargando...</td></tr>
+                                <tr><td colSpan={3} className="text-center py-8 text-gray-400">Cargando...</td></tr>
                             ) : gruposPagina.length === 0 ? (
-                                <tr><td colSpan={4} className="text-center py-8 text-gray-400">No hay grupos de clientes registrados.</td></tr>
+                                <tr><td colSpan={3} className="text-center py-8 text-gray-400">No hay grupos de clientes registrados.</td></tr>
                             ) : (
                                 gruposPagina.map((g) => (
-                                    <tr key={g.id} className="border-b hover:bg-gray-50">
-                                        <td className="p-3 font-medium text-gray-700">{g.nombre}</td>
-                                        <td className="p-3 text-gray-500">{g.tipo_calculo === 'porcentaje' ? `${g.porcentaje ?? 0}%` : '--'}</td>
-                                        <td className="p-3 text-gray-500">{g.tipo_calculo === 'grupo_precio' ? (g.grupo_precio_venta || '—') : '--'}</td>
+                                    <tr key={g.id} className={`border-b hover:bg-gray-50 ${g.activo === false ? 'opacity-50' : ''}`}>
+                                        <td className="p-3 font-medium text-gray-700">
+                                            {g.nombre}
+                                            {g.activo === false && <span className="ml-2 text-[10px] bg-gray-200 text-gray-500 px-1.5 py-0.5 rounded-full">Inactivo</span>}
+                                        </td>
+                                        <td className="p-3 text-gray-500">{g.descripcion || '—'}</td>
                                         <td className="p-3">
                                             <div className="flex gap-2">
                                                 <button onClick={() => abrirEditar(g)} className="bg-orange-500 hover:bg-orange-600 text-white text-xs font-bold px-3 py-1.5 rounded flex items-center gap-1">
@@ -173,6 +199,9 @@ export default function GruposClientes() {
                                                 </button>
                                                 <button onClick={() => eliminarGrupo(g)} className="bg-red-600 hover:bg-red-700 text-white text-xs font-bold px-3 py-1.5 rounded flex items-center gap-1">
                                                     🗑️ Borrar
+                                                </button>
+                                                <button onClick={() => alternarActivo(g)} className="bg-gray-500 hover:bg-gray-600 text-white text-xs font-bold px-3 py-1.5 rounded flex items-center gap-1">
+                                                    ⏻ {g.activo === false ? 'Activar' : 'Deactivate'}
                                                 </button>
                                             </div>
                                         </td>
@@ -188,14 +217,15 @@ export default function GruposClientes() {
                         </div>
                         <div className="flex gap-1">
                             <button onClick={() => setPaginaActual((p) => Math.max(1, p - 1))} disabled={paginaSegura === 1} className="px-3 py-1 text-xs font-bold border rounded disabled:opacity-40 hover:bg-gray-50">Anterior</button>
-                            <button className="px-3 py-1 text-xs font-bold border rounded bg-[#004284] text-white border-[#004284]">{paginaSegura}</button>
+                            <span className="px-3 py-1 text-xs font-bold">{paginaSegura} / {totalPaginas}</span>
                             <button onClick={() => setPaginaActual((p) => Math.min(totalPaginas, p + 1))} disabled={paginaSegura === totalPaginas} className="px-3 py-1 text-xs font-bold border rounded disabled:opacity-40 hover:bg-gray-50">Siguiente</button>
                         </div>
                     </div>
                 </div>
             </div>
 
-            {/* Modal Añadir/Editar — clon de "Agregar grupo de clientes" de CDEpos */}
+            {/* Modal — clon exacto de "Agregar grupo de precios de venta" de CDEpos,
+          adaptado a grupo de clientes: Nombre*, Descripción, Descuento por defecto (%) */}
             {mostrarForm && (
                 <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
                     <div className="bg-white rounded-xl shadow-2xl w-full max-w-md overflow-hidden">
@@ -205,52 +235,42 @@ export default function GruposClientes() {
                         </div>
                         <form onSubmit={guardarGrupo} className="p-6 flex flex-col gap-4">
                             <div>
-                                <label className="block text-sm font-bold text-gray-700 mb-1">Nombre del grupo de clientes:*</label>
+                                <label className="block text-sm font-bold text-gray-700 mb-1">Nombre:*</label>
                                 <input
                                     autoFocus
                                     className="w-full border border-gray-300 rounded p-2.5 text-sm"
                                     value={nombreForm}
                                     onChange={(e) => setNombreForm(e.target.value)}
-                                    placeholder="Nombre del grupo de clientes"
+                                    placeholder="Nombre"
                                 />
                             </div>
                             <div>
-                                <label className="block text-sm font-bold text-gray-700 mb-1">Tipo de cálculo de precio:</label>
-                                <select
-                                    className="w-full border border-gray-300 rounded p-2.5 text-sm bg-white"
-                                    value={tipoCalculoForm}
-                                    onChange={(e) => setTipoCalculoForm(e.target.value)}
-                                >
-                                    <option value="porcentaje">Porcentaje</option>
-                                    <option value="grupo_precio">Grupo de precios de venta</option>
-                                </select>
+                                <label className="block text-sm font-bold text-gray-700 mb-1">Descripción:</label>
+                                <textarea
+                                    className="w-full border border-gray-300 rounded p-2.5 text-sm"
+                                    rows={3}
+                                    value={descripcionForm}
+                                    onChange={(e) => setDescripcionForm(e.target.value)}
+                                    placeholder="Descripción"
+                                />
                             </div>
-
-                            {tipoCalculoForm === 'porcentaje' ? (
-                                <div>
-                                    <label className="block text-sm font-bold text-gray-700 mb-1">
-                                        Porcentaje de cálculo (%): <span className="text-blue-500" title="Se aplica como recargo o descuento sobre el precio base según el signo del valor">ℹ️</span>
-                                    </label>
+                            <div>
+                                <label className="block text-sm font-bold text-gray-700 mb-1">Descuento por defecto (%):</label>
+                                <div className="flex items-center border border-gray-300 rounded overflow-hidden">
                                     <input
                                         type="number"
                                         step="0.01"
-                                        className="w-full border border-gray-300 rounded p-2.5 text-sm"
+                                        className="flex-1 p-2.5 text-sm outline-none"
                                         value={porcentajeForm}
                                         onChange={(e) => setPorcentajeForm(e.target.value)}
-                                        placeholder="Porcentaje de cálculo (%)"
+                                        placeholder="Ej: 25"
                                     />
+                                    <span className="px-3 text-gray-400 bg-gray-50 h-full flex items-center">%</span>
                                 </div>
-                            ) : (
-                                <div>
-                                    <label className="block text-sm font-bold text-gray-700 mb-1">Grupo de precios de venta:</label>
-                                    <input
-                                        className="w-full border border-gray-300 rounded p-2.5 text-sm"
-                                        value={grupoPrecioForm}
-                                        onChange={(e) => setGrupoPrecioForm(e.target.value)}
-                                        placeholder="Ej: P CREDITO"
-                                    />
-                                </div>
-                            )}
+                                <p className="text-xs text-gray-400 mt-1">
+                                    Descuento que se aplicará automáticamente a los clientes de este grupo. Se puede ajustar por cliente.
+                                </p>
+                            </div>
 
                             <div className="flex gap-2 justify-end pt-2 border-t border-gray-100">
                                 <button

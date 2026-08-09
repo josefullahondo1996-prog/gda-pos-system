@@ -789,8 +789,13 @@ export default function Clientes() {
                             } else {
                               const rect = e.currentTarget.getBoundingClientRect();
                               const anchoMenu = 176; // w-44
+                              const alturaEstimadaMenu = 320; // 8 ítems + un divisor
+                              const espacioAbajo = window.innerHeight - rect.bottom;
+                              const abrirHaciaArriba = espacioAbajo < alturaEstimadaMenu && rect.top > alturaEstimadaMenu;
                               const left = Math.min(rect.left, window.innerWidth - anchoMenu - 8);
-                              const top = Math.min(rect.bottom + 4, window.innerHeight - 8);
+                              const top = abrirHaciaArriba
+                                ? Math.max(8, rect.top - alturaEstimadaMenu - 4)
+                                : Math.min(rect.bottom + 4, window.innerHeight - 8);
                               setMenuAccionesPos({ top, left });
                               setMenuAccionesAbierto(cliente.id);
                             }
@@ -805,7 +810,7 @@ export default function Clientes() {
                             <div className="fixed inset-0 z-[9998]" onClick={() => setMenuAccionesAbierto(null)} />
                             <div
                               className="fixed z-[9999] bg-white border rounded shadow-lg w-44 text-[11px] py-1"
-                              style={{ top: menuAccionesPos.top, left: menuAccionesPos.left }}
+                              style={{ top: menuAccionesPos.top, left: menuAccionesPos.left, maxHeight: 'calc(100vh - 16px)', overflowY: 'auto' }}
                             >
                               <button
                                 onClick={() => { setMenuAccionesAbierto(null); abrirModalPagar(cliente); }}
