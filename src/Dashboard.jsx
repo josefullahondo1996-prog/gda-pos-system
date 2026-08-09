@@ -3,7 +3,7 @@ import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { supabase } from './supabaseClient';
 import { useNotificacion } from './NotificacionContext';
 import {
-  LayoutDashboard, Users, Contact, Package, Factory, Wrench,
+  LayoutDashboard, Users, Contact, Package, Wrench,
   ArrowDownToLine, ArrowUpFromLine, BarChart3, ShoppingCart, LogOut, Settings,
   MapPin, FileText, Barcode, Printer, Percent, ClipboardList, CreditCard,
 } from 'lucide-react';
@@ -95,6 +95,14 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
     if (menuExpandido === menu) setMenuExpandido(null);
     else setMenuExpandido(menu);
   };
+
+  // Al iniciar sesión, siempre redirigir al Inicio (/)
+  useEffect(() => {
+    if (!soloPOS) {
+      navigate('/', { replace: true });
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     const path = location.pathname.toLowerCase();
@@ -314,10 +322,6 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
                   <LayoutDashboard size={18} strokeWidth={2} /> {!sidebarColapsado && 'Inicio'}
                 </button>
 
-                <button onClick={() => notificar.info('Módulo en construcción')} className={estiloBotonSimple('fabricacion')} title="Fabricación">
-                  <Factory size={18} strokeWidth={2} /> {!sidebarColapsado && 'Fabricación'}
-                </button>
-
                 <button onClick={() => irA('ot')} className={estiloBotonSimple('ot')} title="OT">
                   <Wrench size={18} strokeWidth={2} /> {!sidebarColapsado && 'OT'}
                 </button>
@@ -365,7 +369,6 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
                     </Link>
                     <button onClick={() => irA('clientes')} className={estiloSubItem('clientes')}>🠖 Clientes</button>
                     <button onClick={() => irA('grupos_clientes')} className={estiloSubItem('grupos_clientes')}>🠖 Grupos de clientes</button>
-                    <button onClick={() => notificar.info('Módulo Importar en construcción')} className={estiloSubItem('importar_contactos')}>🠖 Importar contactos</button>
                   </div>
                 )}
               </>
@@ -417,20 +420,11 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
                 {menuExpandido === 'ventas' && !sidebarColapsado && (
                   <div className="bg-[#151521] py-1 flex flex-col">
                     <button onClick={() => irA('todas_ventas')} className={estiloSubItem('todas_ventas')}>🠖 Todas las ventas</button>
-                    <button onClick={() => notificar.info('Módulo Facturación A4 en construcción')} className={estiloSubItem('nueva_venta')}>🠖 Nueva venta</button>
-                    <button onClick={() => notificar.info('Historial de Tickets en construcción')} className={estiloSubItem('ventas_pos')}>🠖 Ventas POS</button>
 
                     {/* Este botón activa la caja registradora de forma exclusiva */}
                     <button onClick={() => irA('pos')} className={estiloSubItem('pos')}>🠖 Punto de venta</button>
 
-                    <button onClick={() => notificar.info('Módulo en construcción')} className={estiloSubItem('nuevo_pedido')}>🠖 Nuevo Pedido Pendiente</button>
                     <button onClick={() => irA('cobros')} className={estiloSubItem('cobros')}>🠖 Pedidos Pendientes</button>
-                    <button onClick={() => notificar.info('Módulo en construcción')} className={estiloSubItem('nuevo_presupuesto')}>🠖 Nuevo presupuesto</button>
-                    <button onClick={() => notificar.info('Módulo en construcción')} className={estiloSubItem('presupuestos')}>🠖 Presupuestos</button>
-                    <button onClick={() => notificar.info('Módulo en construcción')} className={estiloSubItem('devoluciones')}>🠖 Devoluciones</button>
-                    <button onClick={() => notificar.info('Módulo en construcción')} className={estiloSubItem('envios')}>🠖 Envíos</button>
-                    <button onClick={() => notificar.info('Módulo en construcción')} className={estiloSubItem('descuentos')}>🠖 Descuentos</button>
-                    <button onClick={() => notificar.info('Módulo en construcción')} className={estiloSubItem('importar_ventas')}>🠖 Importar ventas</button>
                   </div>
                 )}
               </>
@@ -459,25 +453,7 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
                 {menuExpandido === 'informes' && !sidebarColapsado && (
                   <div className="bg-[#151521] py-1 flex flex-col">
                     <button onClick={() => irA('ganancias_perdidas')} className={estiloSubItem('ganancias_perdidas')}>🠖 Ganancias y Pérdidas</button>
-                    <button onClick={() => notificar.info('Módulo en construcción')} className={estiloSubItem('compras_ventas')}>🠖 Compras y Ventas</button>
-                    <button onClick={() => notificar.info('Módulo en construcción')} className={estiloSubItem('informe_fiscal')}>🠖 Informe Fiscal (IVA)</button>
-                    <button onClick={() => notificar.info('Módulo en construcción')} className={estiloSubItem('rg90')}>🠖 RG 90 — Marangatu</button>
-                    <button onClick={() => notificar.info('Módulo en construcción')} className={estiloSubItem('proveedores_clientes')}>🠖 Proveedores y Clientes</button>
-                    <button onClick={() => notificar.info('Módulo en construcción')} className={estiloSubItem('grupos_clientes_inf')}>🠖 Grupos de clientes</button>
-                    <button onClick={() => notificar.info('Módulo en construcción')} className={estiloSubItem('inventario_stock')}>🠖 Inventario / Stock</button>
-                    <button onClick={() => notificar.info('Módulo en construcción')} className={estiloSubItem('vencimiento_productos')}>🠖 Vencimiento de productos</button>
-                    <button onClick={() => notificar.info('Módulo en construcción')} className={estiloSubItem('ajustes_inventario')}>🠖 Ajustes de inventario</button>
-                    <button onClick={() => notificar.info('Módulo en construcción')} className={estiloSubItem('productos_mas_vendidos')}>🠖 Productos más vendidos</button>
-                    <button onClick={() => notificar.info('Módulo en construcción')} className={estiloSubItem('detalle_articulo')}>🠖 Detalle por artículo</button>
-                    <button onClick={() => notificar.info('Módulo en construcción')} className={estiloSubItem('compras_producto')}>🠖 Compras por producto</button>
-                    <button onClick={() => notificar.info('Módulo en construcción')} className={estiloSubItem('ventas_producto')}>🠖 Ventas por producto</button>
-                    <button onClick={() => notificar.info('Módulo en construcción')} className={estiloSubItem('pagos_compra')}>🠖 Pagos de compra</button>
-                    <button onClick={() => notificar.info('Módulo en construcción')} className={estiloSubItem('cobros_venta')}>🠖 Cobros de venta</button>
-                    <button onClick={() => notificar.info('Módulo en construcción')} className={estiloSubItem('comprobantes_egreso')}>🠖 Comprobantes de egreso</button>
                     <button onClick={() => irA('caja_registradora')} className={estiloSubItem('caja_registradora')}>🠖 Caja registradora</button>
-                    <button onClick={() => notificar.info('Módulo en construcción')} className={estiloSubItem('vendedores_comisiones')}>🠖 Vendedores / Comisiones</button>
-                    <button onClick={() => notificar.info('Módulo en construcción')} className={estiloSubItem('ventas_personal')}>🠖 Ventas por personal</button>
-                    <button onClick={() => notificar.info('Módulo en construcción')} className={estiloSubItem('historial_actividades')}>🠖 Historial de actividades</button>
                   </div>
                 )}
               </>
@@ -494,12 +470,6 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
                   <div className="bg-[#151521] py-1 flex flex-col">
                     <button onClick={() => irA('config_empresa')} className={estiloSubItem('config_empresa')}>🠖 Configuración de la empresa</button>
                     <button onClick={() => irA('ubicaciones_comerciales')} className={estiloSubItem('ubicaciones_comerciales')}>🠖 Ubicaciones comerciales</button>
-                    <button onClick={() => notificar.info('Módulo en construcción')} className={estiloSubItem('config_factura')}>🠖 Configuración de factura</button>
-                    <button onClick={() => notificar.info('Módulo en construcción')} className={estiloSubItem('config_codigo_barras')}>🠖 Configuraciones de código de barras</button>
-                    <button onClick={() => notificar.info('Módulo en construcción')} className={estiloSubItem('impresoras_tickets')}>🠖 Impresoras de tickets</button>
-                    <button onClick={() => notificar.info('Módulo en construcción')} className={estiloSubItem('tasas_impuestos')}>🠖 Tasas de impuestos</button>
-                    <button onClick={() => notificar.info('Módulo en construcción')} className={estiloSubItem('tipos_servicio')}>🠖 Tipos de servicio</button>
-                    <button onClick={() => notificar.info('Módulo en construcción')} className={estiloSubItem('suscripcion')}>🠖 Suscripción</button>
                   </div>
                 )}
               </>

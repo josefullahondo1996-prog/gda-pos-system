@@ -2,6 +2,13 @@ import { useState } from 'react';
 import { supabase } from './supabaseClient';
 
 const CrearNegocio = ({ onVolverALogin }) => {
+  // La clave de acceso ahora se valida del lado del servidor (función "crear-negocio"
+  // en Supabase), no acá. Esta pantalla solo la pide y la manda junto con el resto
+  // del formulario; si está mal, el servidor la rechaza y se muestra el error.
+  const [claveIngresada, setClaveIngresada] = useState('');
+  const [desbloqueado, setDesbloqueado] = useState(false);
+  const [errorClave, setErrorClave] = useState('');
+
   const [nombreNegocio, setNombreNegocio] = useState('');
   const [nombreAdmin, setNombreAdmin] = useState('');
   const [email, setEmail] = useState('');
@@ -16,7 +23,7 @@ const CrearNegocio = ({ onVolverALogin }) => {
     setError(null);
 
     const { data, error } = await supabase.functions.invoke('crear-negocio', {
-      body: { nombreNegocio, nombreAdmin, email, password },
+      body: { nombreNegocio, nombreAdmin, email, password, claveAcceso: claveIngresada },
     });
 
     if (error || data?.error) {
@@ -37,6 +44,45 @@ const CrearNegocio = ({ onVolverALogin }) => {
     setExito(true);
     setLoading(false);
   };
+
+  if (!desbloqueado) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex flex-col justify-center items-center p-4">
+        <div className="bg-white p-8 rounded-2xl shadow-lg w-full max-w-md text-center border border-gray-100">
+          <h2 className="text-2xl font-bold text-gray-800 mb-2">Acceso restringido</h2>
+          <p className="text-sm text-gray-500 mb-6">Esta pantalla es solo para el administrador. Ingresá la clave de acceso para continuar.</p>
+          {errorClave && <div className="mb-4 p-3 bg-red-100 text-red-700 text-sm rounded-lg text-left">{errorClave}</div>}
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              if (!claveIngresada.trim()) {
+                setErrorClave('Ingresá la clave de acceso.');
+                return;
+              }
+              setDesbloqueado(true);
+              setErrorClave('');
+            }}
+            className="space-y-4 text-left"
+          >
+            <input
+              type="password"
+              autoFocus
+              placeholder="Clave de acceso"
+              value={claveIngresada}
+              onChange={(e) => setClaveIngresada(e.target.value)}
+              className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-orange-500 text-sm text-center"
+            />
+            <button type="submit" className="w-full py-3 text-white font-bold rounded-xl shadow-md bg-orange-500 hover:bg-orange-600 uppercase tracking-wider text-sm">
+              Continuar
+            </button>
+            <button type="button" onClick={onVolverALogin} className="w-full text-xs text-gray-400 hover:underline text-center">
+              Volver a iniciar sesión
+            </button>
+          </form>
+        </div>
+      </div>
+    );
+  }
 
   if (exito) {
     return (

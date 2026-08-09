@@ -12,7 +12,17 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const { nombreNegocio, nombreAdmin, email, password } = await req.json();
+    const { nombreNegocio, nombreAdmin, email, password, claveAcceso } = await req.json();
+
+    // Clave de acceso validada acá, del lado del servidor: aunque alguien mire el
+    // código de la página en el navegador, esta clave nunca viaja al frontend.
+    const CLAVE_ACCESO = Deno.env.get('CLAVE_CREAR_NEGOCIO') ?? 'GDA2026';
+    if (claveAcceso !== CLAVE_ACCESO) {
+      return new Response(JSON.stringify({ error: 'Clave de acceso incorrecta.' }), {
+        status: 401,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
 
     if (!nombreNegocio || !email || !password) {
       return new Response(JSON.stringify({ error: 'Faltan datos: nombre del negocio, email y contraseña son obligatorios.' }), {
@@ -35,7 +45,7 @@ Deno.serve(async (req) => {
 
     const { data: rol, error: errorRol } = await supabaseAdmin
       .from('roles')
-      .insert([{ nombre: 'Admin', permisos: {}, empresa_id: empresa.id }])
+      .insert([{ nombre: 'Admin', descripcion: 'Administrador del negocio', permisos: {}, empresa_id: empresa.id }])
       .select()
       .single();
     if (errorRol) throw errorRol;
