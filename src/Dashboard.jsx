@@ -8,6 +8,7 @@ import {
   MapPin, FileText, Barcode, Printer, Percent, ClipboardList, CreditCard,
 } from 'lucide-react';
 import ConfiguracionEmpresa from './ConfiguracionEmpresa';
+import ConfiguracionFacturaElectronica from './ConfiguracionFacturaElectronica';
 import OT from './OT';
 import UbicacionesComerciales from './UbicacionesComerciales';
 import ListaVentas from './ListaVentas';
@@ -113,6 +114,10 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
       case '/config_empresa':
         setVistaActiva('config_empresa');
         break;
+      case '/config_factura':
+      case '/facturacion_electronica':
+        setVistaActiva('config_factura');
+        break;
       case '/ubicaciones':
       case '/ubicaciones_comerciales':
         setVistaActiva('ubicaciones_comerciales');
@@ -170,6 +175,9 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
 
       case 'config_empresa':
         return <ConfiguracionEmpresa perfilUsuario={perfilUsuario} />;
+
+      case 'config_factura':
+        return <ConfiguracionFacturaElectronica />;
 
       case 'ubicaciones_comerciales':
         return <UbicacionesComerciales />;
@@ -319,8 +327,6 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
                   <LayoutDashboard size={18} strokeWidth={2} /> {!sidebarColapsado && 'Inicio'}
                 </button>
 
-
-
                 <button onClick={() => irA('ot')} className={estiloBotonSimple('ot')} title="OT">
                   <Wrench size={18} strokeWidth={2} /> {!sidebarColapsado && 'OT'}
                 </button>
@@ -367,7 +373,6 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
                       🠖 Proveedores
                     </Link>
                     <button onClick={() => irA('clientes')} className={estiloSubItem('clientes')}>🠖 Clientes</button>
-
                   </div>
                 )}
               </>
@@ -409,7 +414,7 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
               </>
             )}
 
-            {/* MENÚ: VENTAS (LOS 12 SUBÍTEMS COMPLETOS) */}
+            {/* MENÚ: VENTAS */}
             {tieneCategoria('ventas_pos') && !soloPOS && (
               <>
                 <button onClick={() => toggleMenu('ventas')} className={estiloBotonDesplegable('ventas')} title="Ventas">
@@ -419,10 +424,7 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
                 {menuExpandido === 'ventas' && !sidebarColapsado && (
                   <div className="bg-[#151521] py-1 flex flex-col">
                     <button onClick={() => irA('todas_ventas')} className={estiloSubItem('todas_ventas')}>🠖 Todas las ventas</button>
-
-                    {/* Este botón activa la caja registradora de forma exclusiva */}
                     <button onClick={() => irA('pos')} className={estiloSubItem('pos')}>🠖 Punto de venta</button>
-
                     <button onClick={() => irA('cobros')} className={estiloSubItem('cobros')}>🠖 Pedidos Pendientes</button>
                   </div>
                 )}
@@ -435,7 +437,6 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
               </button>
             )}
 
-            {/* ACCESO DIRECTO: solo abrir/gestionar caja, sin el resto de permisos de Ventas */}
             {!tieneCategoria('ventas_pos') && tieneCategoria('caja') && (
               <button onClick={() => irA('pos')} className={estiloBotonSimple('pos')} title="Caja registradora">
                 <ArrowUpFromLine size={18} strokeWidth={2} /> {!sidebarColapsado && 'Caja registradora'}
@@ -473,7 +474,7 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
               </>
             )}
 
-            {/* MENÚ: CONFIGURACIONES (misma estructura que CDEpos) */}
+            {/* MENÚ: CONFIGURACIONES */}
             {esAdmin && (
               <>
                 <button onClick={() => toggleMenu('configuraciones')} className={estiloBotonDesplegable('configuraciones')} title="Configuraciones">
@@ -484,6 +485,7 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
                   <div className="bg-[#151521] py-1 flex flex-col">
                     <button onClick={() => irA('config_empresa')} className={estiloSubItem('config_empresa')}>🠖 Configuración de la empresa</button>
                     <button onClick={() => irA('ubicaciones_comerciales')} className={estiloSubItem('ubicaciones_comerciales')}>🠖 Ubicaciones comerciales</button>
+                    <button onClick={() => irA('config_factura')} className={estiloSubItem('config_factura')}>🠖 Configuración de factura</button>
                   </div>
                 )}
               </>
@@ -541,6 +543,7 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
                 {vistaActiva === 'usuarios' && 'Usuarios'}
                 {vistaActiva === 'roles' && 'Roles'}
                 {vistaActiva === 'config_empresa' && 'Configuración de la Empresa'}
+                {vistaActiva === 'config_factura' && 'Facturación Electrónica'}
                 {vistaActiva === 'ubicaciones_comerciales' && 'Ubicaciones comerciales'}
                 {vistaActiva === 'todas_ventas' && 'Todas las ventas'}
                 {vistaActiva === 'cajas' && 'Caja / Banco'}
