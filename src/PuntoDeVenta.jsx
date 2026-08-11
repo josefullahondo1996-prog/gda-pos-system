@@ -4,8 +4,11 @@ import NuevoClientePOS from './NuevoClientePOS';
 import ModalPagoMultiple from './ModalPagoMultiple';
 import React, { useState, useEffect, useMemo } from 'react';
 import { supabase } from './supabaseClient';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
 import { sonidoExito, sonidoError } from './utils/sonido';
 import { generateReceipt } from './utils/generateReceipt';
+import { generarFacturaElectronica } from './utils/goekuaService';
 import { useEmpresaInfo } from './utils/useEmpresa';
 import { useUbicacionUsuario } from './utils/useUbicacion';
 import { cargarMapaStockPorUbicacion } from './utils/stockUbicacion';
@@ -16,6 +19,8 @@ const PuntoDeVenta = ({ cajaInfo, session, perfilUsuario, onVolver, onSolicitarC
   const { id: empresaId, nombre: nombreEmpresa, direccion: direccionEmpresa, telefono: telefonoEmpresa, ruc: rucEmpresa } = useEmpresaInfo();
   const [ultimaVenta, setUltimaVenta] = useState(null);
   const [formatoTicket, setFormatoTicket] = useState(() => localStorage.getItem('gda_formato_ticket') || '80mm');
+  const [impresoraComandaOcupada, setImpresoraComandaOcupada] = useState(false);
+  const [facturando, setFacturando] = useState(false);
 
   const cambiarFormatoTicket = (formato) => {
     setFormatoTicket(formato);
@@ -296,6 +301,25 @@ const PuntoDeVenta = ({ cajaInfo, session, perfilUsuario, onVolver, onSolicitarC
         );
       }
       return null;
+    }
+  };
+
+  const emitirFactura = async () => {
+    if (!ultimaVenta || facturando) return;
+    setFacturando(true);
+    try {
+      const res = await generarFacturaElectronica(ultimaVenta.id, empresaId);
+      if (!res.success) {
+        alert(`Error al emitir factura: ${res.error}`);
+      } else {
+        alert('¡Factura electrónica emitida y enviada a SIFEN exitosamente!');
+        // Opcional: Actualizar el estado de ultimaVenta si queremos deshabilitar el botón
+        setUltimaVenta({ ...ultimaVenta, goekua_id: res.goekua_id });
+      }
+    } catch (error) {
+      alert(`Error inesperado: ${error.message}`);
+    } finally {
+      setFacturando(false);
     }
   };
 
@@ -710,6 +734,17 @@ const PuntoDeVenta = ({ cajaInfo, session, perfilUsuario, onVolver, onSolicitarC
               >
                 🖨️ Volver a imprimir
               </button>
+              
+              {!ultimaVenta.goekua_id && (
+                <button
+                  onClick={emitirFactura}
+                  disabled={facturando}
+                  className="w-full bg-[#004284] hover:bg-blue-800 text-white font-bold text-sm px-5 py-2.5 rounded disabled:opacity-50"
+                >
+                  {facturando ? 'Emitiendo...' : '📄 Emitir Factura Electrónica'}
+                </button>
+              )}
+
               <button
                 onClick={() => setUltimaVenta(null)}
                 className="w-full border border-gray-300 text-gray-600 font-bold text-sm px-5 py-2.5 rounded hover:bg-gray-50"

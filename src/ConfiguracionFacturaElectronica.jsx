@@ -3,14 +3,13 @@ import { supabase } from './supabaseClient';
 import { useEmpresaInfo } from './utils/useEmpresa';
 
 const PROVEEDORES = [
-    { valor: 'adoqia', nombre: 'AdoqIA', url: 'https://www.adoqia.com' },
-    { valor: 'goekua', nombre: 'GOEKUA', url: 'https://goekua.com.py' },
+    { valor: 'goekua', nombre: 'Servicio de Facturación Integrado', url: '' },
     { valor: 'otro', nombre: 'Otro proveedor', url: '' },
 ];
 
 export default function ConfiguracionFacturaElectronica() {
     const { id: empresaId, nombre: nombreEmpresa, ruc: rucEmpresa } = useEmpresaInfo();
-    const [proveedor, setProveedor] = useState('adoqia');
+    const [proveedor, setProveedor] = useState('goekua');
     const [apiKey, setApiKey] = useState('');
     const [activa, setActiva] = useState(false);
     const [notas, setNotas] = useState('');
@@ -30,7 +29,7 @@ export default function ConfiguracionFacturaElectronica() {
             .eq('id', empresaId)
             .maybeSingle();
         if (data) {
-            setProveedor(data.fe_proveedor || 'adoqia');
+            setProveedor(data.fe_proveedor || 'goekua');
             setApiKey(data.fe_api_key || '');
             setActiva(data.fe_activa || false);
             setNotas(data.fe_notas || '');
@@ -46,7 +45,7 @@ export default function ConfiguracionFacturaElectronica() {
             .eq('id', empresaId);
         setGuardando(false);
         if (error) return alert('Error al guardar: ' + error.message);
-        alert('Datos guardados. Cuando tengamos la conexión real armada, el sistema va a usar esta clave automáticamente.');
+        alert('Configuración guardada exitosamente. El sistema utilizará esta clave para emitir las facturas con SIFEN.');
     };
 
     if (cargando) return <p className="text-sm text-gray-400 p-6">Cargando...</p>;
@@ -58,17 +57,21 @@ export default function ConfiguracionFacturaElectronica() {
 
             {/* Guía paso a paso, visible dentro del propio sistema */}
             <div className="bg-blue-50 border border-blue-200 rounded-lg p-5 mb-6 text-sm text-gray-700">
-                <h3 className="font-bold text-blue-800 mb-3">📋 Guía: cómo activar la facturación electrónica de tu negocio</h3>
+                <h3 className="font-bold text-blue-800 mb-3">📋 Guía: cómo activar la facturación electrónica</h3>
                 <ol className="list-decimal list-inside space-y-2">
-                    <li>Registrate en un proveedor de facturación electrónica homologado (por ejemplo AdoqIA o GOEKUA, abajo tenés los links).</li>
-                    <li>Completá ahí los datos reales de <strong>tu</strong> negocio: RUC, razón social, dirección.</li>
-                    <li>Gestioná tu <strong>certificado digital</strong> (firma electrónica) desde la misma plataforma del proveedor — es obligatorio y va atado a tu RUC.</li>
-                    <li>Una vez aprobado, entrá a la sección "API" / "Desarrolladores" del proveedor y generá tu <strong>clave de API</strong>.</li>
-                    <li>Pegá esa clave acá abajo y guardá. Cuando la conexión esté 100% activa, cada venta va a facturarse sola.</li>
+                    <li>Contactá con nuestro equipo de soporte para dar de alta la facturación electrónica de <strong>{nombreEmpresa || 'tu empresa'}</strong>.</li>
+                    <li>Proporcioná tus datos fiscales reales (RUC, Razón Social, etc.) para el alta en SIFEN.</li>
+                    <li>Asegurate de tener tu <strong>Certificado Digital</strong> vigente y configuralo con soporte.</li>
+                    <li>Ingresá aquí tu <strong>API Key</strong> de producción (proporcionada por soporte).</li>
+                    <li>Marcá la casilla "activa" abajo y guardá.</li>
                 </ol>
-                <p className="mt-3 text-xs text-blue-600">
-                    ⚠️ Esta pantalla ya guarda tu clave de forma segura en tu cuenta, pero el envío automático de cada venta a la DNIT todavía se está terminando de programar — es el siguiente paso una vez que tengas tu clave lista.
-                </p>
+                <div className="mt-4 p-3 bg-white rounded border border-blue-100 text-xs text-gray-600">
+                    <p className="font-bold text-green-700 mb-1">✅ ¡El sistema ya está 100% integrado!</p>
+                    <p>
+                        Una vez configurada tu API Key, el botón de "Emitir Factura Electrónica" aparecerá al finalizar una venta en el Punto de Venta. 
+                        Podrás consultar el estado SIFEN en tiempo real y ver el KuDE directamente desde tu historial de ventas.
+                    </p>
+                </div>
             </div>
 
             <div className="flex gap-3 mb-6">
@@ -95,7 +98,7 @@ export default function ConfiguracionFacturaElectronica() {
                 </div>
 
                 <div>
-                    <label className="block text-xs font-bold text-gray-600 mb-1">Clave de API (la que te dio el proveedor):</label>
+                    <label className="block text-xs font-bold text-gray-600 mb-1">Clave de API de Facturación:</label>
                     <div className="flex gap-2">
                         <input
                             type={mostrarClave ? 'text' : 'password'}

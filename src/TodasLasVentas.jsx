@@ -4,6 +4,7 @@ import { useEmpresaInfo } from './utils/useEmpresa';
 import { generateReceipt } from './utils/generateReceipt';
 import { generateNotaRemision } from './utils/generateNotaRemision';
 import { ajustarStockUbicacion } from './utils/stockUbicacion';
+import { consultarFacturaElectronica, getBadgeSifen } from './utils/goekuaService';
 import FiltroFecha from './FiltroFecha';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -256,9 +257,35 @@ export default function TodasLasVentas({ onNuevaVenta }) {
         generateNotaRemision(venta, items, { nombre: nombreEmpresa });
     };
 
-    const verUrlFactura = () => {
+    const verUrlFactura = async (venta) => {
         setMenuAbiertoId(null);
-        alert('Tu sistema todavía no tiene facturación electrónica conectada (SET / e-Kuatia), por eso todavía no hay una URL de factura para mostrar acá. Si querés, lo podemos conectar más adelante.');
+        if (venta.kude_url) {
+            window.open(venta.kude_url, '_blank');
+        } else if (venta.goekua_id) {
+            alert('Consultando estado en SIFEN...');
+            const res = await consultarFacturaElectronica(venta.goekua_id, empresaId);
+            if (res.success && res.kudeUrl) {
+                window.open(res.kudeUrl, '_blank');
+                cargarTodo(); // recargar para ver la URL guardada
+            } else {
+                alert(`La factura aún no tiene KuDE disponible. Estado actual: ${res.status || res.error || 'Desconocido'}`);
+            }
+        } else {
+            alert('Esta venta no tiene factura electrónica asociada. Generá una desde el Punto de Venta.');
+        }
+    };
+    
+    const consultarEstadoSifen = async (venta) => {
+        setMenuAbiertoId(null);
+        if (!venta.goekua_id) return alert('No hay factura electrónica vinculada a esta venta.');
+        alert('Consultando a SIFEN...');
+        const res = await consultarFacturaElectronica(venta.goekua_id, empresaId);
+        if (res.success) {
+            alert(`Estado actualizado: ${res.status}\nRespuesta SIFEN: ${res.responseSifenMessage || 'Sin detalles'}`);
+            cargarTodo();
+        } else {
+            alert(`Error al consultar: ${res.error}`);
+        }
     };
 
     const nuevaNotificacion = () => {
@@ -590,7 +617,12 @@ export default function TodasLasVentas({ onNuevaVenta }) {
                                                         <div className="border-t border-gray-100 my-1" />
                                                         <button onClick={() => verPagos(venta)} className="w-full text-left px-4 py-2 hover:bg-gray-50 flex items-center gap-2">💰 Ver pagos</button>
                                                         <button onClick={() => devolverVenta(venta)} className="w-full text-left px-4 py-2 hover:bg-gray-50 flex items-center gap-2">↩️ Devolución de Venta</button>
-                                                        <button onClick={verUrlFactura} className="w-full text-left px-4 py-2 hover:bg-gray-50 flex items-center gap-2">🔗 Ver URL de factura</button>
+                                                        {venta.goekua_id && (
+                                                            <>
+                                                                <button onClick={() => consultarEstadoSifen(venta)} className="w-full text-left px-4 py-2 hover:bg-gray-50 flex items-center gap-2">🔄 Actualizar Estado SIFEN</button>
+                                                                <button onClick={() => verUrlFactura(venta)} className="w-full text-left px-4 py-2 hover:bg-gray-50 flex items-center gap-2 text-blue-600">🔗 Ver KuDE Factura</button>
+                                                            </>
+                                                        )}
                                                         <button onClick={nuevaNotificacion} className="w-full text-left px-4 py-2 hover:bg-gray-50 flex items-center gap-2">✉️ Nueva Notificación de Venta</button>
                                                     </div>
                                                 )}
@@ -603,9 +635,18 @@ export default function TodasLasVentas({ onNuevaVenta }) {
                                             <td className="p-3"><span className={badgeEstado(venta.estado_pago)}>{venta.estado_pago || '—'}</span></td>
                                             {columnasVisibles.sifen && (
                                                 <td className="p-3">
-                                                    <span className="bg-gray-100 text-gray-500 px-2 py-1 rounded text-[10px] font-bold" title="Tu sistema todavía no tiene facturación electrónica SIFEN conectada">
-                                                        🖨️ No conectado
-                                                    </span>
+                                                    {venta.goekua_id ? (() => {
+                                                        const badge = getBadgeSifen(venta.estado_sifen);
+                                                        return (
+                                                            <span className={`${badge.color} px-2 py-1 rounded text-[10px] font-bold`} title={venta.estado_sifen || 'ID Goekua: ' + venta.goekua_id}>
+                                                                {badge.icon} {badge.label}
+                                                            </span>
+                                                        );
+                                                    })() : (
+                                                        <span className="bg-gray-100 text-gray-500 px-2 py-1 rounded text-[10px] font-bold">
+                                                            🖨️ Sin Factura
+                                                        </span>
+                                                    )}
                                                 </td>
                                             )}
                                             {columnasVisibles.metodoPago && <td className="p-3 text-gray-500">{venta.metodo_pago || '—'}</td>}
