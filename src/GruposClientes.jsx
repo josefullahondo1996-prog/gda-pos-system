@@ -28,8 +28,9 @@ export default function GruposClientes() {
     const [mostrarForm, setMostrarForm] = useState(false);
     const [editando, setEditando] = useState(null);
     const [nombreForm, setNombreForm] = useState('');
-    const [descripcionForm, setDescripcionForm] = useState('');
+    const [tipoCalculoForm, setTipoCalculoForm] = useState('Porcentaje');
     const [porcentajeForm, setPorcentajeForm] = useState('');
+    const [grupoPreciosForm, setGrupoPreciosForm] = useState('P CREDITO');
     const [guardando, setGuardando] = useState(false);
 
     useEffect(() => {
@@ -56,16 +57,18 @@ export default function GruposClientes() {
     const abrirNuevo = () => {
         setEditando(null);
         setNombreForm('');
-        setDescripcionForm('');
+        setTipoCalculoForm('Porcentaje');
         setPorcentajeForm('');
+        setGrupoPreciosForm('P CREDITO');
         setMostrarForm(true);
     };
 
     const abrirEditar = (grupo) => {
         setEditando(grupo);
         setNombreForm(grupo.nombre);
-        setDescripcionForm(grupo.descripcion || '');
+        setTipoCalculoForm(grupo.tipo_calculo || 'Porcentaje');
         setPorcentajeForm(grupo.porcentaje ?? '');
+        setGrupoPreciosForm(grupo.grupo_precios || 'P CREDITO');
         setMostrarForm(true);
     };
 
@@ -77,9 +80,9 @@ export default function GruposClientes() {
         try {
             const datos = {
                 nombre: nombreForm.trim(),
-                descripcion: descripcionForm || null,
-                tipo_calculo: 'porcentaje',
+                tipo_calculo: tipoCalculoForm,
                 porcentaje: porcentajeForm === '' ? null : Number(porcentajeForm),
+                grupo_precios: grupoPreciosForm || null,
             };
 
             if (editando) {
@@ -120,7 +123,7 @@ export default function GruposClientes() {
     };
 
     const columnasExport = [
-        { key: 'nombre', label: 'Nombre' }, { key: 'descripcion', label: 'Descripción' }, { key: 'porcentaje', label: 'Descuento por defecto (%)' },
+        { key: 'nombre', label: 'Nombre del grupo de clientes' }, { key: 'porcentaje', label: 'Porcentaje de cálculo (%)' }, { key: 'grupo_precios', label: 'Grupo de precios de venta' },
     ];
 
     const exportarCSV = () => {
@@ -174,16 +177,17 @@ export default function GruposClientes() {
                     <table className="w-full text-left text-sm border-collapse">
                         <thead>
                             <tr className="border-b border-gray-200 bg-gray-50 text-gray-500 font-bold uppercase text-xs">
-                                <th className="p-3">Nombre</th>
-                                <th className="p-3">Descripción</th>
-                                <th className="p-3 w-72">Acción</th>
+                                <th className="p-3">Nombre del grupo de clientes</th>
+                                <th className="p-3">Porcentaje de cálculo (%)</th>
+                                <th className="p-3">Grupo de precios de venta</th>
+                                <th className="p-3 w-56">Acción</th>
                             </tr>
                         </thead>
                         <tbody>
                             {cargando ? (
-                                <tr><td colSpan={3} className="text-center py-8 text-gray-400">Cargando...</td></tr>
+                                <tr><td colSpan={4} className="text-center py-8 text-gray-400">Cargando...</td></tr>
                             ) : gruposPagina.length === 0 ? (
-                                <tr><td colSpan={3} className="text-center py-8 text-gray-400">No hay grupos de clientes registrados.</td></tr>
+                                <tr><td colSpan={4} className="text-center py-8 text-gray-400">No hay grupos de clientes registrados.</td></tr>
                             ) : (
                                 gruposPagina.map((g) => (
                                     <tr key={g.id} className={`border-b hover:bg-gray-50 ${g.activo === false ? 'opacity-50' : ''}`}>
@@ -191,17 +195,15 @@ export default function GruposClientes() {
                                             {g.nombre}
                                             {g.activo === false && <span className="ml-2 text-[10px] bg-gray-200 text-gray-500 px-1.5 py-0.5 rounded-full">Inactivo</span>}
                                         </td>
-                                        <td className="p-3 text-gray-500">{g.descripcion || '—'}</td>
+                                        <td className="p-3 text-gray-500">{g.porcentaje != null ? `${g.porcentaje}%` : '--'}</td>
+                                        <td className="p-3 text-gray-500">{g.grupo_precios || 'P CREDITO'}</td>
                                         <td className="p-3">
                                             <div className="flex gap-2">
-                                                <button onClick={() => abrirEditar(g)} className="bg-orange-500 hover:bg-orange-600 text-white text-xs font-bold px-3 py-1.5 rounded flex items-center gap-1">
+                                                <button onClick={() => abrirEditar(g)} className="bg-green-600 hover:bg-green-700 text-white text-xs font-bold px-3 py-1.5 rounded flex items-center gap-1">
                                                     ✏️ Editar
                                                 </button>
                                                 <button onClick={() => eliminarGrupo(g)} className="bg-red-600 hover:bg-red-700 text-white text-xs font-bold px-3 py-1.5 rounded flex items-center gap-1">
                                                     🗑️ Borrar
-                                                </button>
-                                                <button onClick={() => alternarActivo(g)} className="bg-gray-500 hover:bg-gray-600 text-white text-xs font-bold px-3 py-1.5 rounded flex items-center gap-1">
-                                                    ⏻ {g.activo === false ? 'Activar' : 'Deactivate'}
                                                 </button>
                                             </div>
                                         </td>
@@ -235,41 +237,36 @@ export default function GruposClientes() {
                         </div>
                         <form onSubmit={guardarGrupo} className="p-6 flex flex-col gap-4">
                             <div>
-                                <label className="block text-sm font-bold text-gray-700 mb-1">Nombre:*</label>
+                                <label className="block text-sm font-bold text-gray-700 mb-1">Nombre del grupo de clientes:*</label>
                                 <input
                                     autoFocus
                                     className="w-full border border-gray-300 rounded p-2.5 text-sm"
                                     value={nombreForm}
                                     onChange={(e) => setNombreForm(e.target.value)}
-                                    placeholder="Nombre"
+                                    placeholder="Nombre del grupo de clientes"
                                 />
                             </div>
                             <div>
-                                <label className="block text-sm font-bold text-gray-700 mb-1">Descripción:</label>
-                                <textarea
+                                <label className="block text-sm font-bold text-gray-700 mb-1">Tipo de cálculo de precio:</label>
+                                <select
+                                    className="w-full border border-gray-300 rounded p-2.5 text-sm bg-white"
+                                    value={tipoCalculoForm}
+                                    onChange={(e) => setTipoCalculoForm(e.target.value)}
+                                >
+                                    <option value="Porcentaje">Porcentaje</option>
+                                    <option value="Monto fijo">Monto fijo</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label className="block text-sm font-bold text-gray-700 mb-1">Porcentaje de cálculo (%): <span className="text-blue-500 cursor-help" title="Porcentaje de descuento o recargo que se aplica a los clientes de este grupo">ℹ</span></label>
+                                <input
+                                    type="number"
+                                    step="0.01"
                                     className="w-full border border-gray-300 rounded p-2.5 text-sm"
-                                    rows={3}
-                                    value={descripcionForm}
-                                    onChange={(e) => setDescripcionForm(e.target.value)}
-                                    placeholder="Descripción"
+                                    value={porcentajeForm}
+                                    onChange={(e) => setPorcentajeForm(e.target.value)}
+                                    placeholder="Porcentaje de cálculo (%)"
                                 />
-                            </div>
-                            <div>
-                                <label className="block text-sm font-bold text-gray-700 mb-1">Descuento por defecto (%):</label>
-                                <div className="flex items-center border border-gray-300 rounded overflow-hidden">
-                                    <input
-                                        type="number"
-                                        step="0.01"
-                                        className="flex-1 p-2.5 text-sm outline-none"
-                                        value={porcentajeForm}
-                                        onChange={(e) => setPorcentajeForm(e.target.value)}
-                                        placeholder="Ej: 25"
-                                    />
-                                    <span className="px-3 text-gray-400 bg-gray-50 h-full flex items-center">%</span>
-                                </div>
-                                <p className="text-xs text-gray-400 mt-1">
-                                    Descuento que se aplicará automáticamente a los clientes de este grupo. Se puede ajustar por cliente.
-                                </p>
                             </div>
 
                             <div className="flex gap-2 justify-end pt-2 border-t border-gray-100">

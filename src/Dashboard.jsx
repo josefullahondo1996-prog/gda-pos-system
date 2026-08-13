@@ -36,6 +36,7 @@ import GananciasPerdidas from './GananciasPerdidas';
 import Usuarios from './Usuarios';
 import Roles from './Roles';
 import ListaCajas from './Listacajas';
+import GruposClientes from './GruposClientes';
 
 export default function Dashboard({ session, perfilUsuario, initialView = 'inicio' }) {
   const { notificar } = useNotificacion();
@@ -145,6 +146,9 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
         break;
       case '/proveedores':
         setVistaActiva('proveedores');
+        break;
+      case '/grupos_clientes':
+        setVistaActiva('grupos_clientes');
         break;
       case '/cobros':
         setVistaActiva('cobros');
@@ -287,6 +291,9 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
       case 'proveedores':
         return <Proveedores />;
 
+      case 'grupos_clientes':
+        return <GruposClientes />;
+
       case 'cobros':
         return <CuentasPorCobrar />;
 
@@ -388,6 +395,7 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
                   <div className="bg-[#151521] py-1 flex flex-col">
                     <Link to="/proveedores" onClick={() => irA('proveedores', '/proveedores')} className={estiloSubItem('proveedores')}>🠖 Proveedores</Link>
                     <Link to="/clientes" onClick={() => irA('clientes', '/clientes')} className={estiloSubItem('clientes')}>🠖 Clientes</Link>
+                    <Link to="/grupos_clientes" onClick={() => irA('grupos_clientes', '/grupos_clientes')} className={estiloSubItem('grupos_clientes')}>🠖 Grupos de clientes</Link>
                   </div>
                 )}
               </>

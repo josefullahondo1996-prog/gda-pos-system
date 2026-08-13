@@ -3,6 +3,7 @@ import { supabase } from './supabaseClient';
 import Login from './Login';
 import CrearNegocio from './CrearNegocio';
 import Dashboard from './Dashboard';
+import ChatBotFlotante from './ChatBotFlotante';
 
 function App() {
   const [session, setSession] = useState(null);
@@ -100,7 +101,12 @@ function App() {
     );
   }
 
-  return <Dashboard session={session} perfilUsuario={perfilUsuario} />;
+  return (
+    <>
+      <Dashboard session={session} perfilUsuario={perfilUsuario} />
+      <ChatBotFlotante />
+    </>
+  );
 }
 
 export default App;
