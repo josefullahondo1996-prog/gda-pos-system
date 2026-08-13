@@ -58,6 +58,7 @@ export default function TodasLasVentas({ onNuevaVenta }) {
     const [ventaAAnular, setVentaAAnular] = useState(null);
     const [motivoAnulacion, setMotivoAnulacion] = useState('');
     const [anulando, setAnulando] = useState(false);
+    const [rucPorCliente, setRucPorCliente] = useState({});
 
     useEffect(() => {
         if (empresaId) cargarTodo();
@@ -72,7 +73,7 @@ export default function TodasLasVentas({ onNuevaVenta }) {
         const [resVentas, resUbicaciones, resClientes] = await Promise.all([
             supabase.from('ventas').select('*').eq('empresa_id', empresaId).order('fecha', { ascending: false }).limit(300),
             supabase.from('ubicaciones_comerciales').select('id, nombre').eq('empresa_id', empresaId),
-            supabase.from('clientes').select('nombre, nombre_empresa, celular').eq('empresa_id', empresaId),
+            supabase.from('clientes').select('nombre, nombre_empresa, celular, documento_nro').eq('empresa_id', empresaId),
         ]);
         if (!resVentas.error && resVentas.data) setVentas(resVentas.data);
         if (!resUbicaciones.error && resUbicaciones.data) {
@@ -82,11 +83,13 @@ export default function TodasLasVentas({ onNuevaVenta }) {
         }
         if (!resClientes.error && resClientes.data) {
             const mapaCelulares = {};
+            const mapaRuc = {};
             resClientes.data.forEach((c) => {
-                if (c.nombre) mapaCelulares[c.nombre] = c.celular;
-                if (c.nombre_empresa) mapaCelulares[c.nombre_empresa] = c.celular;
+                if (c.nombre)        { mapaCelulares[c.nombre]        = c.celular; mapaRuc[c.nombre]        = c.documento_nro || ''; }
+                if (c.nombre_empresa){ mapaCelulares[c.nombre_empresa] = c.celular; mapaRuc[c.nombre_empresa] = c.documento_nro || ''; }
             });
             setCelularesPorCliente(mapaCelulares);
+            setRucPorCliente(mapaRuc);
         }
         setCargando(false);
     };
@@ -243,8 +246,9 @@ export default function TodasLasVentas({ onNuevaVenta }) {
     const imprimirFactura = async (venta) => {
         setMenuAbiertoId(null);
         const items = await cargarDetalleVenta(venta);
+        const clienteRuc = rucPorCliente[venta.cliente] || '';
         generateReceipt(
-            { ...venta, cliente_nombre: venta.cliente, items },
+            { ...venta, cliente_nombre: venta.cliente, cliente_ruc: clienteRuc, items },
             { nombre: nombreEmpresa, direccion: direccionEmpresa, telefono: telefonoEmpresa, ruc: rucEmpresa },
             '80mm',
             true

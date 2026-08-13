@@ -109,6 +109,9 @@ export default function Clientes() {
   const [codigo, setCodigo] = useState('');
   const [tipoDoc, setTipoDoc] = useState('RUC');
   const [nroDoc, setNroDoc] = useState('');
+  const [cargandoRuc, setCargandoRuc] = useState(false);
+  const [resultadosRuc, setResultadosRuc] = useState([]);
+  const [mostrarModalRuc, setMostrarModalRuc] = useState(false);
 
   // 1. Identificación
   const [prefijo, setPrefijo] = useState('');
@@ -470,7 +473,45 @@ export default function Clientes() {
       imagen_url: imagenClientePreview || null,
     };
 
-    // 5. Enviar a Supabase: actualizar si estamos editando, o crear si es nuevo
+    // 5. Verificar duplicados antes de insertar (sólo cuando es un registro nuevo)
+    if (!clienteEditando) {
+      let duplicadoEncontrado = null;
+
+      if (nroDoc && nroDoc.trim()) {
+        // Buscar por número de documento (RUC / CI)
+        const { data: existenteDoc } = await supabase
+          .from('clientes')
+          .select('id, nombre, documento_nro')
+          .eq('empresa_id', empresaId)
+          .eq('documento_nro', nroDoc.trim())
+          .maybeSingle();
+        if (existenteDoc) duplicadoEncontrado = existenteDoc;
+      }
+
+      if (!duplicadoEncontrado) {
+        // Buscar por nombre exacto (ignora mayúsculas/minúsculas)
+        const { data: existenteNombre } = await supabase
+          .from('clientes')
+          .select('id, nombre')
+          .eq('empresa_id', empresaId)
+          .ilike('nombre', nombreFinal)
+          .maybeSingle();
+        if (existenteNombre) duplicadoEncontrado = existenteNombre;
+      }
+
+      if (duplicadoEncontrado) {
+        sonidoError();
+        const detalle = duplicadoEncontrado.documento_nro
+          ? `Documento: ${duplicadoEncontrado.documento_nro}`
+          : `Nombre: ${duplicadoEncontrado.nombre}`;
+        alert(
+          `⚠️ Cliente ya registrado\n\n"${duplicadoEncontrado.nombre}" ya existe en el sistema (${detalle}).\n\nSi necesitás actualizar sus datos, usá la opción "Editar" desde la tabla de clientes.`
+        );
+        return;
+      }
+    }
+
+    // 6. Enviar a Supabase: actualizar si estamos editando, o crear si es nuevo
     const { error } = clienteEditando
       ? await supabase.from('clientes').update(datosCliente).eq('id', clienteEditando.id).eq('empresa_id', empresaId)
       : await supabase.from('clientes').insert([{ ...datosCliente, estado: 'Activo' }]);
@@ -485,6 +526,103 @@ export default function Clientes() {
       resetearFormulario();
       cargarClientes();
     }
+  };
+
+  const buscarRuc = async () => {
+    if (!nroDoc || !nroDoc.trim()) {
+      alert('Ingresá un RUC o nombre para buscar.');
+      return;
+    }
+    setCargandoRuc(true);
+    const query = nroDoc.trim();
+    const targetUrl = `https://ruc.sun.com.py/api/search?q=${encodeURIComponent(query)}`;
+
+    try {
+      const res = await fetch(targetUrl);
+      if (!res.ok) {
+        if (res.status === 429) throw new Error('Too Many Requests');
+        throw new Error(`Error del servidor: ${res.status}`);
+      }
+      const data = await res.json();
+      procesarResultadosRuc(data, query);
+    } catch (error) {
+      console.warn('Direct RUC search failed, trying proxy...', error);
+      if (error.message === 'Too Many Requests') {
+        alert('Demasiadas consultas al servidor. Por favor, aguardá unos segundos antes de volver a intentar.');
+        setCargandoRuc(false);
+        return;
+      }
+      try {
+        const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(targetUrl)}`;
+        const res = await fetch(proxyUrl);
+        if (!res.ok) throw new Error(`Error de proxy: ${res.status}`);
+        const data = await res.json();
+        procesarResultadosRuc(data, query);
+      } catch (proxyError) {
+        console.error('Proxy RUC search failed too:', proxyError);
+        alert('No se pudo conectar con el servicio de búsqueda de RUC. Intente ingresar los datos manualmente.');
+      }
+    } finally {
+      setCargandoRuc(false);
+    }
+  };
+
+  const procesarResultadosRuc = (data, query) => {
+    if (data.ok === false) {
+      if (data.error === 'Too Many Requests') {
+        alert('Demasiadas consultas al servidor. Por favor, aguardá unos segundos antes de volver a intentar.');
+      } else {
+        alert(`Error al buscar RUC: ${data.error || 'Error desconocido'}`);
+      }
+      return;
+    }
+    
+    const results = data.results || [];
+    if (results.length === 0) {
+      alert(`No se encontraron resultados para: "${query}"`);
+      return;
+    }
+
+    if (results.length === 1) {
+      seleccionarResultadoRuc(results[0]);
+    } else {
+      setResultadosRuc(results);
+      setMostrarModalRuc(true);
+    }
+  };
+
+  const seleccionarResultadoRuc = (item) => {
+    const esEmpresaDetectado = /\b(S\.?R\.?L\.?|S\.?A\.?|E\.?A\.?S\.?|S\.?A\.?C\.?I\.?|S\.?A\.?C\.?A\.?|LTDA|LIMITADA|CONDOMINIO|ASOCIACION|ASOC\.?|CLUB|COOPERATIVA|EMPRESA)\b/i.test(item.name);
+    
+    setTipoDoc('RUC');
+    setNroDoc(item.fullRuc || `${item.ruc}-${item.dv}`);
+    
+    if (esEmpresaDetectado) {
+      setEsEmpresa(true);
+      setNombreEmpresa(item.name);
+      setNombre('');
+      setSegundoNombre('');
+      setApellido('');
+    } else {
+      setEsEmpresa(false);
+      setNombreEmpresa('');
+      const words = item.name.trim().split(/\s+/);
+      if (words.length === 1) {
+        setNombre(words[0]);
+        setApellido('.');
+      } else if (words.length === 2) {
+        setNombre(words[0]);
+        setApellido(words[1]);
+      } else if (words.length === 3) {
+        setNombre(words[0]);
+        setApellido(words[1] + ' ' + words[2]);
+      } else {
+        setNombre(words[0] + ' ' + words[1]);
+        setApellido(words.slice(2).join(' '));
+      }
+      setSegundoNombre('');
+    }
+    setMostrarModalRuc(false);
   };
 
   const resetearFormulario = () => {
@@ -1064,7 +1202,22 @@ export default function Clientes() {
                       <label className="block font-bold text-[#004284] uppercase mb-1">NRO. DOCUMENTO *</label>
                       <div className="flex gap-2">
                         <input type="text" className="w-full border rounded p-2 bg-white outline-none focus:border-orange-500" placeholder="Ej: 4671379-4" required value={nroDoc} onChange={(e) => setNroDoc(e.target.value)} />
-                        <button type="button" title="Búsqueda automática de RUC (próximamente)" onClick={() => alert('La búsqueda automática de RUC todavía no está conectada a ningún padrón — cargá los datos a mano por ahora.')} className="bg-orange-500 hover:bg-orange-600 text-white rounded-full w-10 h-10 flex items-center justify-center shrink-0 shadow-sm">🔍</button>
+                        <button
+                          type="button"
+                          onClick={buscarRuc}
+                          disabled={cargandoRuc}
+                          title="Buscar RUC"
+                          className="bg-orange-500 hover:bg-orange-600 disabled:bg-gray-400 text-white rounded-full w-10 h-10 flex items-center justify-center shrink-0 shadow-sm transition-colors"
+                        >
+                          {cargandoRuc ? (
+                            <svg className="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                            </svg>
+                          ) : (
+                            "🔍"
+                          )}
+                        </button>
                       </div>
                     </div>
                   </div>
@@ -2121,6 +2274,70 @@ export default function Clientes() {
               alt="Foto del cliente"
               className="w-full max-h-[80vh] object-contain rounded-xl shadow-2xl"
             />
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: Resultados Búsqueda RUC */}
+      {mostrarModalRuc && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[100000] p-4">
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl overflow-hidden max-h-[85vh] flex flex-col">
+            <div className="bg-[#004284] px-5 py-4 flex justify-between items-center text-white">
+              <h3 className="font-bold text-base flex items-center gap-2">🔍 Resultados de búsqueda RUC</h3>
+              <button onClick={() => setMostrarModalRuc(false)} className="text-white/80 hover:text-white text-xl leading-none">✕</button>
+            </div>
+            <div className="p-6 overflow-y-auto text-xs flex-1">
+              <p className="text-gray-500 mb-4 font-medium">Se encontraron múltiples registros coincidentes. Seleccioná el correcto para autocompletar:</p>
+              <div className="border rounded overflow-hidden">
+                <table className="w-full text-left border-collapse">
+                  <thead>
+                    <tr className="bg-gray-50 text-[#004284] font-bold border-b">
+                      <th className="p-3">RUC</th>
+                      <th className="p-3">Razón Social / Nombre</th>
+                      <th className="p-3">Estado</th>
+                      <th className="p-3 text-center">Acción</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {resultadosRuc.map((item, idx) => (
+                      <tr key={idx} className="border-b hover:bg-gray-50">
+                        <td className="p-3 font-mono font-bold text-gray-700">{item.fullRuc || `${item.ruc}-${item.dv}`}</td>
+                        <td className="p-3 font-bold text-gray-800">{item.name}</td>
+                        <td className="p-3">
+                          <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${
+                            item.state === 'ACTIVO' 
+                              ? 'bg-green-100 text-green-800 border-green-200' 
+                              : item.state === 'CANCELADO' 
+                              ? 'bg-red-100 text-red-800 border-red-200' 
+                              : 'bg-orange-100 text-orange-800 border-orange-200'
+                          }`}>
+                            {item.state}
+                          </span>
+                        </td>
+                        <td className="p-3 text-center">
+                          <button
+                            type="button"
+                            onClick={() => seleccionarResultadoRuc(item)}
+                            className="bg-blue-600 hover:bg-blue-700 text-white font-bold px-3 py-1.5 rounded transition shadow-sm text-[11px]"
+                          >
+                            Seleccionar
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+            <div className="bg-gray-50 px-6 py-4 flex justify-end border-t">
+              <button
+                type="button"
+                onClick={() => setMostrarModalRuc(false)}
+                className="border text-gray-600 font-bold px-5 py-2 rounded hover:bg-gray-100 text-xs"
+              >
+                Cancelar
+              </button>
+            </div>
           </div>
         </div>
       )}

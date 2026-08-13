@@ -200,7 +200,16 @@ const PuntoDeVenta = ({ cajaInfo, session, perfilUsuario, onVolver, onSolicitarC
     // Si viene del modal de Pago Múltiple, usamos esos valores; si no,
     // seguimos leyendo los mismos estados de siempre (montoPagado, metodoPago,
     // notaVenta) para no cambiar en nada el comportamiento de los botones existentes.
-    const montoPagadoFinal = datosPagoMultiple ? datosPagoMultiple.montoPagado : Number(montoPagado) || 0;
+    let montoPagadoFinal = datosPagoMultiple ? datosPagoMultiple.montoPagado : Number(montoPagado);
+    
+    // Si el usuario hace clic en "COBRAR" (tipoOperacion 'venta') sin escribir un monto, 
+    // asumimos que pagó el total exacto.
+    if (!datosPagoMultiple && tipoOperacion === 'venta' && (montoPagado === '' || montoPagado === undefined)) {
+      montoPagadoFinal = totalConAjustes;
+    } else if (!montoPagadoFinal) {
+      montoPagadoFinal = 0;
+    }
+
     const metodoPagoFinal = datosPagoMultiple ? datosPagoMultiple.metodoPago : metodoPago;
     const notaVentaFinal = datosPagoMultiple
       ? [notaVenta, datosPagoMultiple.notaPagos].filter(Boolean).join(' | ')
@@ -223,10 +232,11 @@ const PuntoDeVenta = ({ cajaInfo, session, perfilUsuario, onVolver, onSolicitarC
     }
 
     let estadoPago = 'Pagado';
-    if (tipoOperacion === 'credito' || montoPagadoFinal === 0) estadoPago = 'Credito';
-    if (montoPagadoFinal > 0 && montoPagadoFinal < totalConAjustes) estadoPago = 'Pago Parcial';
-    if (tipoOperacion === 'cotizacion') estadoPago = 'Cotizacion';
-    if (tipoOperacion === 'pendiente') estadoPago = 'Pendiente';
+    if (tipoOperacion === 'credito') estadoPago = 'Credito';
+    else if (tipoOperacion === 'cotizacion') estadoPago = 'Cotizacion';
+    else if (tipoOperacion === 'pendiente') estadoPago = 'Pendiente';
+    else if (montoPagadoFinal === 0 && totalConAjustes > 0) estadoPago = 'Credito';
+    else if (montoPagadoFinal > 0 && montoPagadoFinal < totalConAjustes) estadoPago = 'Pago Parcial';
 
     const saldoPendienteFinal = datosPagoMultiple ? datosPagoMultiple.saldoPendiente : saldoPendiente;
 
@@ -279,7 +289,11 @@ const PuntoDeVenta = ({ cajaInfo, session, perfilUsuario, onVolver, onSolicitarC
       );
 
       sonidoExito();
-      const ventaParaTicket = { ...nuevaVenta, id: ventaId, cliente_nombre: cliente, items: carrito };
+      const clienteData = clientesDisponibles.find(
+        (c) => (c.nombre_empresa || c.nombre) === cliente
+      );
+      const clienteRuc = clienteData?.documento_nro || '';
+      const ventaParaTicket = { ...nuevaVenta, id: ventaId, cliente_nombre: cliente, cliente_ruc: clienteRuc, items: carrito };
       setUltimaVenta(ventaParaTicket);
       generateReceipt(
         ventaParaTicket,

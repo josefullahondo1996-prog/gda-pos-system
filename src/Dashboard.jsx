@@ -137,6 +137,9 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
       case '/agregar_compra':
         setVistaActiva('agregar_compra');
         break;
+      case '/devoluciones_compra':
+        setVistaActiva('devoluciones_compra');
+        break;
       case '/clientes':
         setVistaActiva('clientes');
         break;
@@ -145,6 +148,27 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
         break;
       case '/cobros':
         setVistaActiva('cobros');
+        break;
+      case '/catalogo':
+        setVistaActiva('catalogo');
+        break;
+      case '/agregar_producto':
+        setVistaActiva('agregar_producto');
+        break;
+      case '/marcas':
+        setVistaActiva('marcas');
+        break;
+      case '/categorias':
+        setVistaActiva('categorias');
+        break;
+      case '/unidades':
+        setVistaActiva('unidades');
+        break;
+      case '/usuarios':
+        setVistaActiva('usuarios');
+        break;
+      case '/roles':
+        setVistaActiva('roles');
         break;
       case '/caja_registradora':
       case '/caja-registradora':
@@ -323,13 +347,13 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
 
             {!soloPOS && (
               <>
-                <button onClick={irAInicio} className={estiloBotonSimple('inicio')} title="Inicio">
+                <Link to="/" onClick={() => irA('inicio', '/')} className={estiloBotonSimple('inicio')} title="Inicio">
                   <LayoutDashboard size={18} strokeWidth={2} /> {!sidebarColapsado && 'Inicio'}
-                </button>
+                </Link>
 
-                <button onClick={() => irA('ot')} className={estiloBotonSimple('ot')} title="OT">
+                <Link to="/ot" onClick={() => irA('ot', '/ot')} className={estiloBotonSimple('ot')} title="OT">
                   <Wrench size={18} strokeWidth={2} /> {!sidebarColapsado && 'OT'}
-                </button>
+                </Link>
               </>
             )}
 
@@ -343,10 +367,10 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
                 {menuExpandido === 'usuarios' && !sidebarColapsado && (
                   <div className="bg-[#151521] py-1 flex flex-col">
                     {tieneCategoria('usuarios') && (
-                      <button onClick={() => irA('usuarios')} className={estiloSubItem('usuarios')}>🠖 Usuarios</button>
+                      <Link to="/usuarios" onClick={() => irA('usuarios', '/usuarios')} className={estiloSubItem('usuarios')}>🠖 Usuarios</Link>
                     )}
                     {tieneCategoria('roles') && (
-                      <button onClick={() => irA('roles')} className={estiloSubItem('roles')}>🠖 Roles</button>
+                      <Link to="/roles" onClick={() => irA('roles', '/roles')} className={estiloSubItem('roles')}>🠖 Roles</Link>
                     )}
                   </div>
                 )}
@@ -362,17 +386,8 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
                 </button>
                 {menuExpandido === 'contactos' && !sidebarColapsado && (
                   <div className="bg-[#151521] py-1 flex flex-col">
-                    <Link
-                      to="/proveedores"
-                      onClick={() => {
-                        irA('proveedores', '/proveedores');
-                        setMenuExpandido(null);
-                      }}
-                      className={estiloSubItem('proveedores')}
-                    >
-                      🠖 Proveedores
-                    </Link>
-                    <button onClick={() => irA('clientes')} className={estiloSubItem('clientes')}>🠖 Clientes</button>
+                    <Link to="/proveedores" onClick={() => irA('proveedores', '/proveedores')} className={estiloSubItem('proveedores')}>🠖 Proveedores</Link>
+                    <Link to="/clientes" onClick={() => irA('clientes', '/clientes')} className={estiloSubItem('clientes')}>🠖 Clientes</Link>
                   </div>
                 )}
               </>
@@ -387,11 +402,11 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
                 </button>
                 {menuExpandido === 'productos' && !sidebarColapsado && (
                   <div className="bg-[#151521] py-1 flex flex-col">
-                    <button onClick={() => irA('catalogo')} className={estiloSubItem('catalogo')}>🠖 Lista de productos</button>
-                    <button onClick={() => irA('agregar_producto')} className={estiloSubItem('agregar_producto')}>🠖 Agregar producto</button>
-                    <button onClick={() => irA('marcas')} className={estiloSubItem('marcas')}>🠖 Marcas</button>
-                    <button onClick={() => irA('categorias')} className={estiloSubItem('categorias')}>🠖 Categorías</button>
-                    <button onClick={() => irA('unidades')} className={estiloSubItem('unidades')}>🠖 Unidades</button>
+                    <Link to="/catalogo" onClick={() => irA('catalogo', '/catalogo')} className={estiloSubItem('catalogo')}>🠖 Lista de productos</Link>
+                    <Link to="/agregar_producto" onClick={() => irA('agregar_producto', '/agregar_producto')} className={estiloSubItem('agregar_producto')}>🠖 Agregar producto</Link>
+                    <Link to="/marcas" onClick={() => irA('marcas', '/marcas')} className={estiloSubItem('marcas')}>🠖 Marcas</Link>
+                    <Link to="/categorias" onClick={() => irA('categorias', '/categorias')} className={estiloSubItem('categorias')}>🠖 Categorías</Link>
+                    <Link to="/unidades" onClick={() => irA('unidades', '/unidades')} className={estiloSubItem('unidades')}>🠖 Unidades</Link>
                   </div>
                 )}
               </>
@@ -406,9 +421,9 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
                 </button>
                 {menuExpandido === 'compras' && !sidebarColapsado && (
                   <div className="bg-[#151521] py-1 flex flex-col">
-                    <button onClick={() => irA('compras')} className={estiloSubItem('compras')}>🠖 Lista de compras</button>
-                    <button onClick={() => irA('agregar_compra')} className={estiloSubItem('agregar_compra')}>🠖 Agregar compra</button>
-                    <button onClick={() => irA('devoluciones_compra')} className={estiloSubItem('devoluciones_compra')}>🠖 Lista de devoluciones de compra</button>
+                    <Link to="/compras" onClick={() => irA('compras', '/compras')} className={estiloSubItem('compras')}>🠖 Lista de compras</Link>
+                    <Link to="/agregar_compra" onClick={() => irA('agregar_compra', '/agregar_compra')} className={estiloSubItem('agregar_compra')}>🠖 Agregar compra</Link>
+                    <Link to="/devoluciones_compra" onClick={() => irA('devoluciones_compra', '/devoluciones_compra')} className={estiloSubItem('devoluciones_compra')}>🠖 Lista de devoluciones de compra</Link>
                   </div>
                 )}
               </>
@@ -423,24 +438,24 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
                 </button>
                 {menuExpandido === 'ventas' && !sidebarColapsado && (
                   <div className="bg-[#151521] py-1 flex flex-col">
-                    <button onClick={() => irA('todas_ventas')} className={estiloSubItem('todas_ventas')}>🠖 Todas las ventas</button>
-                    <button onClick={() => irA('pos')} className={estiloSubItem('pos')}>🠖 Punto de venta</button>
-                    <button onClick={() => irA('cobros')} className={estiloSubItem('cobros')}>🠖 Pedidos Pendientes</button>
+                    <Link to="/todas_ventas" onClick={() => irA('todas_ventas', '/todas_ventas')} className={estiloSubItem('todas_ventas')}>🠖 Todas las ventas</Link>
+                    <Link to="/pos" onClick={() => irA('pos', '/pos')} className={estiloSubItem('pos')}>🠖 Punto de venta</Link>
+                    <Link to="/cobros" onClick={() => irA('cobros', '/cobros')} className={estiloSubItem('cobros')}>🠖 Pedidos Pendientes</Link>
                   </div>
                 )}
               </>
             )}
 
             {soloPOS && (
-              <button onClick={() => irA('pos')} className={estiloBotonSimple('pos')} title="Punto de venta">
+              <Link to="/pos" onClick={() => irA('pos', '/pos')} className={estiloBotonSimple('pos')} title="Punto de venta">
                 <ArrowUpFromLine size={18} strokeWidth={2} /> {!sidebarColapsado && 'Punto de venta'}
-              </button>
+              </Link>
             )}
 
             {!tieneCategoria('ventas_pos') && tieneCategoria('caja') && (
-              <button onClick={() => irA('pos')} className={estiloBotonSimple('pos')} title="Caja registradora">
+              <Link to="/pos" onClick={() => irA('pos', '/pos')} className={estiloBotonSimple('pos')} title="Caja registradora">
                 <ArrowUpFromLine size={18} strokeWidth={2} /> {!sidebarColapsado && 'Caja registradora'}
-              </button>
+              </Link>
             )}
 
             {/* MENÚ: CAJA / BANCO */}
@@ -452,7 +467,7 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
                 </button>
                 {menuExpandido === 'caja_banco' && !sidebarColapsado && (
                   <div className="bg-[#151521] py-1 flex flex-col">
-                    <button onClick={() => irA('cajas')} className={estiloSubItem('cajas')}>🠖 Lista de cajas</button>
+                    <Link to="/cajas" onClick={() => irA('cajas', '/cajas')} className={estiloSubItem('cajas')}>🠖 Lista de cajas</Link>
                   </div>
                 )}
               </>
@@ -467,8 +482,8 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
                 </button>
                 {menuExpandido === 'informes' && !sidebarColapsado && (
                   <div className="bg-[#151521] py-1 flex flex-col">
-                    <button onClick={() => irA('ganancias_perdidas')} className={estiloSubItem('ganancias_perdidas')}>🠖 Ganancias y Pérdidas</button>
-                    <button onClick={() => irA('caja_registradora')} className={estiloSubItem('caja_registradora')}>🠖 Caja registradora</button>
+                    <Link to="/ganancias_perdidas" onClick={() => irA('ganancias_perdidas', '/ganancias_perdidas')} className={estiloSubItem('ganancias_perdidas')}>🠖 Ganancias y Pérdidas</Link>
+                    <Link to="/caja_registradora" onClick={() => irA('caja_registradora', '/caja_registradora')} className={estiloSubItem('caja_registradora')}>🠖 Caja registradora</Link>
                   </div>
                 )}
               </>
@@ -483,9 +498,9 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
                 </button>
                 {menuExpandido === 'configuraciones' && !sidebarColapsado && (
                   <div className="bg-[#151521] py-1 flex flex-col">
-                    <button onClick={() => irA('config_empresa')} className={estiloSubItem('config_empresa')}>🠖 Configuración de la empresa</button>
-                    <button onClick={() => irA('ubicaciones_comerciales')} className={estiloSubItem('ubicaciones_comerciales')}>🠖 Ubicaciones comerciales</button>
-                    <button onClick={() => irA('config_factura')} className={estiloSubItem('config_factura')}>🠖 Configuración de factura</button>
+                    <Link to="/config_empresa" onClick={() => irA('config_empresa', '/config_empresa')} className={estiloSubItem('config_empresa')}>🠖 Configuración de la empresa</Link>
+                    <Link to="/ubicaciones_comerciales" onClick={() => irA('ubicaciones_comerciales', '/ubicaciones_comerciales')} className={estiloSubItem('ubicaciones_comerciales')}>🠖 Ubicaciones comerciales</Link>
+                    <Link to="/config_factura" onClick={() => irA('config_factura', '/config_factura')} className={estiloSubItem('config_factura')}>🠖 Configuración de factura</Link>
                   </div>
                 )}
               </>
