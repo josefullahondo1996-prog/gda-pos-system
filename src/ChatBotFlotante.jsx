@@ -25,7 +25,7 @@ export default function ChatBotFlotante() {
         setEnviando(true);
 
         try {
-            const { data, error } = await supabase.functions.invoke('asistente-ia', {
+            const { data, error } = await supabase.functions.invoke('chat-gda', {
                 body: {
                     mensaje,
                     // Mandamos los últimos mensajes como contexto (sin el que acabamos de agregar, va aparte)
