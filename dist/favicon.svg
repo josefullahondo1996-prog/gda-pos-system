@@ -1,0 +1,28 @@
+<svg width="48" height="48" viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="pyposBadge" x1="4" y1="2" x2="44" y2="46" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#fb923c" />
+      <stop offset="1" stop-color="#c2410c" />
+    </linearGradient>
+  </defs>
+  <rect x="1" y="1" width="46" height="46" rx="13" fill="url(#pyposBadge)" />
+  <rect x="1" y="1" width="46" height="46" rx="13" fill="none" stroke="#fff" stroke-opacity="0.15" />
+  <text
+    x="19"
+    y="33"
+    font-family="Arial, Helvetica, sans-serif"
+    font-weight="800"
+    font-size="26"
+    fill="#ffffff"
+    text-anchor="middle"
+  >P</text>
+  <circle cx="35" cy="34" r="9" fill="#1e1e2d" />
+  <path
+    d="M31 34.2l2.6 2.6 5-5.4"
+    fill="none"
+    stroke="#fb923c"
+    stroke-width="2.2"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+  />
+</svg>

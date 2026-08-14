@@ -12,7 +12,7 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const { mensaje, historial = [] } = await req.json();
+    const { mensaje, historial = [], empresa, usuario } = await req.json();
 
     if (!mensaje || typeof mensaje !== 'string') {
       return new Response(
@@ -29,13 +29,47 @@ Deno.serve(async (req) => {
       );
     }
 
+    // Intentar resolver la empresa y usuario a partir del token de autorización
+    const authHeader = req.headers.get('Authorization');
+    let empresaNombre = empresa || 'tu negocio';
+    let usuarioNombre = usuario || 'Usuario';
+
+    if (authHeader) {
+      try {
+        const supabaseUrl = Deno.env.get('SUPABASE_URL') || '';
+        const supabaseAnonKey = Deno.env.get('SUPABASE_ANON_KEY') || '';
+        const supabaseClient = createClient(supabaseUrl, supabaseAnonKey, {
+          global: { headers: { Authorization: authHeader } }
+        });
+        
+        const { data: { user } } = await supabaseClient.auth.getUser();
+        if (user) {
+          const { data: profile } = await supabaseClient
+            .from('usuarios')
+            .select('nombre, empresas(nombre)')
+            .eq('auth_user_id', user.id)
+            .maybeSingle();
+            
+          if (profile) {
+            if (profile.nombre) usuarioNombre = profile.nombre;
+            if (profile.empresas?.nombre) empresaNombre = profile.empresas.nombre;
+          }
+        }
+      } catch (dbErr) {
+        console.error('Error al obtener perfil del usuario desde DB en asistente-ia:', dbErr);
+      }
+    }
+
     // Construir el prompt completo con contexto
     const historialTexto = historial
       .map((m: any) => `${m.role === 'user' ? 'Usuario' : 'Asistente'}: ${m.text}`)
       .join('\n');
     
-    const promptCompleto = `Eres un asistente virtual amable y útil para un sistema de punto de venta (POS). 
-Ayuda al usuario con preguntas sobre el sistema, productos, ventas, inventario, clientes, etc. 
+    const promptCompleto = `Eres un asistente virtual amable y útil para el sistema de punto de venta (POS) llamado PYpos.
+Estás conversando con ${usuarioNombre}, quien pertenece a la empresa "${empresaNombre}".
+Toda tu ayuda, respuestas y contexto deben referirse exclusivamente a la empresa "${empresaNombre}".
+Bajo ninguna circunstancia debes mencionar a "GDA" o "GDA POS" a menos que la empresa del usuario se llame exactamente así.
+Ayuda al usuario con preguntas sobre el sistema, productos, ventas, inventario, clientes, etc.
 Responde en español, de forma concisa y profesional.
 
 ${historialTexto ? 'Historial de conversación:\n' + historialTexto + '\n\n' : ''}Usuario: ${mensaje}`;

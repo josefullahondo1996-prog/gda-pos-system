@@ -104,7 +104,7 @@ function App() {
   return (
     <>
       <Dashboard session={session} perfilUsuario={perfilUsuario} />
-      <ChatBotFlotante />
+      <ChatBotFlotante perfilUsuario={perfilUsuario} />
     </>
   );
 }
