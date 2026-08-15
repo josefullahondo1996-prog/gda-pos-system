@@ -84,12 +84,19 @@ export default function ChatBotFlotante({ perfilUsuario }) {
         setEnviando(true);
 
         try {
-            const { data, error } = await supabase.functions.invoke('chat-gda', {
+            const historialParaIA = nuevosMensajes.slice(-10).map((m) => ({
+                role: m.role === 'user' ? 'user' : 'assistant',
+                text: m.text,
+            }));
+
+            const { data, error } = await supabase.functions.invoke('asistente-ia', {
                 body: {
                     mensaje,
-                    historial: mensajes.slice(-10),
+                    historial: historialParaIA,
                     empresa: perfilUsuario?.empresas?.nombre,
-                    usuario: perfilUsuario?.nombre
+                    empresaId: perfilUsuario?.empresas?.id,
+                    usuario: perfilUsuario?.nombre,
+                    usuarioId: perfilUsuario?.id,
                 },
             });
 

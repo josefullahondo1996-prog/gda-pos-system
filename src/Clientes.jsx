@@ -5,6 +5,7 @@ import { sonidoExito, sonidoError } from './utils/sonido';
 import { useEmpresaInfo } from './utils/useEmpresa';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import { generateReceipt } from './utils/generateReceipt';
 
 export default function Clientes() {
   const { id: empresaId, nombre: nombreDelNegocio, direccion: direccionEmpresa, telefono: telefonoEmpresa } = useEmpresaInfo();
@@ -88,6 +89,16 @@ export default function Clientes() {
   const [clienteDocumentos, setClienteDocumentos] = useState(null);
   const [notasDoc, setNotasDoc] = useState('');
   const [guardandoNotas, setGuardandoNotas] = useState(false);
+
+  // Modal de pago para Libro Mayor > Ventas
+  const [ventaPagar, setVentaPagar] = useState(null);
+  const [montoPagoVenta, setMontoPagoVenta] = useState('');
+  const [metodoPagoVenta, setMetodoPagoVenta] = useState('Efectivo');
+  const [notaPagoVenta, setNotaPagoVenta] = useState('');
+  const [fechaPagoVenta, setFechaPagoVenta] = useState('');
+  const [cuentaPagoVenta, setCuentaPagoVenta] = useState('Ninguna');
+  const [documentoPagoVenta, setDocumentoPagoVenta] = useState(null);
+  const [guardandoPagoVenta, setGuardandoPagoVenta] = useState(false);
 
   // Control de Acordeones
   const [acordeonIdentificacion, setAcordeonIdentificacion] = useState(true);
@@ -209,6 +220,104 @@ export default function Clientes() {
     if (empresaId) query = query.eq('empresa_id', empresaId);
     const { data, error } = await query;
     if (!error && data) setPagosRaw(data);
+  };
+
+  const cargarDetalleVenta = async (venta) => {
+    const { data } = await supabase.from('detalle_ventas').select('*').eq('venta_id', venta.id);
+    return data || [];
+  };
+
+  const imprimirFactura = async (venta) => {
+    setVentasAccionAbierta(null);
+    const items = await cargarDetalleVenta(venta);
+    const clienteRuc = clienteLibroMayor?.documento_nro || '';
+    generateReceipt(
+      { ...venta, cliente_nombre: venta.cliente, cliente_ruc: clienteRuc, items },
+      { nombre: nombreDelNegocio, direccion: direccionEmpresa, telefono: telefonoEmpresa },
+      '80mm',
+      true
+    );
+  };
+
+  const abrirModalPagoLibroMayor = (venta) => {
+    setVentasAccionAbierta(null);
+    setVentaPagar(venta);
+    setMontoPagoVenta('');
+    setMetodoPagoVenta('Efectivo');
+    setNotaPagoVenta('');
+    setFechaPagoVenta(new Date().toISOString().split('T')[0]);
+    setCuentaPagoVenta('Ninguna');
+    setDocumentoPagoVenta(null);
+  };
+
+  const guardarPagoLibroMayor = async () => {
+    if (!ventaPagar) return;
+    const monto = Number(montoPagoVenta);
+    if (!monto || monto <= 0) return alert('Ingresá un monto válido.');
+    setGuardandoPagoVenta(true);
+    try {
+      const cajaElegida = cuentaPagoVenta !== 'Ninguna' ? cajasDisponibles.find((c) => c.id === cuentaPagoVenta) : null;
+
+      const { error: errorPago } = await supabase.from('pagos_clientes').insert([{
+        empresa_id: empresaId,
+        cliente_id: clienteLibroMayor?.id || null,
+        monto,
+        metodo_pago: metodoPagoVenta,
+        nota: notaPagoVenta || null,
+        fecha: fechaPagoVenta ? new Date(fechaPagoVenta).toISOString() : new Date().toISOString(),
+        cuenta_pago: cajaElegida ? cajaElegida.nombre : null,
+        documento_url: documentoPagoVenta || null,
+      }]);
+      if (errorPago) throw errorPago;
+
+      if (cajaElegida) {
+        const { error: errorCaja } = await supabase
+          .from('cuentas_caja')
+          .update({ saldo: Number(cajaElegida.saldo || 0) + monto })
+          .eq('id', cajaElegida.id)
+          .eq('empresa_id', empresaId);
+        if (errorCaja) throw errorCaja;
+      }
+
+      let queryVentasPendientes = supabase
+        .from('ventas')
+        .select('id, total, monto_pagado, saldo_pendiente, estado_pago, fecha')
+        .in('cliente', [clienteLibroMayor?.nombre, clienteLibroMayor?.nombre_empresa].filter(Boolean))
+        .gt('saldo_pendiente', 0)
+        .order('fecha', { ascending: true });
+      if (empresaId) queryVentasPendientes = queryVentasPendientes.eq('empresa_id', empresaId);
+      const { data: ventasPendientes, error: errorVentas } = await queryVentasPendientes;
+      if (errorVentas) throw errorVentas;
+
+      let restante = monto;
+      for (const v of ventasPendientes || []) {
+        if (restante <= 0) break;
+        const saldoActualVenta = Number(v.saldo_pendiente) || 0;
+        const aplicado = Math.min(restante, saldoActualVenta);
+        if (aplicado <= 0) continue;
+        const nuevoSaldo = Math.max(0, saldoActualVenta - aplicado);
+        const nuevoEstado = nuevoSaldo <= 0 ? 'Pagado' : 'Pago Parcial';
+        const { error: errorUpdate } = await supabase
+          .from('ventas')
+          .update({ saldo_pendiente: nuevoSaldo, estado_pago: nuevoEstado })
+          .eq('id', v.id);
+        if (errorUpdate) throw errorUpdate;
+        restante -= aplicado;
+      }
+
+      sonidoExito();
+      if (restante > 0) {
+        alert(`Pago registrado. ${formatGs(restante)} quedaron como crédito a favor del cliente.`);
+      }
+      setVentaPagar(null);
+      await cargarPagos();
+      await cargarVentas();
+      await cargarCajasDisponibles();
+    } catch (error) {
+      alert('Error al registrar el pago: ' + error.message);
+    } finally {
+      setGuardandoPagoVenta(false);
+    }
   };
 
   // Cruce cliente <-> ventas por nombre. OJO: esto depende de que el nombre que
@@ -2054,12 +2163,24 @@ export default function Clientes() {
                                       Acciones ▾
                                     </button>
                                     {ventasAccionAbierta === v.id && (
-                                      <div className="absolute z-50 mt-1 bg-white border rounded shadow-lg w-32 text-[11px] py-1">
+                                      <div className="absolute z-50 mt-1 bg-white border rounded shadow-lg w-48 text-[11px] py-1">
                                         <button
                                           onClick={() => { setVentasAccionAbierta(null); setVentasVerDetalle(v); }}
                                           className="w-full text-left px-3 py-2 hover:bg-gray-100 text-gray-700 flex items-center gap-2"
                                         >
                                           👁️ Ver
+                                        </button>
+                                        <button
+                                          onClick={() => imprimirFactura(v)}
+                                          className="w-full text-left px-3 py-2 hover:bg-gray-100 text-gray-700 flex items-center gap-2"
+                                        >
+                                          🖨️ Imprimir Factura
+                                        </button>
+                                        <button
+                                          onClick={() => abrirModalPagoLibroMayor(v)}
+                                          className="w-full text-left px-3 py-2 hover:bg-gray-100 text-gray-700 flex items-center gap-2"
+                                        >
+                                          💰 Monto total pagado o pago parcial
                                         </button>
                                       </div>
                                     )}
@@ -2192,6 +2313,75 @@ export default function Clientes() {
           </div>
         );
       })()}
+
+      {/* MODAL: Pago de venta desde Libro Mayor */}
+      {ventaPagar && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[9999] p-4" onClick={() => !guardandoPagoVenta && setVentaPagar(null)}>
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg overflow-hidden max-h-[95vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
+            <div className="bg-gradient-to-r from-[#6f5ff0] to-[#5b4fcf] px-6 py-5 flex justify-between items-center">
+              <h3 className="text-white font-bold text-lg">Registrar pago de venta</h3>
+              <button onClick={() => setVentaPagar(null)} className="text-white/80 hover:text-white text-xl leading-none">✕</button>
+            </div>
+
+            <div className="p-6 overflow-y-auto flex flex-col gap-4 text-sm">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <div className="bg-gray-50 border border-gray-100 rounded-lg p-3">
+                  <p className="font-bold text-gray-700">Cliente: <span className="font-normal">{clienteLibroMayor?.nombre}</span></p>
+                </div>
+                <div className="bg-gray-50 border border-gray-100 rounded-lg p-3 text-xs leading-relaxed">
+                  <p><span className="font-bold text-gray-700">Venta N.°:</span> {ventaPagar?.id ? String(ventaPagar.id).slice(0, 8).toUpperCase() : '—'}</p>
+                  <p><span className="font-bold text-gray-700">Total:</span> {formatGs(ventaPagar?.total)}</p>
+                  <p><span className="font-bold text-gray-700">Pagado:</span> {formatGs(ventaPagar?.montoPagadoActual ?? ventaPagar?.monto_pagado)}</p>
+                  <p><span className="font-bold text-gray-700">Saldo adeudado:</span> {formatGs(ventaPagar?.saldoActual ?? ventaPagar?.saldo_pendiente)}</p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-gray-700 mb-1">Método de pago:*</label>
+                  <select className="w-full border border-gray-300 rounded p-2.5 text-sm bg-white" value={metodoPagoVenta} onChange={(e) => setMetodoPagoVenta(e.target.value)}>
+                    <option>Efectivo</option>
+                    <option>Transferencia</option>
+                    <option>Tarjeta</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-gray-700 mb-1">Pagado el:*</label>
+                  <input type="date" className="w-full border border-gray-300 rounded p-2.5 text-sm" value={fechaPagoVenta} onChange={(e) => setFechaPagoVenta(e.target.value)} />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-gray-700 mb-1">Cantidad:*</label>
+                  <input autoFocus type="number" className="w-full border border-gray-300 rounded p-2.5 text-sm" value={montoPagoVenta} onChange={(e) => setMontoPagoVenta(e.target.value)} placeholder="0" />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-gray-700 mb-1">Cuenta de pago:</label>
+                <select className="w-full border border-gray-300 rounded p-2.5 text-sm bg-white" value={cuentaPagoVenta} onChange={(e) => setCuentaPagoVenta(e.target.value)}>
+                  <option value="Ninguna">Ninguna</option>
+                  {cajasDisponibles.map((caja) => (
+                    <option key={caja.id} value={caja.id}>
+                      {caja.nombre} (Saldo: {Number(caja.saldo || 0).toLocaleString('es-PY')} {caja.moneda === 'Guarani (Gs)' ? 'Gs' : caja.moneda})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-gray-700 mb-1">Nota de pago:</label>
+                <textarea className="w-full border border-gray-300 rounded p-2.5 text-sm" rows={3} value={notaPagoVenta} onChange={(e) => setNotaPagoVenta(e.target.value)} />
+              </div>
+            </div>
+
+            <div className="px-6 py-4 border-t bg-gray-50 flex justify-end gap-3">
+              <button type="button" disabled={guardandoPagoVenta} onClick={guardarPagoLibroMayor} className="bg-orange-500 hover:bg-orange-600 text-white font-bold text-sm px-6 py-2 rounded disabled:opacity-60">
+                {guardandoPagoVenta ? 'Guardando...' : 'Guardar'}
+              </button>
+              <button type="button" disabled={guardandoPagoVenta} onClick={() => setVentaPagar(null)} className="bg-white border text-gray-600 font-bold text-sm px-6 py-2 rounded hover:bg-gray-100">Cerrar</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* MODAL: Ventas del cliente */}
       {clienteVentas && (
