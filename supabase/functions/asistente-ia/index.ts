@@ -198,11 +198,15 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    // ===== CREAR CLIENTE SUPABASE ANON =====
+    // ===== CREAR CLIENTE SUPABASE =====
     const supabaseAnonKey = Deno.env.get('SUPABASE_ANON_KEY') ?? '';
-    const supabaseClient = createClient(supabaseUrl, supabaseAnonKey, {
-      global: { headers: authHeader ? { Authorization: authHeader } : {} },
-    });
+    const supabaseClient = createClient(
+      Deno.env.get('SUPABASE_URL') ?? '',
+      supabaseAnonKey,
+      {
+        global: { headers: authHeader ? { Authorization: authHeader } : {} },
+      }
+    );
 
     const supabaseAdmin = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
@@ -262,29 +266,75 @@ Deno.serve(async (req: Request) => {
       try {
         const { inicioDia, finDia } = getDateRange();
 
-        const [ventasHoyRes, productosBajosRes, cajaRes, gastosHoyRes, clientesRes] = await Promise.all([
-          supabaseClient
+        const [ventasHoyRes, ultimasVentasRes, productosBajosRes, cajaRes, gastosHoyRes, clientesRes, allProductosRes] = await Promise.all([
+          // Ventas de hoy con detalle exacto de productos vendidos
+          supabaseAdmin
             .from('ventas')
-            .select('id, total, fecha, metodo_pago, estado_pago')
+            .select(`
+              id,
+              total,
+              fecha,
+              cliente,
+              metodo_pago,
+              estado_pago,
+              articulos,
+              descuento,
+              nota_venta,
+              detalle_ventas (
+                id,
+                nombre_producto,
+                cantidad,
+                precio_unitario,
+                subtotal
+              )
+            `)
             .eq('empresa_id', empresaIdReal)
             .gte('fecha', inicioDia.toISOString())
             .lt('fecha', finDia.toISOString())
             .order('fecha', { ascending: false })
-            .limit(10),
-          supabaseClient
+            .limit(25),
+
+          // Últimas 20 ventas generales para consultas históricas o recientes
+          supabaseAdmin
+            .from('ventas')
+            .select(`
+              id,
+              total,
+              fecha,
+              cliente,
+              metodo_pago,
+              estado_pago,
+              articulos,
+              detalle_ventas (
+                nombre_producto,
+                cantidad,
+                precio_unitario,
+                subtotal
+              )
+            `)
+            .eq('empresa_id', empresaIdReal)
+            .order('fecha', { ascending: false })
+            .limit(20),
+
+          // Productos bajos en stock
+          supabaseAdmin
             .from('productos')
             .select('id, nombre, stock_actual, precio_venta')
             .eq('empresa_id', empresaIdReal)
             .lt('stock_actual', 5)
             .order('stock_actual', { ascending: true })
-            .limit(10),
-          supabaseClient
+            .limit(15),
+
+          // Caja registros
+          supabaseAdmin
             .from('caja_registros')
             .select('id, estado, saldo_inicial, saldo_final, fecha_apertura, fecha_cierre')
             .eq('empresa_id', empresaIdReal)
             .order('fecha_apertura', { ascending: false })
             .limit(5),
-          supabaseClient
+
+          // Gastos de hoy
+          supabaseAdmin
             .from('gastos')
             .select('id, descripcion, monto, categoria, creado_en')
             .eq('empresa_id', empresaIdReal)
@@ -292,28 +342,112 @@ Deno.serve(async (req: Request) => {
             .lt('creado_en', finDia.toISOString())
             .order('creado_en', { ascending: false })
             .limit(10),
-          supabaseClient
+
+          // Clientes
+          supabaseAdmin
             .from('clientes')
             .select('id, nombre, nombre_empresa, celular')
             .eq('empresa_id', empresaIdReal)
             .order('creado_en', { ascending: false })
-            .limit(5),
+            .limit(10),
+
+          // Todos los productos
+          supabaseAdmin
+            .from('productos')
+            .select('id, nombre, stock_actual, precio_venta, categoria')
+            .eq('empresa_id', empresaIdReal)
+            .order('stock_actual', { ascending: true })
+            .limit(150),
         ]);
 
-        const ventasHoy: NegocioItem[] = ventasHoyRes.data || [];
-        const productosBajos: NegocioItem[] = productosBajosRes.data || [];
-        const cajas: NegocioItem[] = cajaRes.data || [];
-        const gastosHoy: NegocioItem[] = gastosHoyRes.data || [];
-        const clientes: NegocioItem[] = clientesRes.data || [];
+        const ventasHoy = ventasHoyRes.data || [];
+        const ultimasVentas = ultimasVentasRes.data || [];
+        const productosBajos = productosBajosRes.data || [];
+        const cajas = cajaRes.data || [];
+        const gastosHoy = gastosHoyRes.data || [];
+        const clientes = clientesRes.data || [];
+        const todosProductos = allProductosRes.data || [];
 
+        // Análisis de totales del día
         const totalVentasHoy = ventasHoy.reduce<number>(
-          (sum: number, item: NegocioItem) => sum + Number(item.total || 0),
+          (sum: number, item: any) => sum + Number(item.total || 0),
           0
         );
         const totalGastosHoy = gastosHoy.reduce<number>(
-          (sum: number, item: NegocioItem) => sum + Number(item.monto || 0),
+          (sum: number, item: any) => sum + Number(item.monto || 0),
           0
         );
+        const gananciaHoy = totalVentasHoy - totalGastosHoy;
+        const ticketPromedio = ventasHoy.length > 0 ? totalVentasHoy / ventasHoy.length : 0;
+        
+        // Agrupar productos vendidos hoy para calcular el ranking de más vendidos
+        const conteoProductosHoy: Record<string, { cantidad: number; totalGs: number }> = {};
+        ventasHoy.forEach((v: any) => {
+          if (Array.isArray(v.detalle_ventas)) {
+            v.detalle_ventas.forEach((det: any) => {
+              const prodNombre = det.nombre_producto || 'Producto sin nombre';
+              const cant = Number(det.cantidad || 0);
+              const subt = Number(det.subtotal || (cant * Number(det.precio_unitario || 0)));
+              if (!conteoProductosHoy[prodNombre]) {
+                conteoProductosHoy[prodNombre] = { cantidad: 0, totalGs: 0 };
+              }
+              conteoProductosHoy[prodNombre].cantidad += cant;
+              conteoProductosHoy[prodNombre].totalGs += subt;
+            });
+          }
+        });
+
+        const rankingProductosHoy = Object.entries(conteoProductosHoy)
+          .map(([nombre, datos]) => ({ nombre, ...datos }))
+          .sort((a, b) => b.cantidad - a.cantidad);
+
+        // Formatear desglose detallado de cada venta de hoy con sus ítems exactos
+        const detalleVentasHoyTexto = ventasHoy.length > 0
+          ? ventasHoy.map((v: any, index: number) => {
+              const hora = new Date(v.fecha || new Date()).toLocaleTimeString('es-PY', { hour: '2-digit', minute: '2-digit' });
+              const clienteStr = v.cliente ? ` | Cliente: ${v.cliente}` : '';
+              const pagoStr = v.metodo_pago ? ` (${v.metodo_pago})` : '';
+              
+              let itemsTexto = '     (Sin detalle de ítems registrado)';
+              if (Array.isArray(v.detalle_ventas) && v.detalle_ventas.length > 0) {
+                itemsTexto = v.detalle_ventas.map((det: any) => 
+                  `     • ${det.cantidad}x ${det.nombre_producto || 'Producto'} @ ${Number(det.precio_unitario || 0).toLocaleString('es-PY')} Gs (Subtotal: ${Number(det.subtotal || 0).toLocaleString('es-PY')} Gs)`
+                ).join('\n');
+              }
+              return `  Venta #${index + 1} [${hora}] Total: ${Number(v.total || 0).toLocaleString('es-PY')} Gs${clienteStr}${pagoStr}\n${itemsTexto}`;
+            }).join('\n\n')
+          : '  Sin ventas registradas hoy.';
+
+        // Formatear ranking de los productos más vendidos hoy
+        const rankingProductosTexto = rankingProductosHoy.length > 0
+          ? rankingProductosHoy.slice(0, 10).map((p, i) => 
+              `  ${i + 1}. ${p.nombre}: ${p.cantidad} un. vendidas (${Number(p.totalGs).toLocaleString('es-PY')} Gs total)`
+            ).join('\n')
+          : '  Sin productos vendidos hoy.';
+
+        // Formatear últimas ventas generales (para consultas recientes o días anteriores)
+        const ultimasVentasGeneralesTexto = ultimasVentas.length > 0
+          ? ultimasVentas.slice(0, 5).map((v: any) => {
+              const fechaStr = new Date(v.fecha || new Date()).toLocaleString('es-PY', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+              const prodsStr = Array.isArray(v.detalle_ventas) && v.detalle_ventas.length > 0
+                ? v.detalle_ventas.map((d: any) => `${d.cantidad}x ${d.nombre_producto}`).join(', ')
+                : 'Ítems no especificados';
+              return `  - [${fechaStr}] ${Number(v.total || 0).toLocaleString('es-PY')} Gs | Productos: ${prodsStr}`;
+            }).join('\n')
+          : '  Sin historial reciente.';
+
+        // Alertas automáticas
+        const alertas: string[] = [];
+        if (productosBajos.length > 0) {
+          alertas.push(`⚠️ ${productosBajos.length} productos con stock crítico (< 5 unidades)`);
+        }
+        if (gananciaHoy < 0) {
+          alertas.push(`⚠️ Día con pérdida: -${Math.abs(gananciaHoy).toLocaleString('es-PY')} Gs`);
+        }
+        if (ventasHoy.length === 0) {
+          alertas.push(`⚠️ Sin ventas registradas hoy`);
+        }
+        
         const cajaAbierta = cajas.find(
           (c: NegocioItem) => c.estado === 'abierta' || c.estado === 'ABIERTA'
         );
@@ -324,43 +458,48 @@ Deno.serve(async (req: Request) => {
           ? `Caja abierta desde ${fechaApertura.toLocaleString('es-PY')}. Saldo inicial ${Number(cajaAbierta.saldo_inicial || 0).toLocaleString('es-PY')} Gs.`
           : 'No hay caja abierta actualmente.';
 
+        const stockTotalProductos = todosProductos.length;
+        const productosAgotados = todosProductos.filter((p: NegocioItem) => Number(p.stock_actual || 0) === 0).length;
+
         contextoNegocio = `
-Empresa: ${empresaNombre}
-Fecha: ${new Date().toLocaleDateString('es-PY', { dateStyle: 'full' })}
-Ventas del día: ${ventasHoy.length} ventas, total acumulado ${Number(totalVentasHoy).toLocaleString('es-PY')} Gs.
-Gastos del día: ${gastosHoy.length} registros, total ${Number(totalGastosHoy).toLocaleString('es-PY')} Gs.
-Estado de caja: ${cajeroEstado}
-Productos con stock bajo (menos de 5): ${
-          productosBajos.length
-            ? productosBajos
-                .map((p: NegocioItem) => `${p.nombre} (${p.stock_actual} unidades)`)
-                .join(', ')
-            : 'Ninguno'
-        }.
-Clientes recientes: ${
-          clientes.length
-            ? clientes
-                .map((c: NegocioItem) => c.nombre || c.nombre_empresa || 'Cliente')
-                .slice(0, 3)
-                .join(', ')
-            : 'Sin clientes recientes'
-        }.
-Últimas ventas: ${
-          ventasHoy.length
-            ? ventasHoy
-                .slice(0, 3)
-                .map(
-                  (v: NegocioItem) =>
-                    `${new Date(v.fecha || new Date()).toLocaleString('es-PY', {
-                      day: '2-digit',
-                      month: '2-digit',
-                      hour: '2-digit',
-                      minute: '2-digit',
-                    })} - ${Number(v.total || 0).toLocaleString('es-PY')} Gs`
-                )
-                .join(' | ')
-            : 'Sin ventas hoy'
-        }.
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+📊 CONTEXTO DEL NEGOCIO - ${empresaNombre}
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+📅 FECHA ACTUAL: ${new Date().toLocaleDateString('es-PY', { dateStyle: 'full', timeStyle: 'short' })}
+👤 USUARIO ACTUAL: ${usuarioNombre}
+
+━━ RESUMEN GENERAL DE HOY ━━
+💰 Ventas totales: ${ventasHoy.length} transacciones | Múltiple total: ${Number(totalVentasHoy).toLocaleString('es-PY')} Gs
+💸 Gastos totales: ${gastosHoy.length} registros | Total: ${Number(totalGastosHoy).toLocaleString('es-PY')} Gs
+📈 Ganancia neta: ${gananciaHoy >= 0 ? '+' : ''}${Number(gananciaHoy).toLocaleString('es-PY')} Gs
+🧾 Ticket promedio: ${Number(ticketPromedio).toLocaleString('es-PY')} Gs
+
+━━ RANKING DE PRODUCTOS MÁS VENDIDOS HOY ━━
+${rankingProductosTexto}
+
+━━ DETALLE DE CADA VENTA REGISTRADA HOY (CON PRODUCTOS EXACTOS) ━━
+${detalleVentasHoyTexto}
+
+━━ HISTORIAL DE ÚLTIMAS VENTAS RECIENTES ━━
+${ultimasVentasGeneralesTexto}
+
+━━ ESTADO DE CAJA ━━
+${cajeroEstado}
+
+━━ INVENTARIO ━━
+📦 Total de productos en catálogo: ${stockTotalProductos}
+🔴 Productos agotados: ${productosAgotados}
+🟡 Productos con stock bajo (< 5 un.): ${productosBajos.length}
+${productosBajos.length > 0 ? `   Lista de stock bajo: ${productosBajos.slice(0, 5).map((p: NegocioItem) => `${p.nombre} (${p.stock_actual} un.)`).join(' | ')}` : ''}
+
+━━ CLIENTES RECIENTES ━━
+👥 ${clientes.length > 0 ? clientes.map((c: NegocioItem) => c.nombre || c.nombre_empresa || 'Cliente').slice(0, 5).join(', ') : 'Sin registros'}
+
+━━ ALERTAS DEL SISTEMA ━━
+${alertas.length > 0 ? alertas.join('\n') : '✅ Sin alertas críticas'}
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 `;
       } catch (dbErr) {
         console.error('Error al consultar contexto del negocio:', dbErr);
@@ -373,24 +512,24 @@ Clientes recientes: ${
           .join('\n')
       : '';
 
-    const promptCompleto = `Eres un asistente virtual especializado para el sistema POS de ${empresaNombre}. Tu tarea es apoyar a ${usuarioNombre} con consultas operativas del negocio usando únicamente este contexto y los datos del sistema.
+    const promptCompleto = `Eres un asistente virtual avanzado especializado para el sistema POS de ${empresaNombre}. Tu tarea es responder a ${usuarioNombre} sobre las ventas del negocio, especificando exactamente los productos que se vendieron, cantidades, precios, clientes y montos totales usando este contexto de datos actualizados.
 
-Reglas:
-- Responde en español, de forma breve, útil y profesional.
-- Si puedes responder con información real del negocio, usa esos números y convierte a formato paraguayo (Gs, puntos para miles).
-- Si no tienes la información exacta, dilo de forma honesta y ofrece el siguiente paso.
-- Nunca inventes ventas, productos o clientes.
-- No des instrucciones peligrosas ni acciones fuera del sistema.
-- Enfócate en ventas, caja, inventario, clientes, proveedores, compras, gastos y reportes.
+Reglas obligatorias:
+- Responde en español, de forma clara, directa, amable y profesional.
+- Cuando pregunten sobre ventas o productos vendidos, especifica detalladamente los NOMBRES EXACTOS DE LOS PRODUCTOS, las cantidades, el precio unitario y el cliente/método de pago si están disponibles.
+- Usa los números reales provistos y dale formato en Guaraníes paraguayos (Gs, usando puntos para los miles, ej: 150.000 Gs).
+- Si te preguntan por el producto más vendido, revisa el "RANKING DE PRODUCTOS MÁS VENDIDOS HOY".
+- Si no hay ventas registradas o la información no está en el contexto, dilo de forma transparente sin inventar.
+- No des instrucciones ni acciones peligrosas fuera del sistema.
 - Cuando el usuario solicite "abrir caja" o "registrar gasto", ayuda a completar la información necesaria (monto, descripción).
 
-Contexto del negocio:
+Contexto completo del negocio:
 ${contextoNegocio}
 
-Historial reciente:
+Historial reciente de la conversación:
 ${historialTexto || 'Sin historial previo'}
 
-Usuario: ${mensaje}`;
+Consulta del Usuario: ${mensaje}`;
 
     const MODELOS_A_PROBAR = [
       'gemini-flash-latest',
@@ -412,8 +551,8 @@ Usuario: ${mensaje}`;
             body: JSON.stringify({
               contents: [{ parts: [{ text: promptCompleto }] }],
               generationConfig: {
-                maxOutputTokens: 500,
-                temperature: 0.5,
+                maxOutputTokens: 650,
+                temperature: 0.4,
               },
             }),
           }
@@ -455,4 +594,4 @@ Usuario: ${mensaje}`;
   }
 });
 
-console.log('Función asistente-ia iniciada con contexto, acciones y fallback de modelos.');
+console.log('Función asistente-ia actualizada con detalle exacto de ventas y productos.');

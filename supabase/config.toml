@@ -3,3 +3,7 @@ verify_jwt = false
 
 [functions.delete-user]
 verify_jwt = false
+
+[functions.crear-negocio]
+verify_jwt = false
+
