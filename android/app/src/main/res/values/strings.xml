@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">py-pos-system</string>
+    <string name="title_activity_main">py-pos-system</string>
+    <string name="package_name">com.pypos.app</string>
+    <string name="custom_url_scheme">com.pypos.app</string>
+</resources>

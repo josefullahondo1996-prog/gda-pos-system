@@ -1,0 +1,5 @@
+{
+  "appId": "com.pypos.app",
+  "appName": "py-pos-system",
+  "webDir": "dist"
+}
