@@ -6,6 +6,7 @@ import {
   LayoutDashboard, Users, Contact, Package, Factory, Wrench,
   ArrowDownToLine, ArrowUpFromLine, BarChart3, ShoppingCart, LogOut, Settings,
   MapPin, FileText, Barcode, Printer, Percent, ClipboardList, CreditCard,
+  Menu, X
 } from 'lucide-react';
 import ConfiguracionEmpresa from './ConfiguracionEmpresa';
 import ConfiguracionFacturaElectronica from './ConfiguracionFacturaElectronica';
@@ -36,6 +37,9 @@ import GananciasPerdidas from './GananciasPerdidas';
 import Usuarios from './Usuarios';
 import Roles from './Roles';
 import ListaCajas from './Listacajas';
+import InformeCajaPago from './InformeCajaPago';
+import VentasPorProducto from './VentasPorProducto';
+import CobroDeVentas from './CobroDeVentas';
 import GruposClientes from './GruposClientes';
 
 export default function Dashboard({ session, perfilUsuario, initialView = 'inicio' }) {
@@ -69,9 +73,11 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
   const irA = (vista, pathname) => {
     setVistaActiva(vista);
     setRefreshKey((k) => k + 1);
+    setMenuMovilAbierto(false); // Cierra el menú móvil al navegar
     if (pathname) navigate(pathname, { replace: true });
   };
   const [sidebarColapsado, setSidebarColapsado] = useState(false);
+  const [menuMovilAbierto, setMenuMovilAbierto] = useState(false);
 
   const cerrarSesion = async () => {
     await supabase.auth.signOut();
@@ -181,6 +187,18 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
       case '/cajas':
       case '/caja_banco':
         setVistaActiva('cajas');
+        break;
+      case '/informe-caja-pago':
+      case '/informe_caja_pago':
+        setVistaActiva('informe_caja_pago');
+        break;
+      case '/ventas-por-producto':
+      case '/ventas_por_producto':
+        setVistaActiva('ventas_por_producto');
+        break;
+      case '/cobro-de-ventas':
+      case '/cobro_de_ventas':
+        setVistaActiva('cobro_de_ventas');
         break;
       case '/ganancias_perdidas':
       case '/ganancias-perdidas':
@@ -306,6 +324,15 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
       case 'cajas':
         return <ListaCajas perfilUsuario={perfilUsuario} />;
 
+      case 'informe_caja_pago':
+        return <InformeCajaPago perfilUsuario={perfilUsuario} />;
+
+      case 'ventas_por_producto':
+        return <VentasPorProducto perfilUsuario={perfilUsuario} />;
+
+      case 'cobro_de_ventas':
+        return <CobroDeVentas perfilUsuario={perfilUsuario} />;
+
       default:
         return <GraficosDashboard />;
     }
@@ -330,28 +357,47 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
   `;
 
   return (
-    <div className="flex h-screen bg-[#f3f4f6] font-sans">
+    <div className="flex h-screen bg-[#f3f4f6] font-sans flex-col md:flex-row overflow-hidden">
+
+      {/* Overlay para móvil */}
+      {menuMovilAbierto && !posPantallaCompleta && (
+        <div
+          className="fixed inset-0 bg-black/50 z-20 md:hidden"
+          onClick={() => setMenuMovilAbierto(false)}
+        />
+      )}
 
       {/* ========================================== */}
       {/* MENÚ LATERAL IZQUIERDO (SIDEBAR COMPLETO)  */}
       {/* ========================================== */}
       {!posPantallaCompleta && (
-        <aside className={`${sidebarColapsado ? 'w-[76px]' : 'w-[260px]'} transition-all duration-200 bg-[#1e1e2d] text-white flex flex-col h-full shadow-xl z-20 hidden md:flex`}>
-
-          {/* Logo Superior */}
-          <div className="h-16 flex items-center justify-center border-b border-gray-700 bg-white overflow-hidden">
-            <h1 className="text-2xl font-bold tracking-wider text-[#004284] whitespace-nowrap">
-              {sidebarColapsado ? (
-                <span className="text-orange-500">P</span>
-              ) : (
-                <>PY<span className="text-orange-500">POS</span></>
-              )}
-            </h1>
+        <aside className={`
+          ${sidebarColapsado ? 'w-[76px]' : 'w-[260px]'}
+          transition-all duration-300 bg-[#1e1e2d] text-white flex flex-col h-full shadow-xl z-30
+          fixed inset-y-0 left-0 transform ${menuMovilAbierto ? 'translate-x-0' : '-translate-x-full'}
+          md:relative md:translate-x-0 md:flex
+        `}>
+          {/* Logo Superior con botón de cerrar para móvil */}
+          <div className="h-16 flex items-center justify-between px-4 border-b border-gray-700 bg-white overflow-hidden">
+            <div className="flex-1 flex justify-center">
+              <h1 className="text-2xl font-bold tracking-wider text-[#004284] whitespace-nowrap">
+                {sidebarColapsado ? (
+                  <span className="text-orange-500">P</span>
+                ) : (
+                  <>PY<span className="text-orange-500">POS</span></>
+                )}
+              </h1>
+            </div>
+            <button
+              onClick={() => setMenuMovilAbierto(false)}
+              className="md:hidden text-gray-500 hover:text-gray-800"
+            >
+              <X size={24} />
+            </button>
           </div>
 
           {/* Lista de Navegación */}
           <nav className="flex-1 overflow-y-auto overflow-x-hidden py-2 flex flex-col bg-[#1e1e2d]">
-
             {!soloPOS && (
               <>
                 <Link to="/" onClick={() => irA('inicio', '/')} className={estiloBotonSimple('inicio')} title="Inicio">
@@ -476,6 +522,7 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
                 {menuExpandido === 'caja_banco' && !sidebarColapsado && (
                   <div className="bg-[#151521] py-1 flex flex-col">
                     <Link to="/cajas" onClick={() => irA('cajas', '/cajas')} className={estiloSubItem('cajas')}>🠖 Lista de cajas</Link>
+                    <Link to="/informe-caja-pago" onClick={() => irA('informe_caja_pago', '/informe-caja-pago')} className={estiloSubItem('informe_caja_pago')}>🠖 Informe de caja de pago</Link>
                   </div>
                 )}
               </>
@@ -491,6 +538,8 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
                 {menuExpandido === 'informes' && !sidebarColapsado && (
                   <div className="bg-[#151521] py-1 flex flex-col">
                     <Link to="/ganancias_perdidas" onClick={() => irA('ganancias_perdidas', '/ganancias_perdidas')} className={estiloSubItem('ganancias_perdidas')}>🠖 Ganancias y Pérdidas</Link>
+                    <Link to="/ventas-por-producto" onClick={() => irA('ventas_por_producto', '/ventas-por-producto')} className={estiloSubItem('ventas_por_producto')}>🠖 Ventas por producto</Link>
+                    <Link to="/cobro-de-ventas" onClick={() => irA('cobro_de_ventas', '/cobro-de-ventas')} className={estiloSubItem('cobro_de_ventas')}>🠖 Cobros de venta</Link>
                     <Link to="/caja_registradora" onClick={() => irA('caja_registradora', '/caja_registradora')} className={estiloSubItem('caja_registradora')}>🠖 Caja registradora</Link>
                   </div>
                 )}
@@ -513,7 +562,6 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
                 )}
               </>
             )}
-
           </nav>
 
           {/* Footer del Sidebar */}
@@ -532,13 +580,21 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
       {/* ========================================== */}
       {/* ÁREA PRINCIPAL DERECHA (MAIN CONTENT)      */}
       {/* ========================================== */}
-      <div className="flex-1 flex flex-col h-full overflow-hidden">
+      <div className="flex-1 flex flex-col h-full overflow-hidden relative">
 
         {/* Header Superior */}
         {!posPantallaCompleta && (
-          <header className="h-16 bg-white shadow-sm flex items-center justify-between px-6 z-10 border-b">
-            <div className="flex items-center gap-4">
-              {/* BOTÓN PARA COLAPSAR/EXPANDIR EL MENÚ */}
+          <header className="h-14 md:h-16 bg-white shadow-sm flex items-center justify-between px-4 md:px-6 z-10 border-b">
+            <div className="flex items-center gap-3">
+              {/* BOTÓN HAMBURGUESA PARA MÓVIL */}
+              <button
+                onClick={() => setMenuMovilAbierto(true)}
+                className="md:hidden flex items-center justify-center w-8 h-8 rounded-lg text-gray-500 hover:bg-gray-100 transition-colors"
+              >
+                <Menu size={22} />
+              </button>
+
+              {/* BOTÓN PARA COLAPSAR/EXPANDIR EL MENÚ (Escritorio) */}
               <button
                 onClick={() => setSidebarColapsado(!sidebarColapsado)}
                 title={sidebarColapsado ? 'Expandir menú' : 'Colapsar menú'}
@@ -547,48 +603,92 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
                 {sidebarColapsado ? '☰' : '◀'}
               </button>
 
-              <h2 className="text-gray-800 font-bold text-lg">
+              <h2 className="text-gray-800 font-bold text-base md:text-lg truncate max-w-[150px] md:max-w-none">
                 {vistaActiva === 'inicio' && 'Inicio'}
                 {vistaActiva === 'pos' && 'Punto de Venta'}
-                {vistaActiva === 'reporte_cierre' && 'Reporte de Cierre de Caja'}
-                {vistaActiva === 'nuevo_gasto' && 'Registrar Gasto'}
+                {vistaActiva === 'reporte_cierre' && 'Cierre'}
+                {vistaActiva === 'nuevo_gasto' && 'Gasto'}
                 {vistaActiva === 'compras' && 'Compras'}
-                {vistaActiva === 'agregar_compra' && 'Agregar Compra'}
-                {vistaActiva === 'devoluciones_compra' && 'Devoluciones de Compra'}
-                {vistaActiva === 'cobros' && 'Cuentas por Cobrar'}
-                {vistaActiva === 'catalogo' && 'Lista de Productos'}
-                {vistaActiva === 'agregar_producto' && 'Agregar Producto'}
+                {vistaActiva === 'agregar_compra' && 'Nueva Compra'}
+                {vistaActiva === 'devoluciones_compra' && 'Devoluciones'}
+                {vistaActiva === 'cobros' && 'Pendientes'}
+                {vistaActiva === 'catalogo' && 'Productos'}
+                {vistaActiva === 'agregar_producto' && 'Nuevo Producto'}
                 {vistaActiva === 'marcas' && 'Marcas'}
                 {vistaActiva === 'unidades' && 'Unidades'}
                 {vistaActiva === 'clientes' && 'Clientes'}
-                {vistaActiva === 'caja_registradora' && 'Caja registradora'}
-                {vistaActiva === 'ganancias_perdidas' && 'Ganancias y Pérdidas'}
+                {vistaActiva === 'caja_registradora' && 'Caja'}
+                {vistaActiva === 'ganancias_perdidas' && 'G/P'}
                 {vistaActiva === 'usuarios' && 'Usuarios'}
                 {vistaActiva === 'roles' && 'Roles'}
-                {vistaActiva === 'config_empresa' && 'Configuración de la Empresa'}
-                {vistaActiva === 'config_factura' && 'Facturación Electrónica'}
-                {vistaActiva === 'ubicaciones_comerciales' && 'Ubicaciones comerciales'}
-                {vistaActiva === 'todas_ventas' && 'Todas las ventas'}
-                {vistaActiva === 'cajas' && 'Caja / Banco'}
+                {vistaActiva === 'config_empresa' && 'Empresa'}
+                {vistaActiva === 'config_factura' && 'Facturación'}
+                {vistaActiva === 'ubicaciones_comerciales' && 'Ubicaciones'}
+                {vistaActiva === 'todas_ventas' && 'Ventas'}
+                {vistaActiva === 'cajas' && 'Banco'}
+                {vistaActiva === 'informe_caja_pago' && 'Informe de Pago'}
+                {vistaActiva === 'ventas_por_producto' && 'Ventas por Producto'}
+                {vistaActiva === 'cobro_de_ventas' && 'Cobros de Venta'}
               </h2>
             </div>
-            <div className="flex items-center gap-4">
-              <span className="text-sm font-medium text-gray-700 flex items-center gap-2">
-                <span className="bg-orange-500 text-white rounded-full w-6 h-6 flex items-center justify-center text-xs font-bold">
+            <div className="flex items-center gap-2">
+              <span className="text-xs md:text-sm font-medium text-gray-700 flex items-center gap-2">
+                <span className="bg-orange-500 text-white rounded-full w-6 h-6 flex items-center justify-center text-[10px] font-bold">
                   {(perfilUsuario?.empresas?.nombre || 'N').charAt(0).toUpperCase()}
                 </span>
-                {perfilUsuario?.empresas?.nombre || 'Mi Negocio'}
+                <span className="hidden sm:inline">{perfilUsuario?.empresas?.nombre || 'Mi Negocio'}</span>
               </span>
             </div>
           </header>
         )}
 
         {/* Inyección de los Módulos Activos */}
-        <main className={`flex-1 overflow-y-auto bg-[#f3f4f6] ${posPantallaCompleta ? '' : 'p-4 md:p-6'}`}>
+        <main className={`flex-1 overflow-y-auto bg-[#f3f4f6] pb-16 md:pb-0 ${posPantallaCompleta ? '' : 'p-3 md:p-6'}`}>
           <div key={`${vistaActiva}-${refreshKey}`}>
             {renderizarVista()}
           </div>
         </main>
+
+        {/* BARRA DE NAVEGACIÓN INFERIOR PARA MÓVIL */}
+        {!posPantallaCompleta && (
+          <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 h-16 flex items-center justify-around px-2 z-40">
+            <button
+              onClick={() => irA('inicio', '/')}
+              className={`flex flex-col items-center gap-1 flex-1 ${vistaActiva === 'inicio' ? 'text-orange-500' : 'text-gray-500'}`}
+            >
+              <LayoutDashboard size={20} />
+              <span className="text-[10px] font-medium">Inicio</span>
+            </button>
+            <button
+              onClick={() => irA('pos', '/pos')}
+              className={`flex flex-col items-center gap-1 flex-1 ${vistaActiva === 'pos' ? 'text-orange-500' : 'text-gray-500'}`}
+            >
+              <ShoppingCart size={20} />
+              <span className="text-[10px] font-medium">POS</span>
+            </button>
+            <button
+              onClick={() => irA('todas_ventas', '/todas_ventas')}
+              className={`flex flex-col items-center gap-1 flex-1 ${vistaActiva === 'todas_ventas' ? 'text-orange-500' : 'text-gray-500'}`}
+            >
+              <ArrowUpFromLine size={20} />
+              <span className="text-[10px] font-medium">Ventas</span>
+            </button>
+            <button
+              onClick={() => irA('catalogo', '/catalogo')}
+              className={`flex flex-col items-center gap-1 flex-1 ${vistaActiva === 'catalogo' ? 'text-orange-500' : 'text-gray-500'}`}
+            >
+              <Package size={20} />
+              <span className="text-[10px] font-medium">Stock</span>
+            </button>
+            <button
+              onClick={() => setMenuMovilAbierto(true)}
+              className="flex flex-col items-center gap-1 flex-1 text-gray-500"
+            >
+              <Menu size={20} />
+              <span className="text-[10px] font-medium">Más</span>
+            </button>
+          </nav>
+        )}
 
       </div>
     </div>

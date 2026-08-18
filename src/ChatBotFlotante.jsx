@@ -8,6 +8,15 @@ export default function ChatBotFlotante({ perfilUsuario }) {
     const [texto, setTexto] = useState('');
     const [enviando, setEnviando] = useState(false);
     const [recording, setRecording] = useState(false);
+    const [conectado, setConectado] = useState(true);
+    const [mostrarIndicador, setMostrarIndicador] = useState(false);
+    
+    // Datos del sistema para contexto IA
+    const [datosEmpresa, setDatosEmpresa] = useState(null);
+    const [datosVentas, setDatosVentas] = useState(null);
+    const [datosProductos, setDatosProductos] = useState(null);
+    const [datosClientes, setDatosClientes] = useState(null);
+    const [datosInventario, setDatosInventario] = useState(null);
     
     // Posicionamiento para la funcionalidad de arrastre
     const [posicion, setPosicion] = useState({ x: null, y: null });
@@ -54,26 +63,109 @@ export default function ChatBotFlotante({ perfilUsuario }) {
 
     // Actualizar el saludo inicial dinámicamente según la empresa y usuario logueado
     useEffect(() => {
+        const mensajesGuardados = localStorage.getItem('chatbot_mensajes');
+        
+        if (mensajesGuardados) {
+            try {
+                setMensajes(JSON.parse(mensajesGuardados));
+            } catch (err) {
+                console.error('Error cargando chat guardado:', err);
+                crearSaludoInicial();
+            }
+        } else {
+            crearSaludoInicial();
+        }
+    }, []);
+
+    // Función para crear saludo inicial
+    const crearSaludoInicial = () => {
         if (perfilUsuario) {
             const nombreEmpresa = perfilUsuario.empresas?.nombre || 'tu negocio';
             const nombreUsuario = perfilUsuario.nombre || 'Usuario';
-            setMensajes([
+            const saludo = [
                 { 
                     role: 'assistant', 
                     text: `¡Hola, **${nombreUsuario}**! Soy el asistente virtual de **${nombreEmpresa}**. ¿En qué te puedo ayudar hoy?`,
                     time: obtenerHoraActual()
                 }
-            ]);
+            ];
+            setMensajes(saludo);
+            localStorage.setItem('chatbot_mensajes', JSON.stringify(saludo));
+            // Cargar datos del sistema después de mostrar el saludo
+            cargarDatosDelSistema();
         } else {
-            setMensajes([
+            const saludo = [
                 { 
                     role: 'assistant', 
                     text: '¡Hola! Soy el asistente de **PYpos**. ¿En qué te puedo ayudar hoy?',
                     time: obtenerHoraActual()
                 }
-            ]);
+            ];
+            setMensajes(saludo);
+            localStorage.setItem('chatbot_mensajes', JSON.stringify(saludo));
         }
-    }, [perfilUsuario]);
+    };
+
+    // Cargar datos del sistema para dar contexto a la IA
+    const cargarDatosDelSistema = async () => {
+        if (!perfilUsuario?.empresas?.id) return;
+        
+        const empresaId = perfilUsuario.empresas.id;
+        
+        try {
+            // 1. Datos básicos de la empresa
+            const { data: empresa } = await supabase
+                .from('empresas')
+                .select('*')
+                .eq('id', empresaId)
+                .single();
+            setDatosEmpresa(empresa);
+
+            // 2. Ventas de los últimos 30 días
+            const hace30Dias = new Date();
+            hace30Dias.setDate(hace30Dias.getDate() - 30);
+            const { data: ventas } = await supabase
+                .from('ventas')
+                .select('fecha, total, cliente, estado_pago, metodo_pago')
+                .eq('empresa_id', empresaId)
+                .gte('fecha', hace30Dias.toISOString())
+                .order('fecha', { ascending: false })
+                .limit(50);
+            
+            const totalVentas = ventas?.reduce((sum, v) => sum + (Number(v.total) || 0), 0) || 0;
+            const ventasHoy = ventas?.filter(v => new Date(v.fecha).toDateString() === new Date().toDateString()).length || 0;
+            setDatosVentas({ total: totalVentas, cantidad: ventas?.length || 0, hoy: ventasHoy, ultimas: ventas?.slice(0, 10) });
+
+            // 3. Productos más vendidos e inventario
+            const { data: productos } = await supabase
+                .from('productos')
+                .select('id, nombre, precio_venta, precio_costo, cantidad_disponible, categoria')
+                .eq('empresa_id', empresaId)
+                .order('cantidad_disponible', { ascending: true })
+                .limit(20);
+            
+            const productosBarosStock = productos?.filter(p => p.cantidad_disponible < 10) || [];
+            setDatosProductos({ total: productos?.length || 0, bajoStock: productosBarosStock });
+
+            // 4. Clientes registrados
+            const { data: clientes } = await supabase
+                .from('clientes')
+                .select('id, nombre, email, telefono, numero_compras')
+                .eq('empresa_id', empresaId)
+                .order('numero_compras', { ascending: false })
+                .limit(50);
+            
+            setDatosClientes({ total: clientes?.length || 0, clientes });
+
+            // 5. Estadísticas de inventario
+            const inventarioTotal = productos?.reduce((sum, p) => sum + (Number(p.cantidad_disponible) || 0), 0) || 0;
+            const valorInventario = productos?.reduce((sum, p) => sum + ((Number(p.cantidad_disponible) || 0) * (Number(p.precio_costo) || 0)), 0) || 0;
+            setDatosInventario({ total: inventarioTotal, valor: valorInventario, productos: productos?.length || 0 });
+
+        } catch (error) {
+            console.error('Error cargando datos del sistema:', error);
+        }
+    };
 
     const suggestions = [
         { label: '📊 Venta de hoy', text: '¿Cuánto se ha vendido hoy?' },
@@ -81,6 +173,46 @@ export default function ChatBotFlotante({ perfilUsuario }) {
         { label: '🧾 Crear factura', text: '¿Cómo puedo emitir una factura electrónica?' },
         { label: '⚙️ Abrir caja', text: '¿Cuáles son los pasos para abrir la caja?' },
     ];
+
+    // Sugerencias dinámicas basadas en datos del sistema
+    const sugerenciasIntelligentes = () => {
+        const sugerencias = [];
+        
+        if (datosProductos?.bajoStock?.length > 0) {
+            sugerencias.push({
+                label: `⚠️ ${datosProductos.bajoStock.length} bajo stock`,
+                text: `Tengo ${datosProductos.bajoStock.length} productos con bajo stock. ¿Cuáles son?`
+            });
+        }
+        
+        if (datosVentas?.hoy === 0) {
+            sugerencias.push({
+                label: '📊 Sin ventas hoy',
+                text: '¿Por qué no tengo ventas registradas hoy?'
+            });
+        } else if (datosVentas?.hoy > 0) {
+            sugerencias.push({
+                label: `✅ ${datosVentas.hoy} ventas hoy`,
+                text: `Muéstrame resumen de las ${datosVentas.hoy} ventas de hoy`
+            });
+        }
+        
+        if (datosClientes?.total > 100) {
+            sugerencias.push({
+                label: '👥 Clientes Top',
+                text: '¿Cuáles son mis clientes más frecuentes?'
+            });
+        }
+        
+        if (datosVentas?.total > 0) {
+            sugerencias.push({
+                label: '💰 Ganancia neta',
+                text: '¿Cuál es mi ganancia neta de este mes?'
+            });
+        }
+        
+        return sugerencias.length > 0 ? sugerencias : suggestions;
+    };
 
     // Scroll automático al recibir mensajes
     useEffect(() => {
@@ -130,14 +262,55 @@ export default function ChatBotFlotante({ perfilUsuario }) {
             { role: 'user', text: mensaje, time: obtenerHoraActual() }
         ];
         setMensajes(nuevosMensajes);
+        localStorage.setItem('chatbot_mensajes', JSON.stringify(nuevosMensajes));
         setTexto('');
         setEnviando(true);
+        setMostrarIndicador(true);
+        setConectado(true);
 
         try {
             const historialParaIA = nuevosMensajes.slice(-10).map((m) => ({
                 role: m.role === 'user' ? 'user' : 'assistant',
                 text: m.text,
             }));
+
+            // Construir contexto enriquecido del sistema
+            const contextoSistema = {
+                empresa: {
+                    nombre: datosEmpresa?.nombre,
+                    direccion: datosEmpresa?.direccion,
+                    email: datosEmpresa?.email,
+                    telefono: datosEmpresa?.telefono,
+                },
+                ventas: datosVentas ? {
+                    totalUltimos30Dias: `Gs ${Number(datosVentas.total).toLocaleString('es-PY')}`,
+                    cantidad: datosVentas.cantidad,
+                    ventasHoy: datosVentas.hoy,
+                    promedioPorVenta: datosVentas.cantidad > 0 
+                        ? `Gs ${(datosVentas.total / datosVentas.cantidad).toLocaleString('es-PY')}`
+                        : 'N/A'
+                } : null,
+                inventario: datosInventario ? {
+                    productosRegistrados: datosInventario.productos,
+                    unidadesEnStock: datosInventario.total,
+                    valorTotal: `Gs ${Number(datosInventario.valor).toLocaleString('es-PY')}`,
+                } : null,
+                productos: datosProductos ? {
+                    productosConBajoStock: datosProductos.bajoStock.map(p => `${p.nombre} (${p.cantidad_disponible} unidades)`),
+                    alertas: datosProductos.bajoStock.length > 0 
+                        ? `⚠️ ${datosProductos.bajoStock.length} productos con bajo stock`
+                        : 'Todos los productos tienen stock adecuado'
+                } : null,
+                clientes: datosClientes ? {
+                    totalRegistrados: datosClientes.total,
+                    clientesTop: datosClientes.clientes?.slice(0, 5).map(c => `${c.nombre} (${c.numero_compras || 0} compras)`)
+                } : null,
+                usuario: {
+                    nombre: perfilUsuario?.nombre,
+                    email: perfilUsuario?.email,
+                    rol: perfilUsuario?.rol_nombre,
+                }
+            };
 
             const { data, error } = await supabase.functions.invoke('asistente-ia', {
                 body: {
@@ -147,6 +320,7 @@ export default function ChatBotFlotante({ perfilUsuario }) {
                     empresaId: perfilUsuario?.empresas?.id,
                     usuario: perfilUsuario?.nombre,
                     usuarioId: perfilUsuario?.id,
+                    contexto: contextoSistema,
                 },
             });
 
@@ -154,19 +328,26 @@ export default function ChatBotFlotante({ perfilUsuario }) {
                 throw new Error(data?.error || error.message);
             }
 
-            setMensajes((prev) => [
-                ...prev, 
-                { role: 'assistant', text: data.respuesta, time: obtenerHoraActual() }
-            ]);
+            const mensajeIA = { role: 'assistant', text: data.respuesta, time: obtenerHoraActual() };
+            const mensajesActualizados = [...nuevosMensajes, mensajeIA];
+            setMensajes(mensajesActualizados);
+            localStorage.setItem('chatbot_mensajes', JSON.stringify(mensajesActualizados));
             sonidoExito();
         } catch (err) {
-            setMensajes((prev) => [
-                ...prev, 
-                { role: 'assistant', text: '⚠️ No pude responder: ' + err.message, time: obtenerHoraActual() }
-            ]);
+            setConectado(false);
+            const mensajeError = { 
+                role: 'assistant', 
+                text: '⚠️ **Error de conexión:** ' + (err.message || 'No pude conectarme al servidor. Intenta nuevamente.'),
+                time: obtenerHoraActual(),
+                error: true
+            };
+            const mensajesActualizados = [...nuevosMensajes, mensajeError];
+            setMensajes(mensajesActualizados);
+            localStorage.setItem('chatbot_mensajes', JSON.stringify(mensajesActualizados));
             sonidoError();
         } finally {
             setEnviando(false);
+            setMostrarIndicador(false);
         }
     };
 
@@ -190,15 +371,18 @@ export default function ChatBotFlotante({ perfilUsuario }) {
 
     const borrarHistorial = () => {
         if (window.confirm("¿Querés limpiar la conversación actual?")) {
+            localStorage.removeItem('chatbot_mensajes');
             const nombreEmpresa = perfilUsuario?.empresas?.nombre || 'tu negocio';
             const nombreUsuario = perfilUsuario?.nombre || 'Usuario';
-            setMensajes([
+            const saludoNuevo = [
                 { 
                     role: 'assistant', 
                     text: `Chat reiniciado. ¿En qué te puedo ayudar ahora, **${nombreUsuario}**?`,
                     time: obtenerHoraActual()
                 }
-            ]);
+            ];
+            setMensajes(saludoNuevo);
+            localStorage.setItem('chatbot_mensajes', JSON.stringify(saludoNuevo));
             sonidoExito();
         }
     };
@@ -388,8 +572,12 @@ export default function ChatBotFlotante({ perfilUsuario }) {
                         <div className="flex items-center gap-2.5">
                             <div className="relative flex items-center justify-center w-8.5 h-8.5 bg-white/15 rounded-full border border-white/25">
                                 <span className="text-lg">🤖</span>
-                                <span className="absolute bottom-0 right-0 w-2.5 h-2.5 bg-green-400 border-2 border-orange-500 rounded-full"></span>
-                                <span className="absolute bottom-0 right-0 w-2.5 h-2.5 bg-green-400 border-2 border-orange-500 rounded-full animate-ping opacity-75"></span>
+                                <span className={`absolute bottom-0 right-0 w-2.5 h-2.5 border-2 border-orange-500 rounded-full transition-colors ${
+                                    conectado ? 'bg-green-400' : 'bg-red-400'
+                                }`}></span>
+                                {conectado && (
+                                    <span className="absolute bottom-0 right-0 w-2.5 h-2.5 bg-green-400 border-2 border-orange-500 rounded-full animate-ping opacity-75"></span>
+                                )}
                             </div>
                             <div>
                                 <p className="text-white font-bold text-sm tracking-wide leading-tight">Asistente PYpos</p>
@@ -451,16 +639,34 @@ export default function ChatBotFlotante({ perfilUsuario }) {
                             </div>
                         ))}
                         
-                        {enviando && (
-                            <div className="flex flex-col max-w-[85%] self-start items-start">
-                                <div className="bg-white text-gray-800 border border-gray-200/60 self-start rounded-2xl rounded-tl-none px-4 py-3 shadow-sm flex flex-col gap-1.5">
-                                    <div className="flex items-center gap-1.5">
-                                        <span className="w-1.5 h-1.5 bg-orange-400 rounded-full animate-bounce-dot" style={{ animationDelay: '0ms' }}></span>
-                                        <span className="w-1.5 h-1.5 bg-orange-400 rounded-full animate-bounce-dot" style={{ animationDelay: '150ms' }}></span>
-                                        <span className="w-1.5 h-1.5 bg-orange-400 rounded-full animate-bounce-dot" style={{ animationDelay: '300ms' }}></span>
-                                    </div>
+                        {mostrarIndicador && (
+                            <div className="flex flex-col max-w-[85%] self-start items-start animate-in fade-in duration-200">
+                                <div className={`${
+                                    conectado
+                                        ? 'bg-white text-gray-800 border border-gray-200/60'
+                                        : 'bg-red-50 text-red-700 border border-red-200'
+                                } self-start rounded-2xl rounded-tl-none px-4 py-3 shadow-sm flex flex-col gap-2`}>
+                                    {conectado ? (
+                                        <>
+                                            <div className="flex items-center gap-1.5">
+                                                <span className="w-2 h-2 bg-orange-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></span>
+                                                <span className="w-2 h-2 bg-orange-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></span>
+                                                <span className="w-2 h-2 bg-orange-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></span>
+                                            </div>
+                                            <span className="text-xs font-medium text-gray-600">Pensando...</span>
+                                        </>
+                                    ) : (
+                                        <>
+                                            <div className="flex items-center gap-2">
+                                                <span className="text-base">🔌</span>
+                                                <span className="text-xs font-semibold">Reconectando...</span>
+                                            </div>
+                                        </>
+                                    )}
                                 </div>
-                                <span className="text-[9px] text-gray-400 mt-1 px-1">Pensando...</span>
+                                <span className={`text-[9px] mt-1 px-1 font-semibold ${
+                                    conectado ? 'text-gray-400' : 'text-red-500'
+                                }`}>{conectado ? 'IA procesando' : 'Sin conexión'}</span>
                             </div>
                         )}
                         <div ref={finRef} />
@@ -468,7 +674,7 @@ export default function ChatBotFlotante({ perfilUsuario }) {
 
                     {/* Sugerencias de Preguntas (Chips Deslizables) */}
                     <div className="px-3 py-2.5 bg-white border-t border-gray-100/80 flex gap-2 overflow-x-auto scrollbar-none select-none">
-                        {suggestions.map((sug, i) => (
+                        {sugerenciasIntelligentes().map((sug, i) => (
                             <button
                                 key={i}
                                 onClick={() => sendMessageText(sug.text)}

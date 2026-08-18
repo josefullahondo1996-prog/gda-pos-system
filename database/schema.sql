@@ -188,6 +188,9 @@ CREATE TABLE detalle_ventas (
     nombre_producto text,
     cantidad numeric NOT NULL DEFAULT 0,
     precio_unitario numeric(12,2) NOT NULL DEFAULT 0,
+    descuento numeric(12,2) NOT NULL DEFAULT 0,
+    impuesto numeric(12,2) NOT NULL DEFAULT 0,
+    precio_costo numeric(12,2) NOT NULL DEFAULT 0,
     subtotal numeric(12,2) NOT NULL DEFAULT 0,
     creado_en timestamptz NOT NULL DEFAULT now()
 );

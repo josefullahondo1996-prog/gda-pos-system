@@ -49,10 +49,20 @@ function App() {
   };
 
   useEffect(() => {
+    console.log('App: Iniciando sesión de Supabase...');
     supabase.auth.getSession().then(async ({ data: { session } }) => {
+      console.log('App: Sesión obtenida:', session ? 'Usuario logueado' : 'Sin sesión');
       usuarioActualId.current = session?.user?.id || null;
       setSession(session);
-      await cargarPerfil(session);
+      try {
+        await cargarPerfil(session);
+      } catch (e) {
+        console.error('App: Error en cargarPerfil:', e);
+      }
+      console.log('App: Finalizando estado de carga');
+      setCargando(false);
+    }).catch(err => {
+      console.error('App: Error al obtener sesión:', err);
       setCargando(false);
     });
 
