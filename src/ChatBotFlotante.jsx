@@ -560,7 +560,7 @@ export default function ChatBotFlotante({ perfilUsuario }) {
                 <div
                     ref={panelRef}
                     style={posicion.x !== null ? { left: `${posicion.x}px`, top: `${posicion.y}px`, bottom: 'auto', right: 'auto' } : {}}
-                    className="fixed bottom-24 right-5 z-[9998] w-[360px] max-w-[92vw] h-[520px] max-h-[82vh] bg-white/95 backdrop-blur-md rounded-2xl shadow-[0_12px_40px_rgba(0,0,0,0.18)] border border-gray-200/80 flex flex-col overflow-hidden animate-chat-open select-none"
+                    className="fixed bottom-24 right-5 z-[9998] w-[360px] max-w-[92vw] h-[520px] max-h-[82vh] bg-white rounded-2xl shadow-[0_20px_60px_rgba(0,0,0,0.3)] border border-gray-200 flex flex-col overflow-hidden animate-chat-open select-none"
                 >
                     {/* Header Arrastrable */}
                     <div
@@ -618,7 +618,7 @@ export default function ChatBotFlotante({ perfilUsuario }) {
                     </div>
 
                     {/* Cuerpo de Mensajes */}
-                    <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-3.5 bg-gray-50/70 select-text">
+                    <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-3.5 bg-gray-50 select-text">
                         {mensajes.map((m, i) => (
                             <div
                                 key={i}
@@ -630,7 +630,7 @@ export default function ChatBotFlotante({ perfilUsuario }) {
                                     className={`px-3.5 py-2.5 rounded-2xl text-[13.5px] shadow-sm leading-relaxed border transition-all duration-200 ${
                                         m.role === 'user'
                                             ? 'bg-gradient-to-tr from-orange-500 to-amber-500 text-white border-orange-400 rounded-tr-none shadow-orange-500/10'
-                                            : 'bg-white text-gray-800 border-gray-200/60 rounded-tl-none'
+                                            : 'bg-white text-gray-800 border-gray-300 rounded-tl-none'
                                     }`}
                                 >
                                     {renderMensaje(m.text, m.role === 'user')}
@@ -643,7 +643,7 @@ export default function ChatBotFlotante({ perfilUsuario }) {
                             <div className="flex flex-col max-w-[85%] self-start items-start animate-in fade-in duration-200">
                                 <div className={`${
                                     conectado
-                                        ? 'bg-white text-gray-800 border border-gray-200/60'
+                                        ? 'bg-white text-gray-800 border border-gray-300'
                                         : 'bg-red-50 text-red-700 border border-red-200'
                                 } self-start rounded-2xl rounded-tl-none px-4 py-3 shadow-sm flex flex-col gap-2`}>
                                     {conectado ? (
@@ -673,7 +673,7 @@ export default function ChatBotFlotante({ perfilUsuario }) {
                     </div>
 
                     {/* Sugerencias de Preguntas (Chips Deslizables) */}
-                    <div className="px-3 py-2.5 bg-white border-t border-gray-100/80 flex gap-2 overflow-x-auto scrollbar-none select-none">
+                    <div className="px-3 py-2.5 bg-white border-t border-gray-200 flex gap-2 overflow-x-auto scrollbar-none select-none">
                         {sugerenciasIntelligentes().map((sug, i) => (
                             <button
                                 key={i}
@@ -686,7 +686,7 @@ export default function ChatBotFlotante({ perfilUsuario }) {
                     </div>
 
                     {/* Formulario de Entrada */}
-                    <form onSubmit={enviarMensaje} className="p-3 border-t border-gray-150/60 flex items-center gap-2 bg-white select-text">
+                    <form onSubmit={enviarMensaje} className="p-3 border-t border-gray-200 flex items-center gap-2 bg-white select-text">
                         <div className="flex-1 relative flex items-center">
                             <input
                                 type="text"
