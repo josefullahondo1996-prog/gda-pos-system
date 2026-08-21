@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { supabase } from './supabaseClient';
-import { useNotificacion } from './NotificacionContext';
 import {
   LayoutDashboard, Users, Contact, Package, Factory, Wrench,
   ArrowDownToLine, ArrowUpFromLine, BarChart3, ShoppingCart, LogOut, Settings,
@@ -45,7 +44,6 @@ import Gastos from './Gastos';
 import CategoriasGastos from './CategoriasGastos';
 
 export default function Dashboard({ session, perfilUsuario, initialView = 'inicio' }) {
-  const { notificar } = useNotificacion();
   // === CONTROL DE ACCESO POR ROL (va primero, vistaActiva lo necesita) ===
   const nombreRol = (perfilUsuario?.roles?.nombre || '').toLowerCase();
   const esAdmin = nombreRol.includes('admin');
@@ -56,6 +54,24 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
     const categoria = permisosRol[categoriaKey];
     if (!categoria) return false;
     return Object.values(categoria).some(Boolean);
+  };
+
+  const puedeVerVista = (vista) => {
+    if (esAdmin || !permisosRol) return true;
+    const categoriaPorVista = {
+      ot: 'ot', config_empresa: 'configuraciones', config_factura: 'configuraciones',
+      ubicaciones_comerciales: 'ubicaciones', clientes: 'clientes_proveedores',
+      proveedores: 'clientes_proveedores', grupos_clientes: 'clientes_proveedores',
+      catalogo: 'productos', agregar_producto: 'productos', marcas: 'productos',
+      categorias: 'productos', unidades: 'productos', compras: 'compras',
+      agregar_compra: 'compras', devoluciones_compra: 'compras', gastos: 'gastos',
+      agregar_gasto: 'gastos', categorias_gastos: 'gastos', todas_ventas: 'ventas_pos',
+      pos: 'ventas_pos', cobros: 'ventas_pos', cajas: 'caja', informe_caja_pago: 'caja',
+      caja_registradora: 'informes', ganancias_perdidas: 'informes',
+      ventas_por_producto: 'informes', cobro_de_ventas: 'informes', usuarios: 'usuarios', roles: 'roles',
+    };
+    const categoria = categoriaPorVista[vista];
+    return !categoria || tieneCategoria(categoria);
   };
 
   // Rol "cajero exclusivo": solo puede ver Abrir Caja y el Punto de Venta
@@ -81,11 +97,45 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
   const [sidebarColapsado, setSidebarColapsado] = useState(false);
   const [menuMovilAbierto, setMenuMovilAbierto] = useState(false);
   const [fechaHora, setFechaHora] = useState(new Date());
+  const [notificacionesSistema, setNotificacionesSistema] = useState([]);
+  const [mostrarNotificaciones, setMostrarNotificaciones] = useState(false);
 
   useEffect(() => {
     const intervalo = setInterval(() => setFechaHora(new Date()), 30000);
     return () => clearInterval(intervalo);
   }, []);
+
+  const cargarNotificacionesSistema = async () => {
+    const empresaId = perfilUsuario?.empresas?.id || perfilUsuario?.empresa_id;
+    if (!empresaId) return;
+
+    const [comprasResult, cajasResult, productosResult] = await Promise.all([
+      supabase.from('compras').select('id, proveedor_nombre, saldo_pendiente').eq('empresa_id', empresaId).gt('saldo_pendiente', 0).limit(5),
+      supabase.from('caja_registros').select('id, usuario, fecha_apertura').eq('empresa_id', empresaId).eq('estado', 'Abierta').limit(5),
+      supabase.from('productos').select('id, nombre, stock_actual, alerta_stock_bajo').eq('empresa_id', empresaId).limit(100),
+    ]);
+
+    const avisos = [];
+    (comprasResult.data || []).forEach((compra) => avisos.push({
+      id: `compra-${compra.id}`, tipo: 'warning', titulo: 'Compra pendiente',
+      texto: `${compra.proveedor_nombre || 'Proveedor'} · ${Number(compra.saldo_pendiente || 0).toLocaleString('es-PY')} Gs`,
+    }));
+    (cajasResult.data || []).forEach((caja) => avisos.push({
+      id: `caja-${caja.id}`, tipo: 'info', titulo: 'Caja abierta',
+      texto: caja.usuario ? `Abierta por ${caja.usuario}` : 'Hay una caja abierta',
+    }));
+    (productosResult.data || []).filter((producto) => Number(producto.stock_actual || 0) <= Number(producto.alerta_stock_bajo ?? 5)).slice(0, 5).forEach((producto) => avisos.push({
+      id: `stock-${producto.id}`, tipo: 'danger', titulo: 'Stock bajo',
+      texto: `${producto.nombre} · ${Number(producto.stock_actual || 0)} unidades`,
+    }));
+    setNotificacionesSistema(avisos.slice(0, 12));
+  };
+
+  useEffect(() => {
+    cargarNotificacionesSistema();
+    const intervalo = setInterval(cargarNotificacionesSistema, 60000);
+    return () => clearInterval(intervalo);
+  }, [perfilUsuario?.empresas?.id, perfilUsuario?.empresa_id]);
 
   const cerrarSesion = async () => {
     await supabase.auth.signOut();
@@ -231,6 +281,16 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
 
   // 2. ENRUTADOR DE VISTAS (Aquí se decide qué se dibuja a la derecha)
   const renderizarVista = () => {
+    if (!puedeVerVista(vistaActiva)) {
+      return (
+        <div className="bg-white rounded-xl border border-red-100 p-8 text-center shadow-sm">
+          <h2 className="text-lg font-bold text-gray-800">Acceso restringido</h2>
+          <p className="text-sm text-gray-500 mt-2">Tu rol no tiene permiso para acceder a este módulo.</p>
+          <button onClick={irAInicio} className="mt-4 bg-orange-500 text-white rounded px-4 py-2 text-sm font-bold">Volver al inicio</button>
+        </div>
+      );
+    }
+
     switch (vistaActiva) {
       case 'inicio':
         return <Inicio key={refreshInicio} perfilUsuario={perfilUsuario} />;
@@ -426,7 +486,7 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
 
           {/* Lista de Navegación */}
           <nav className="flex-1 overflow-y-auto overflow-x-hidden py-2 flex flex-col bg-[#1e1e2d]">
-            {!soloPOS && (
+            {!soloPOS && tieneCategoria('ot') && (
               <>
                 <Link to="/" onClick={() => irA('inicio', '/')} className={estiloBotonSimple('inicio')} title="Inicio">
                   <LayoutDashboard size={18} strokeWidth={2} /> {!sidebarColapsado && 'Inicio'}
@@ -691,15 +751,26 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
               <span className="hidden md:inline text-xs font-medium text-gray-600 whitespace-nowrap">
                 {fechaHora.toLocaleDateString('es-PY')}
               </span>
-              <button
-                type="button"
-                onClick={() => notificar.info('No tienes notificaciones nuevas.')}
-                className="w-8 h-8 rounded-md text-gray-500 hover:bg-gray-100 hover:text-orange-500 flex items-center justify-center"
-                title="Notificaciones"
-                aria-label="Notificaciones"
-              >
-                <Bell size={17} />
-              </button>
+              <div className="relative">
+                <button
+                  type="button"
+                  onClick={() => setMostrarNotificaciones((actual) => !actual)}
+                  className="relative w-8 h-8 rounded-md text-gray-500 hover:bg-gray-100 hover:text-orange-500 flex items-center justify-center"
+                  title="Notificaciones"
+                  aria-label="Notificaciones"
+                >
+                  <Bell size={17} />
+                  {notificacionesSistema.length > 0 && <span className="absolute -top-1 -right-1 min-w-4 h-4 px-1 rounded-full bg-red-500 text-white text-[9px] font-black flex items-center justify-center">{notificacionesSistema.length}</span>}
+                </button>
+                {mostrarNotificaciones && (
+                  <div className="absolute right-0 top-10 z-50 w-80 max-w-[calc(100vw-2rem)] bg-white border border-gray-200 rounded-xl shadow-xl overflow-hidden">
+                    <div className="px-4 py-3 border-b flex items-center justify-between"><span className="font-bold text-gray-800">Notificaciones</span><span className="text-[10px] text-gray-400">Datos en tiempo real</span></div>
+                    <div className="max-h-80 overflow-y-auto">
+                      {notificacionesSistema.length === 0 ? <p className="p-5 text-center text-sm text-gray-400">No hay notificaciones nuevas.</p> : notificacionesSistema.map((aviso) => <div key={aviso.id} className="px-4 py-3 border-b last:border-0 hover:bg-gray-50"><p className={`text-xs font-bold ${aviso.tipo === 'danger' ? 'text-red-600' : aviso.tipo === 'warning' ? 'text-orange-600' : 'text-blue-600'}`}>{aviso.titulo}</p><p className="text-xs text-gray-600 mt-0.5">{aviso.texto}</p></div>)}
+                    </div>
+                  </div>
+                )}
+              </div>
               <span className="text-xs md:text-sm font-medium text-gray-700 flex items-center gap-2">
                 <span className="bg-orange-500 text-white rounded-full w-6 h-6 flex items-center justify-center text-[10px] font-bold">
                   {(perfilUsuario?.empresas?.nombre || 'N').charAt(0).toUpperCase()}

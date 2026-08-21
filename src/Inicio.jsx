@@ -541,10 +541,10 @@ const Inicio = ({ perfilUsuario }) => {
       <div className="bg-[#f4f7fa] min-h-screen w-full">
 
         {/* HEADER */}
-        <div className="bg-[#1e293b] p-8 rounded-3xl text-white mb-6 relative overflow-hidden shadow-xl">
-          <div className="relative z-10 flex flex-wrap justify-between items-end gap-4">
+        <div className="bg-[#1e293b] p-4 sm:p-6 lg:p-8 rounded-3xl text-white mb-6 relative overflow-hidden shadow-xl">
+          <div className="relative z-10 flex flex-col sm:flex-row sm:flex-wrap justify-between sm:items-end gap-4">
             <div>
-              <h1 className="text-3xl font-extrabold mb-1">{saludo}, {perfilUsuario?.empresas?.nombre || 'tu negocio'} 👋</h1>
+              <h1 className="text-2xl sm:text-3xl font-extrabold mb-1 break-words">{saludo}, {perfilUsuario?.empresas?.nombre || 'tu negocio'} 👋</h1>
               <p className="text-slate-400 text-sm font-medium">Resumen de tu negocio — <span className="capitalize">{fechaHoy}</span></p>
             </div>
             <FiltroFecha value={rango} onChange={(nuevoRango) => setRango(nuevoRango)} />
@@ -622,7 +622,7 @@ const Inicio = ({ perfilUsuario }) => {
                       Forzar Cierre
                     </button>
                   </div>
-                  <div className="grid grid-cols-4 gap-2 mt-3 pt-3 border-t border-emerald-100">
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mt-3 pt-3 border-t border-emerald-100">
                     <div>
                       <p className="text-[9px] font-bold text-gray-400 uppercase">Ventas</p>
                       <p className="text-xs font-bold text-gray-800">{formatCurrency(caja.totalVentasCaja)}</p>
@@ -650,7 +650,7 @@ const Inicio = ({ perfilUsuario }) => {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
           <div className="lg:col-span-2 bg-white p-6 rounded-3xl shadow-sm border border-gray-50 transition-all duration-300 hover:shadow-xl hover:border-gray-200">
             <h3 className="font-black text-gray-800 mb-6 flex items-center gap-2"><LineChart size={20} className="text-blue-500" /> Ventas ({rango.label})</h3>
-            <div className="h-[300px] w-full">
+            <div className="h-[240px] sm:h-[300px] w-full min-w-0">
               {datosLinea.some((d) => d.total > 0) ? (
                 <ResponsiveContainer width="100%" height="100%">
                   <AreaChart data={datosLinea}>
@@ -673,7 +673,7 @@ const Inicio = ({ perfilUsuario }) => {
 
           <div className="bg-white p-6 rounded-3xl shadow-sm border border-gray-50 transition-all duration-300 hover:shadow-xl hover:border-gray-200">
             <h3 className="font-black text-gray-800 mb-6 flex items-center gap-2"><PieChartIcon size={20} className="text-blue-500" /> Composición</h3>
-            <div className="h-[300px] w-full">
+            <div className="h-[240px] sm:h-[300px] w-full min-w-0">
               {datosPie.length > 0 ? (
                 <ResponsiveContainer width="100%" height="100%">
                   <PieChart>
@@ -695,7 +695,7 @@ const Inicio = ({ perfilUsuario }) => {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
           <div className="lg:col-span-2 bg-white p-6 rounded-3xl shadow-sm border border-gray-50 transition-all duration-300 hover:shadow-xl hover:border-gray-200">
             <h3 className="font-black text-gray-800 mb-6 flex items-center gap-2"><BarChart3 size={20} className="text-blue-500" /> Ventas vs Compras vs Gastos (6 meses)</h3>
-            <div className="h-[280px] w-full">
+            <div className="h-[230px] sm:h-[280px] w-full min-w-0">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={datos6meses}>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} />

@@ -44,6 +44,14 @@ const CATEGORIAS_PERMISOS = [
         key: 'configuraciones', titulo: 'Configuraciones',
         permisos: ['Acceso a configuraciones generales del sistema'],
     },
+    {
+        key: 'ot', titulo: 'Órdenes de trabajo',
+        permisos: ['Ver órdenes de trabajo', 'Crear orden de trabajo', 'Editar orden de trabajo', 'Borrar orden de trabajo'],
+    },
+    {
+        key: 'ubicaciones', titulo: 'Ubicaciones comerciales',
+        permisos: ['Ver ubicaciones', 'Administrar ubicaciones'],
+    },
 ];
 
 const RolPermisos = ({ rolEditar, onGuardado, onCancelar }) => {
