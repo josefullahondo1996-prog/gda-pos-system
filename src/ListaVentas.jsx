@@ -3,9 +3,11 @@ import { supabase } from './supabaseClient';
 import { useEmpresaInfo } from './utils/useEmpresa';
 import { generateReceipt } from './utils/generateReceipt';
 import { ajustarStockUbicacion } from './utils/stockUbicacion';
+import { useNotificacion } from './NotificacionContext';
 
 export default function ListaVentas() {
   const { id: empresaId, nombre: nombreEmpresa, direccion: direccionEmpresa, telefono: telefonoEmpresa, ruc: rucEmpresa } = useEmpresaInfo();
+  const { confirmar, notificar } = useNotificacion();
   const [ventas, setVentas] = useState([]);
   const [ubicaciones, setUbicaciones] = useState([]);
   const [cargando, setCargando] = useState(false);
@@ -71,7 +73,8 @@ export default function ListaVentas() {
   };
 
   const borrarVenta = async (venta) => {
-    if (!confirm(`Esto borrará la venta #${venta.id} permanentemente y repondrá el stock de los productos. ¿Confirmas?`)) return;
+    if (!(await confirmar(`La venta #${venta.id} será eliminada y se repondrá el stock de sus productos.`, { titulo: '¿Estás seguro?', textoConfirmar: 'Eliminar venta', textoCancelar: 'Cancelar', peligroso: true }))) return;
+      notificar.exito('Venta eliminada y stock devuelto correctamente.');
     setCargando(true);
     try {
       if ((venta.estado_pago || venta.estado) !== 'Anulada') {

@@ -1,9 +1,11 @@
 import { useEffect, useState } from 'react';
 import { supabase } from './supabaseClient';
 import { useEmpresaInfo } from './utils/useEmpresa';
+import { useNotificacion } from './NotificacionContext';
 
 export default function Marcas() {
     const { id: empresaId } = useEmpresaInfo();
+    const { confirmar } = useNotificacion();
     const [marcas, setMarcas] = useState([]);
     const [busqueda, setBusqueda] = useState('');
     const [cargando, setCargando] = useState(true);
@@ -84,7 +86,7 @@ export default function Marcas() {
     };
 
     const eliminarMarca = async (marca) => {
-        if (!window.confirm(`¿Eliminar la marca "${marca.nombre}"?`)) return;
+        if (!(await confirmar(`La marca "${marca.nombre}" será eliminada permanentemente.`, { titulo: '¿Estás seguro?', textoConfirmar: 'Eliminar', textoCancelar: 'Cancelar', peligroso: true }))) return;
         const { error } = await supabase.from('marcas').delete().eq('id', marca.id).eq('empresa_id', empresaId);
         if (error) return alert('Error al eliminar: ' + error.message);
         setMarcas(marcas.filter((m) => m.id !== marca.id));

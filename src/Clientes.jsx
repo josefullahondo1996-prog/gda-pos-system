@@ -6,9 +6,11 @@ import { useEmpresaInfo } from './utils/useEmpresa';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { generateReceipt } from './utils/generateReceipt';
+import { useNotificacion } from './NotificacionContext';
 
 export default function Clientes() {
   const { id: empresaId, nombre: nombreDelNegocio, direccion: direccionEmpresa, telefono: telefonoEmpresa } = useEmpresaInfo();
+  const { notificar, confirmar } = useNotificacion();
   const [clientes, setClientes] = useState([]);
   const [ventasRaw, setVentasRaw] = useState([]);
   const [ubicacionesMap, setUbicacionesMap] = useState({});
@@ -631,10 +633,10 @@ export default function Clientes() {
       : await supabase.from('clientes').insert([{ ...datosCliente, estado: 'Activo' }]);
 
     if (error) {
-      alert('Error al guardar: ' + error.message);
+      notificar.error(`No se pudo ${clienteEditando ? 'actualizar' : 'registrar'} el contacto. ${error.message}`);
     } else {
       sonidoExito();
-      alert(clienteEditando ? '¡Cliente actualizado exitosamente!' : '¡Cliente registrado exitosamente con todos sus datos!');
+      notificar.exito(clienteEditando ? 'Contacto actualizado correctamente.' : 'Cliente registrado correctamente.');
       setMostrarModalAñadir(false);
       setClienteEditando(null);
       resetearFormulario();
@@ -783,7 +785,17 @@ export default function Clientes() {
   };
 
   const handleEliminarCliente = async (cliente) => {
-    if (!window.confirm(`¿Eliminar permanentemente a "${cliente.nombre}"? Esta acción no se puede deshacer.`)) return;
+    const nombreContacto = cliente.nombre_empresa || cliente.nombre || 'este contacto';
+    const confirmarEliminacion = await confirmar(
+      `Este contacto será eliminado permanentemente:\n\n${nombreContacto}\n\nEsta acción no se puede deshacer.`,
+      {
+        titulo: '¿Estás seguro?',
+        textoConfirmar: 'Eliminar',
+        textoCancelar: 'Cancelar',
+        peligroso: true,
+      }
+    );
+    if (!confirmarEliminacion) return;
 
     try {
       const { error } = await supabase.from('clientes').delete().eq('id', cliente.id).eq('empresa_id', empresaId);
@@ -791,11 +803,11 @@ export default function Clientes() {
 
       setClientes((prev) => prev.filter((c) => c.id !== cliente.id));
       sonidoExito();
-      alert('Cliente eliminado correctamente.');
+      notificar.exito('Cliente eliminado correctamente.');
     } catch (error) {
       sonidoError();
       console.error('Error al eliminar cliente:', error.message);
-      alert('Hubo un error al eliminar el cliente: ' + error.message);
+      notificar.error('No se pudo eliminar el cliente. ' + error.message);
     }
   };
 

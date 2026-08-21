@@ -2,9 +2,11 @@ import { useEffect, useState } from 'react';
 import { supabase } from './supabaseClient';
 import { useEmpresaInfo } from './utils/useEmpresa';
 import RolPermisos from './RolPermisos';
+import { useNotificacion } from './NotificacionContext';
 
 export default function Roles() {
     const { id: empresaId } = useEmpresaInfo();
+    const { confirmar } = useNotificacion();
     const [roles, setRoles] = useState([]);
     const [busqueda, setBusqueda] = useState('');
     const [cargando, setCargando] = useState(true);
@@ -35,7 +37,7 @@ export default function Roles() {
     };
 
     const eliminarRol = async (rol) => {
-        if (!window.confirm(`¿Eliminar el rol "${rol.nombre}"?`)) return;
+        if (!(await confirmar(`El rol "${rol.nombre}" será eliminado permanentemente.`, { titulo: '¿Estás seguro?', textoConfirmar: 'Eliminar', textoCancelar: 'Cancelar', peligroso: true }))) return;
         const { error } = await supabase.from('roles').delete().eq('id', rol.id).eq('empresa_id', empresaId);
         if (error) return alert('Error al eliminar: ' + error.message);
         setRoles(roles.filter((r) => r.id !== rol.id));

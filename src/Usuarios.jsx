@@ -2,9 +2,11 @@ import React, { useState, useEffect } from 'react';
 import { supabase } from './supabaseClient';
 import { useEmpresaInfo } from './utils/useEmpresa';
 import AgregarUsuario from './AgregarUsuario';
+import { useNotificacion } from './NotificacionContext';
 
 const Usuarios = () => {
   const { id: empresaId } = useEmpresaInfo();
+  const { confirmar } = useNotificacion();
   const [usuarios, setUsuarios] = useState([]);
   const [cargando, setCargando] = useState(true);
   const [busqueda, setBusqueda] = useState('');
@@ -69,7 +71,8 @@ const Usuarios = () => {
 
   // === ELIMINAR USUARIO PERMANENTEMENTE ===
   const handleEliminarUsuario = async (usuario) => {
-    if (!window.confirm(`¿Eliminar permanentemente a "${usuario.nombre || usuario.nombre_usuario}"? Esta acción no se puede deshacer.`)) return;
+    const nombreUsuario = usuario.nombre || usuario.nombre_usuario || 'este usuario';
+    if (!(await confirmar(`El usuario "${nombreUsuario}" será eliminado permanentemente.`, { titulo: '¿Estás seguro?', textoConfirmar: 'Eliminar usuario', textoCancelar: 'Cancelar', peligroso: true }))) return;
 
     try {
       // Todo el borrado (ficha en "usuarios" + cuenta de acceso en Auth) pasa

@@ -15,9 +15,11 @@ const FORM_VACIO = {
   saldo_apertura: '',
   estado: 'Activo',
 };
+import { useNotificacion } from './NotificacionContext';
 
 const Proveedores = () => {
   const { id: empresaId } = useEmpresaInfo();
+  const { confirmar } = useNotificacion();
   const [proveedores, setProveedores] = useState([]);
   const [loading, setLoading] = useState(true);
   const [busqueda, setBusqueda] = useState('');
@@ -144,7 +146,8 @@ const Proveedores = () => {
   // === Borrar ===
   const borrarProveedor = async (proveedor) => {
     setMenuAccionesAbierto(null);
-    if (!window.confirm(`¿Seguro que querés borrar a "${proveedor.nombre_empresa || proveedor.nombre}"? Esta acción no se puede deshacer.`)) {
+    const nombreProveedor = proveedor.nombre_empresa || proveedor.nombre || 'este proveedor';
+    if (!(await confirmar(`El contacto "${nombreProveedor}" será eliminado permanentemente.`, { titulo: '¿Estás seguro?', textoConfirmar: 'Eliminar', textoCancelar: 'Cancelar', peligroso: true }))) {
       return;
     }
     try {

@@ -8,6 +8,7 @@ import { consultarFacturaElectronica, getBadgeSifen } from './utils/goekuaServic
 import FiltroFecha from './FiltroFecha';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import { useNotificacion } from './NotificacionContext';
 
 const formatGs = (v) => `Gs ${Number(v || 0).toLocaleString('es-PY')}`;
 const formatFecha = (f) => (f ? new Date(f).toLocaleDateString('es-PY') + ' ' + new Date(f).toLocaleTimeString('es-PY', { hour: '2-digit', minute: '2-digit' }) : '—');
@@ -21,6 +22,7 @@ const badgeEstado = (estado) => {
 
 export default function TodasLasVentas({ onNuevaVenta }) {
     const { id: empresaId, nombre: nombreEmpresa, direccion: direccionEmpresa, telefono: telefonoEmpresa, ruc: rucEmpresa } = useEmpresaInfo();
+    const { confirmar } = useNotificacion();
     const [ventas, setVentas] = useState([]);
     const [ubicaciones, setUbicaciones] = useState({});
     const [celularesPorCliente, setCelularesPorCliente] = useState({});
@@ -190,7 +192,7 @@ export default function TodasLasVentas({ onNuevaVenta }) {
     };
 
     const borrarVenta = async (venta) => {
-        if (!confirm(`Esto borra la venta #${venta.id} de forma permanente. ${venta.estado_pago !== 'Anulada' && venta.estado_pago !== 'Devuelta' ? 'También se repondrá el stock de sus productos. ' : ''}¿Confirmás?`)) return;
+        if (!(await confirmar(`La venta #${venta.id} será eliminada permanentemente. ${venta.estado_pago !== 'Anulada' && venta.estado_pago !== 'Devuelta' ? 'También se repondrá el stock de sus productos.' : ''}`, { titulo: '¿Estás seguro?', textoConfirmar: 'Eliminar venta', textoCancelar: 'Cancelar', peligroso: true }))) return;
         
         setCargando(true);
         try {

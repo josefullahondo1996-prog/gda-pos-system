@@ -9,9 +9,11 @@ import { useEmpresaInfo } from './utils/useEmpresa';
 import { useUbicacionUsuario } from './utils/useUbicacion';
 import { useSucursalActiva } from './utils/SucursalContext';
 import { cargarMapaStockPorUbicacion } from './utils/stockUbicacion';
+import { useNotificacion } from './NotificacionContext';
 
 export default function ListaProductos() {
   const { id: empresaId, nombre: nombreEmpresa } = useEmpresaInfo();
+  const { confirmar } = useNotificacion();
   const { nombre: nombreUbicacionUsuario, ve_todas: usuarioVeTodas } = useUbicacionUsuario();
   // sucursalActiva: la elegida en el selector global del header.
   // Si el usuario está fijo a una sola sucursal, el contexto ya la deja bloqueada acá también.
@@ -145,7 +147,7 @@ export default function ListaProductos() {
   };
 
   const eliminarProducto = async (id) => {
-    if (!window.confirm('¿Eliminar este producto? Esta acción no se puede deshacer.')) return;
+    if (!(await confirmar('Este producto será eliminado permanentemente.', { titulo: '¿Estás seguro?', textoConfirmar: 'Eliminar', textoCancelar: 'Cancelar', peligroso: true }))) return;
     const { error } = await supabase.from('productos').delete().eq('id', id).eq('empresa_id', empresaId);
     if (error) return alert('Error al eliminar: ' + error.message);
     setProductos(productos.filter((p) => p.id !== id));
@@ -206,7 +208,7 @@ export default function ListaProductos() {
 
   const eliminarSeleccionados = async () => {
     if (seleccionados.length === 0) return alert('Seleccioná al menos un producto.');
-    if (!window.confirm(`¿Eliminar ${seleccionados.length} producto(s) seleccionado(s)?`)) return;
+    if (!(await confirmar(`${seleccionados.length} producto(s) serán eliminados permanentemente.`, { titulo: '¿Estás seguro?', textoConfirmar: 'Eliminar', textoCancelar: 'Cancelar', peligroso: true }))) return;
     const { error } = await supabase.from('productos').delete().in('id', seleccionados).eq('empresa_id', empresaId);
     if (error) return alert('Error al eliminar: ' + error.message);
     setProductos(productos.filter((p) => !seleccionados.includes(p.id)));
@@ -256,7 +258,7 @@ export default function ListaProductos() {
     const eleccion = prompt(`¿De qué sucursal quitás estos ${seleccionados.length} producto(s)? Escribí el número:\n${nombresUbicacion}`);
     const ubicacion = ubicacionesDisponibles[Number(eleccion) - 1];
     if (!ubicacion) return;
-    if (!window.confirm(`Esto borra el registro de stock de esos productos en "${ubicacion.nombre}" (no borra el producto ni su stock en otras sucursales). ¿Confirmás?`)) return;
+    if (!(await confirmar(`Se eliminará el registro de stock de esos productos en "${ubicacion.nombre}". No se borrarán los productos ni el stock de otras sucursales.`, { titulo: '¿Estás seguro?', textoConfirmar: 'Eliminar stock', textoCancelar: 'Cancelar', peligroso: true }))) return;
     const { error } = await supabase.from('producto_stock_ubicacion').delete().in('producto_id', seleccionados).eq('ubicacion_id', ubicacion.id).eq('empresa_id', empresaId);
     if (error) return alert('Error: ' + error.message);
     cargarMapaStockPorUbicacion(empresaId).then(setMapaStockUbicacion);

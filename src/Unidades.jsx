@@ -1,9 +1,11 @@
 import { useEffect, useState } from 'react';
 import { supabase } from './supabaseClient';
 import { useEmpresaInfo } from './utils/useEmpresa';
+import { useNotificacion } from './NotificacionContext';
 
 export default function Unidades() {
     const { id: empresaId } = useEmpresaInfo();
+    const { confirmar } = useNotificacion();
     const [unidades, setUnidades] = useState([]);
     const [busqueda, setBusqueda] = useState('');
     const [cargando, setCargando] = useState(true);
@@ -84,7 +86,7 @@ export default function Unidades() {
     };
 
     const eliminarUnidad = async (unidad) => {
-        if (!window.confirm(`¿Eliminar la unidad "${unidad.nombre}"?`)) return;
+        if (!(await confirmar(`La unidad "${unidad.nombre}" será eliminada permanentemente.`, { titulo: '¿Estás seguro?', textoConfirmar: 'Eliminar', textoCancelar: 'Cancelar', peligroso: true }))) return;
         const { error } = await supabase.from('unidades').delete().eq('id', unidad.id).eq('empresa_id', empresaId);
         if (error) return alert('Error al eliminar: ' + error.message);
         setUnidades(unidades.filter((u) => u.id !== unidad.id));
