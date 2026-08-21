@@ -12,11 +12,13 @@ import { generarFacturaElectronica } from './utils/goekuaService';
 import { useEmpresaInfo } from './utils/useEmpresa';
 import { useUbicacionUsuario } from './utils/useUbicacion';
 import { cargarMapaStockPorUbicacion } from './utils/stockUbicacion';
+import { useNotificacion } from './NotificacionContext';
 
 const formatGs = (valor) => `Gs ${Number(valor || 0).toLocaleString('es-PY')}`;
 
 const PuntoDeVenta = ({ cajaInfo, session, perfilUsuario, onVolver, onSolicitarCierre, onNuevoGasto }) => {
   const { id: empresaId, nombre: nombreEmpresa, direccion: direccionEmpresa, telefono: telefonoEmpresa, ruc: rucEmpresa } = useEmpresaInfo();
+  const { notificar } = useNotificacion();
   const [ultimaVenta, setUltimaVenta] = useState(null);
   const [formatoTicket, setFormatoTicket] = useState(() => localStorage.getItem('gda_formato_ticket') || '80mm');
   const [impresoraComandaOcupada, setImpresoraComandaOcupada] = useState(false);
@@ -444,15 +446,33 @@ const PuntoDeVenta = ({ cajaInfo, session, perfilUsuario, onVolver, onSolicitarC
             {fechaHora.toLocaleDateString('es-PY')} {fechaHora.toLocaleTimeString('es-PY', { hour: '2-digit', minute: '2-digit' })}
           </span>
         </div>
-        <div className="flex flex-wrap gap-2 text-xs font-bold">
-          <button onClick={cerrarRegistro} className="bg-red-50 text-red-600 px-3 py-2 rounded-lg hover:bg-red-100">
+        <div className="flex flex-wrap justify-end gap-1.5 text-[11px] font-bold">
+          <button onClick={() => notificar.info('El detalle se registra desde la operación de venta.')} className="bg-emerald-50 text-emerald-700 border border-emerald-100 px-2.5 py-1.5 rounded hover:bg-emerald-100 whitespace-nowrap">
+            ▣ Registrar detalles
+          </button>
+          <button onClick={cerrarRegistro} className="bg-red-50 text-red-600 border border-red-100 px-2.5 py-1.5 rounded hover:bg-red-100 whitespace-nowrap">
             🔒 Cerrar registro
           </button>
-          <button onClick={() => setMostrarGastos(true)} className="bg-gray-100 text-gray-700 px-3 py-2 rounded-lg hover:bg-gray-200">
+          <button onClick={() => setMostrarGastos(true)} className="bg-orange-50 text-orange-700 border border-orange-100 px-2.5 py-1.5 rounded hover:bg-orange-100 whitespace-nowrap">
             🧾 Gastos
           </button>
-          <button onClick={pantallaCompleta} className="bg-gray-100 text-gray-700 px-3 py-2 rounded-lg hover:bg-gray-200">
+          <button onClick={() => notificar.info('Calculadora disponible próximamente.')} className="bg-gray-50 text-gray-700 border border-gray-200 px-2.5 py-1.5 rounded hover:bg-gray-100 whitespace-nowrap">
+            ▣ Calculadora
+          </button>
+          <button onClick={() => notificar.info('La devolución se gestiona desde Todas las ventas.')} className="bg-red-50 text-red-700 border border-red-100 px-2.5 py-1.5 rounded hover:bg-red-100 whitespace-nowrap">
+            ↩ Devolución de venta
+          </button>
+          <button onClick={() => notificar.info('El módulo Delivery aún no está habilitado.')} className="bg-blue-50 text-blue-700 border border-blue-100 px-2.5 py-1.5 rounded hover:bg-blue-100 whitespace-nowrap">
+            ◇ Delivery
+          </button>
+          <button onClick={pantallaCompleta} className="bg-gray-50 text-gray-700 border border-gray-200 px-2.5 py-1.5 rounded hover:bg-gray-100 whitespace-nowrap">
             ⛶ Pantalla completa
+          </button>
+          <button onClick={() => notificar.info('La sustitución de personal aún no está habilitada.')} className="bg-indigo-50 text-indigo-700 border border-indigo-100 px-2.5 py-1.5 rounded hover:bg-indigo-100 whitespace-nowrap">
+            ♙ Sustitución de personal
+          </button>
+          <button onClick={() => { if (onNuevoGasto) onNuevoGasto(); else setMostrarGastos(true); }} className="bg-red-50 text-red-700 border border-red-100 px-2.5 py-1.5 rounded hover:bg-red-100 whitespace-nowrap">
+            ⊖ Agregar gasto
           </button>
         </div>
       </div>

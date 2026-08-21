@@ -6,7 +6,7 @@ import {
   LayoutDashboard, Users, Contact, Package, Factory, Wrench,
   ArrowDownToLine, ArrowUpFromLine, BarChart3, ShoppingCart, LogOut, Settings,
   MapPin, FileText, Barcode, Printer, Percent, ClipboardList, CreditCard,
-  Menu, X
+  Menu, X, Bell
 } from 'lucide-react';
 import ConfiguracionEmpresa from './ConfiguracionEmpresa';
 import ConfiguracionFacturaElectronica from './ConfiguracionFacturaElectronica';
@@ -80,6 +80,12 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
   };
   const [sidebarColapsado, setSidebarColapsado] = useState(false);
   const [menuMovilAbierto, setMenuMovilAbierto] = useState(false);
+  const [fechaHora, setFechaHora] = useState(new Date());
+
+  useEffect(() => {
+    const intervalo = setInterval(() => setFechaHora(new Date()), 30000);
+    return () => clearInterval(intervalo);
+  }, []);
 
   const cerrarSesion = async () => {
     await supabase.auth.signOut();
@@ -673,7 +679,27 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
                 {vistaActiva === 'cobro_de_ventas' && 'Cobros de Venta'}
               </h2>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 md:gap-3">
+              <button
+                onClick={() => irA('pos', '/pos')}
+                className="bg-orange-500 hover:bg-orange-600 text-white rounded-md px-3 py-2 text-xs font-bold flex items-center gap-2 shadow-sm whitespace-nowrap"
+                title="Punto de venta"
+              >
+                <ShoppingCart size={15} />
+                <span className="hidden sm:inline">Punto de venta</span>
+              </button>
+              <span className="hidden md:inline text-xs font-medium text-gray-600 whitespace-nowrap">
+                {fechaHora.toLocaleDateString('es-PY')}
+              </span>
+              <button
+                type="button"
+                onClick={() => notificar.info('No tienes notificaciones nuevas.')}
+                className="w-8 h-8 rounded-md text-gray-500 hover:bg-gray-100 hover:text-orange-500 flex items-center justify-center"
+                title="Notificaciones"
+                aria-label="Notificaciones"
+              >
+                <Bell size={17} />
+              </button>
               <span className="text-xs md:text-sm font-medium text-gray-700 flex items-center gap-2">
                 <span className="bg-orange-500 text-white rounded-full w-6 h-6 flex items-center justify-center text-[10px] font-bold">
                   {(perfilUsuario?.empresas?.nombre || 'N').charAt(0).toUpperCase()}
