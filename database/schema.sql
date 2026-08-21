@@ -162,6 +162,19 @@ CREATE TABLE detalle_compras (
     creado_en timestamptz NOT NULL DEFAULT now()
 );
 
+CREATE TABLE pagos_compras (
+    id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    empresa_id uuid NOT NULL REFERENCES empresas(id) ON DELETE CASCADE,
+    compra_id uuid NOT NULL REFERENCES compras(id) ON DELETE CASCADE,
+    monto numeric(12,2) NOT NULL DEFAULT 0,
+    metodo_pago text,
+    fecha timestamptz NOT NULL DEFAULT now(),
+    cuenta_pago text,
+    nota text,
+    documento_url text,
+    creado_en timestamptz NOT NULL DEFAULT now()
+);
+
 CREATE TABLE ventas (
     id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
     empresa_id uuid NOT NULL REFERENCES empresas(id) ON DELETE CASCADE,
@@ -218,6 +231,21 @@ CREATE TABLE gastos (
     creado_en timestamptz NOT NULL DEFAULT now()
 );
 
+ALTER TABLE gastos ADD COLUMN IF NOT EXISTS fecha date;
+ALTER TABLE gastos ADD COLUMN IF NOT EXISTS proveedor text;
+ALTER TABLE gastos ADD COLUMN IF NOT EXISTS nro_referencia text;
+ALTER TABLE gastos ADD COLUMN IF NOT EXISTS nota text;
+ALTER TABLE gastos ADD COLUMN IF NOT EXISTS subcategoria text;
+
+CREATE TABLE IF NOT EXISTS categorias_gastos (
+    id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    empresa_id uuid NOT NULL REFERENCES empresas(id) ON DELETE CASCADE,
+    nombre text NOT NULL,
+    codigo text,
+    creado_en timestamptz NOT NULL DEFAULT now(),
+    UNIQUE (empresa_id, nombre)
+);
+
 CREATE INDEX ON usuarios(empresa_id);
 CREATE INDEX ON roles(empresa_id);
 CREATE INDEX ON productos(empresa_id);
@@ -225,14 +253,67 @@ CREATE INDEX ON clientes(empresa_id);
 CREATE INDEX ON proveedores(empresa_id);
 CREATE INDEX ON compras(empresa_id);
 CREATE INDEX ON detalle_compras(empresa_id);
+CREATE INDEX ON pagos_compras(empresa_id);
+CREATE INDEX ON pagos_compras(compra_id);
 CREATE INDEX ON ventas(empresa_id);
 CREATE INDEX ON detalle_ventas(empresa_id);
 CREATE INDEX ON caja_registros(empresa_id);
 CREATE INDEX ON gastos(empresa_id);
+CREATE INDEX ON categorias_gastos(empresa_id);
 
 ALTER TABLE empresas ENABLE ROW LEVEL SECURITY;
 ALTER TABLE usuarios ENABLE ROW LEVEL SECURITY;
 ALTER TABLE clientes ENABLE ROW LEVEL SECURITY;
+ALTER TABLE pagos_compras ENABLE ROW LEVEL SECURITY;
+ALTER TABLE categorias_gastos ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "categorias_gastos_select_own_company"
+ON categorias_gastos FOR SELECT
+USING (empresa_id IN (SELECT empresa_id FROM usuarios WHERE auth_user_id = auth.uid()));
+
+CREATE POLICY "categorias_gastos_insert_own_company"
+ON categorias_gastos FOR INSERT
+WITH CHECK (empresa_id IN (SELECT empresa_id FROM usuarios WHERE auth_user_id = auth.uid()));
+
+CREATE POLICY "categorias_gastos_update_own_company"
+ON categorias_gastos FOR UPDATE
+USING (empresa_id IN (SELECT empresa_id FROM usuarios WHERE auth_user_id = auth.uid()))
+WITH CHECK (empresa_id IN (SELECT empresa_id FROM usuarios WHERE auth_user_id = auth.uid()));
+
+CREATE POLICY "categorias_gastos_delete_own_company"
+ON categorias_gastos FOR DELETE
+USING (empresa_id IN (SELECT empresa_id FROM usuarios WHERE auth_user_id = auth.uid()));
+
+CREATE POLICY "pagos_compras_select_own_company"
+ON pagos_compras
+FOR SELECT
+USING (
+    empresa_id IN (SELECT empresa_id FROM usuarios WHERE auth_user_id = auth.uid())
+);
+
+CREATE POLICY "pagos_compras_insert_own_company"
+ON pagos_compras
+FOR INSERT
+WITH CHECK (
+    empresa_id IN (SELECT empresa_id FROM usuarios WHERE auth_user_id = auth.uid())
+);
+
+CREATE POLICY "pagos_compras_update_own_company"
+ON pagos_compras
+FOR UPDATE
+USING (
+    empresa_id IN (SELECT empresa_id FROM usuarios WHERE auth_user_id = auth.uid())
+)
+WITH CHECK (
+    empresa_id IN (SELECT empresa_id FROM usuarios WHERE auth_user_id = auth.uid())
+);
+
+CREATE POLICY "pagos_compras_delete_own_company"
+ON pagos_compras
+FOR DELETE
+USING (
+    empresa_id IN (SELECT empresa_id FROM usuarios WHERE auth_user_id = auth.uid())
+);
 
 CREATE POLICY "empresas_select_own_company"
 ON empresas

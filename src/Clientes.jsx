@@ -582,29 +582,34 @@ export default function Clientes() {
       imagen_url: imagenClientePreview || null,
     };
 
-    // 5. Verificar duplicados antes de insertar (sólo cuando es un registro nuevo)
-    if (!clienteEditando) {
+    // 5. Verificar duplicados antes de insertar o actualizar.
+    // En edición se excluye el contacto actual para permitir guardar sus propios datos.
+    {
       let duplicadoEncontrado = null;
 
       if (nroDoc && nroDoc.trim()) {
         // Buscar por número de documento (RUC / CI)
-        const { data: existenteDoc } = await supabase
+        let consultaDocumento = supabase
           .from('clientes')
           .select('id, nombre, documento_nro')
           .eq('empresa_id', empresaId)
-          .eq('documento_nro', nroDoc.trim())
-          .maybeSingle();
+          .eq('documento_nro', nroDoc.trim());
+        if (clienteEditando) consultaDocumento = consultaDocumento.neq('id', clienteEditando.id);
+        const { data: existentesDoc } = await consultaDocumento.limit(1);
+        const existenteDoc = existentesDoc?.[0];
         if (existenteDoc) duplicadoEncontrado = existenteDoc;
       }
 
       if (!duplicadoEncontrado) {
         // Buscar por nombre exacto (ignora mayúsculas/minúsculas)
-        const { data: existenteNombre } = await supabase
+        let consultaNombre = supabase
           .from('clientes')
           .select('id, nombre')
           .eq('empresa_id', empresaId)
-          .ilike('nombre', nombreFinal)
-          .maybeSingle();
+          .ilike('nombre', nombreFinal);
+        if (clienteEditando) consultaNombre = consultaNombre.neq('id', clienteEditando.id);
+        const { data: existentesNombre } = await consultaNombre.limit(1);
+        const existenteNombre = existentesNombre?.[0];
         if (existenteNombre) duplicadoEncontrado = existenteNombre;
       }
 
@@ -614,7 +619,7 @@ export default function Clientes() {
           ? `Documento: ${duplicadoEncontrado.documento_nro}`
           : `Nombre: ${duplicadoEncontrado.nombre}`;
         alert(
-          `⚠️ Cliente ya registrado\n\n"${duplicadoEncontrado.nombre}" ya existe en el sistema (${detalle}).\n\nSi necesitás actualizar sus datos, usá la opción "Editar" desde la tabla de clientes.`
+          `⚠️ Contacto ya registrado\n\n"${duplicadoEncontrado.nombre}" ya existe en el sistema (${detalle}).\n\nNo se cambió el tipo de contacto para evitar duplicarlo.`
         );
         return;
       }
@@ -1273,10 +1278,10 @@ export default function Clientes() {
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6 items-end">
                   <div>
                     <label className="block font-bold text-gray-700 uppercase mb-1">TIPO DE CONTACTO *</label>
-                    {/* Esta pantalla solo registra personas/clientes. Los proveedores
-                        se registran desde la pantalla "Proveedores" para que no se mezclen. */}
-                    <select className="w-full border rounded p-2.5 bg-gray-100 outline-none" value={tipoContacto} onChange={(e) => setTipoContacto(e.target.value)} disabled>
+                    <select className="w-full border rounded p-2.5 bg-white outline-none" value={tipoContacto} onChange={(e) => setTipoContacto(e.target.value)}>
                       <option value="Clientes">Clientes</option>
+                      <option value="Proveedores">Proveedores</option>
+                      <option value="Ambos">Ambos (Proveedor y Cliente)</option>
                     </select>
                   </div>
 

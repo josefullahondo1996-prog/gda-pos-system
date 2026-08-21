@@ -96,7 +96,7 @@ export default function GananciasPerdidas() {
     const gastoTotal = gastosF.reduce((a, g) => a + Number(g.monto || 0), 0);
 
     const beneficioBruto = ventasTotales - comprasTotales;
-    const beneficioNeto = beneficioBruto - gastoTotal - descuentoTotalVenta;
+    const beneficioNeto = beneficioBruto - gastoTotal;
     const margenBruto = ventasTotales > 0 ? (beneficioBruto / ventasTotales) * 100 : 0;
     const margenNeto = ventasTotales > 0 ? (beneficioNeto / ventasTotales) * 100 : 0;
 

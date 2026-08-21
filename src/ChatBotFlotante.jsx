@@ -27,144 +27,69 @@ export default function ChatBotFlotante({ perfilUsuario }) {
     const panelRef = useRef(null);
     const recognitionRef = useRef(null);
 
-    // Obtener la hora actual formateada
-    const obtenerHoraActual = () => {
-        return new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    };
+    const empresaId = perfilUsuario?.empresa_id || perfilUsuario?.empresas?.id || 'sin-empresa';
+    const usuarioId = perfilUsuario?.id || perfilUsuario?.auth_user_id || 'sin-usuario';
+    const claveHistorial = `chatbot_mensajes:${empresaId}:${usuarioId}`;
 
-    // Inicializar el Speech Recognition API para entrada de voz
+    const obtenerHoraActual = () => new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
     useEffect(() => {
         const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-        if (SpeechRecognition) {
-            const rec = new SpeechRecognition();
-            rec.continuous = false;
-            rec.interimResults = false;
-            rec.lang = 'es-ES';
-            
-            rec.onstart = () => {
-                setRecording(true);
-            };
-            rec.onend = () => {
-                setRecording(false);
-            };
-            rec.onerror = (event) => {
-                console.error("Speech recognition error:", event.error);
-                setRecording(false);
-                sonidoError();
-            };
-            rec.onresult = (event) => {
-                const transcript = event.results[0][0].transcript;
-                setTexto((prev) => (prev ? prev + ' ' + transcript : transcript));
-                sonidoExito();
-            };
-            recognitionRef.current = rec;
-        }
+        if (!SpeechRecognition) return;
+        const rec = new SpeechRecognition();
+        rec.continuous = false;
+        rec.interimResults = false;
+        rec.lang = 'es-ES';
+        rec.onstart = () => setRecording(true);
+        rec.onend = () => setRecording(false);
+        rec.onerror = (event) => { console.error('Speech recognition error:', event.error); setRecording(false); sonidoError(); };
+        rec.onresult = (event) => { setTexto((prev) => (prev ? `${prev} ${event.results[0][0].transcript}` : event.results[0][0].transcript)); sonidoExito(); };
+        recognitionRef.current = rec;
     }, []);
 
-    // Actualizar el saludo inicial dinámicamente según la empresa y usuario logueado
     useEffect(() => {
-        const mensajesGuardados = localStorage.getItem('chatbot_mensajes');
-        
-        if (mensajesGuardados) {
-            try {
-                setMensajes(JSON.parse(mensajesGuardados));
-            } catch (err) {
-                console.error('Error cargando chat guardado:', err);
-                crearSaludoInicial();
-            }
+        setDatosEmpresa(null);
+        setDatosVentas(null);
+        setDatosProductos(null);
+        setDatosClientes(null);
+        setDatosInventario(null);
+        const guardado = localStorage.getItem(claveHistorial);
+        if (guardado) {
+            try { setMensajes(JSON.parse(guardado)); } catch { crearSaludoInicial(); }
         } else {
             crearSaludoInicial();
         }
-    }, []);
+    }, [claveHistorial]);
 
-    // Función para crear saludo inicial
     const crearSaludoInicial = () => {
-        if (perfilUsuario) {
-            const nombreEmpresa = perfilUsuario.empresas?.nombre || 'tu negocio';
-            const nombreUsuario = perfilUsuario.nombre || 'Usuario';
-            const saludo = [
-                { 
-                    role: 'assistant', 
-                    text: `¡Hola, **${nombreUsuario}**! Soy el asistente virtual de **${nombreEmpresa}**. ¿En qué te puedo ayudar hoy?`,
-                    time: obtenerHoraActual()
-                }
-            ];
-            setMensajes(saludo);
-            localStorage.setItem('chatbot_mensajes', JSON.stringify(saludo));
-            // Cargar datos del sistema después de mostrar el saludo
-            cargarDatosDelSistema();
-        } else {
-            const saludo = [
-                { 
-                    role: 'assistant', 
-                    text: '¡Hola! Soy el asistente de **PYpos**. ¿En qué te puedo ayudar hoy?',
-                    time: obtenerHoraActual()
-                }
-            ];
-            setMensajes(saludo);
-            localStorage.setItem('chatbot_mensajes', JSON.stringify(saludo));
-        }
+        const nombreEmpresa = perfilUsuario?.empresas?.nombre || 'tu negocio';
+        const nombreUsuario = perfilUsuario?.nombre || 'Usuario';
+        const saludo = [{ role: 'assistant', text: perfilUsuario ? `¡Hola, **${nombreUsuario}**! Soy el asistente virtual de **${nombreEmpresa}**. ¿En qué te puedo ayudar hoy?` : '¡Hola! Soy el asistente de **PYpos**. ¿En qué te puedo ayudar hoy?', time: obtenerHoraActual() }];
+        setMensajes(saludo);
+        localStorage.setItem(claveHistorial, JSON.stringify(saludo));
+        if (perfilUsuario) cargarDatosDelSistema();
     };
 
-    // Cargar datos del sistema para dar contexto a la IA
     const cargarDatosDelSistema = async () => {
-        if (!perfilUsuario?.empresas?.id) return;
-        
-        const empresaId = perfilUsuario.empresas.id;
-        
+        const empresaIdActual = perfilUsuario?.empresas?.id;
+        if (!empresaIdActual) return;
         try {
-            // 1. Datos básicos de la empresa
-            const { data: empresa } = await supabase
-                .from('empresas')
-                .select('*')
-                .eq('id', empresaId)
-                .single();
+            const { data: empresa } = await supabase.from('empresas').select('*').eq('id', empresaIdActual).single();
             setDatosEmpresa(empresa);
-
-            // 2. Ventas de los últimos 30 días
-            const hace30Dias = new Date();
-            hace30Dias.setDate(hace30Dias.getDate() - 30);
-            const { data: ventas } = await supabase
-                .from('ventas')
-                .select('fecha, total, cliente, estado_pago, metodo_pago')
-                .eq('empresa_id', empresaId)
-                .gte('fecha', hace30Dias.toISOString())
-                .order('fecha', { ascending: false })
-                .limit(50);
-            
-            const totalVentas = ventas?.reduce((sum, v) => sum + (Number(v.total) || 0), 0) || 0;
-            const ventasHoy = ventas?.filter(v => new Date(v.fecha).toDateString() === new Date().toDateString()).length || 0;
+            const hace30Dias = new Date(); hace30Dias.setDate(hace30Dias.getDate() - 30);
+            const { data: ventas } = await supabase.from('ventas').select('fecha, total, cliente, estado_pago, metodo_pago').eq('empresa_id', empresaIdActual).gte('fecha', hace30Dias.toISOString()).order('fecha', { ascending: false }).limit(50);
+            const totalVentas = ventas?.reduce((sum, venta) => sum + (Number(venta.total) || 0), 0) || 0;
+            const ventasHoy = ventas?.filter((venta) => new Date(venta.fecha).toDateString() === new Date().toDateString()).length || 0;
             setDatosVentas({ total: totalVentas, cantidad: ventas?.length || 0, hoy: ventasHoy, ultimas: ventas?.slice(0, 10) });
-
-            // 3. Productos más vendidos e inventario
-            const { data: productos } = await supabase
-                .from('productos')
-                .select('id, nombre, precio_venta, precio_costo, cantidad_disponible, categoria')
-                .eq('empresa_id', empresaId)
-                .order('cantidad_disponible', { ascending: true })
-                .limit(20);
-            
-            const productosBarosStock = productos?.filter(p => p.cantidad_disponible < 10) || [];
-            setDatosProductos({ total: productos?.length || 0, bajoStock: productosBarosStock });
-
-            // 4. Clientes registrados
-            const { data: clientes } = await supabase
-                .from('clientes')
-                .select('id, nombre, email, telefono, numero_compras')
-                .eq('empresa_id', empresaId)
-                .order('numero_compras', { ascending: false })
-                .limit(50);
-            
+            const { data: productos } = await supabase.from('productos').select('id, nombre, precio_venta, precio_costo, cantidad_disponible, categoria').eq('empresa_id', empresaIdActual).order('cantidad_disponible', { ascending: true }).limit(20);
+            const productosBajoStock = productos?.filter((producto) => producto.cantidad_disponible < 10) || [];
+            setDatosProductos({ total: productos?.length || 0, bajoStock: productosBajoStock });
+            const { data: clientes } = await supabase.from('clientes').select('id, nombre, email, telefono, numero_compras').eq('empresa_id', empresaIdActual).order('numero_compras', { ascending: false }).limit(50);
             setDatosClientes({ total: clientes?.length || 0, clientes });
-
-            // 5. Estadísticas de inventario
-            const inventarioTotal = productos?.reduce((sum, p) => sum + (Number(p.cantidad_disponible) || 0), 0) || 0;
-            const valorInventario = productos?.reduce((sum, p) => sum + ((Number(p.cantidad_disponible) || 0) * (Number(p.precio_costo) || 0)), 0) || 0;
+            const inventarioTotal = productos?.reduce((sum, producto) => sum + (Number(producto.cantidad_disponible) || 0), 0) || 0;
+            const valorInventario = productos?.reduce((sum, producto) => sum + ((Number(producto.cantidad_disponible) || 0) * (Number(producto.precio_costo) || 0)), 0) || 0;
             setDatosInventario({ total: inventarioTotal, valor: valorInventario, productos: productos?.length || 0 });
-
-        } catch (error) {
-            console.error('Error cargando datos del sistema:', error);
-        }
+        } catch (error) { console.error('Error cargando datos del sistema:', error); }
     };
 
     const suggestions = [
@@ -174,79 +99,32 @@ export default function ChatBotFlotante({ perfilUsuario }) {
         { label: '⚙️ Abrir caja', text: '¿Cuáles son los pasos para abrir la caja?' },
     ];
 
-    // Sugerencias dinámicas basadas en datos del sistema
     const sugerenciasIntelligentes = () => {
         const sugerencias = [];
-        
-        if (datosProductos?.bajoStock?.length > 0) {
-            sugerencias.push({
-                label: `⚠️ ${datosProductos.bajoStock.length} bajo stock`,
-                text: `Tengo ${datosProductos.bajoStock.length} productos con bajo stock. ¿Cuáles son?`
-            });
-        }
-        
-        if (datosVentas?.hoy === 0) {
-            sugerencias.push({
-                label: '📊 Sin ventas hoy',
-                text: '¿Por qué no tengo ventas registradas hoy?'
-            });
-        } else if (datosVentas?.hoy > 0) {
-            sugerencias.push({
-                label: `✅ ${datosVentas.hoy} ventas hoy`,
-                text: `Muéstrame resumen de las ${datosVentas.hoy} ventas de hoy`
-            });
-        }
-        
-        if (datosClientes?.total > 100) {
-            sugerencias.push({
-                label: '👥 Clientes Top',
-                text: '¿Cuáles son mis clientes más frecuentes?'
-            });
-        }
-        
-        if (datosVentas?.total > 0) {
-            sugerencias.push({
-                label: '💰 Ganancia neta',
-                text: '¿Cuál es mi ganancia neta de este mes?'
-            });
-        }
-        
+        if (datosProductos?.bajoStock?.length > 0) sugerencias.push({ label: `⚠️ ${datosProductos.bajoStock.length} bajo stock`, text: `Tengo ${datosProductos.bajoStock.length} productos con bajo stock. ¿Cuáles son?` });
+        if (datosVentas?.hoy === 0) sugerencias.push({ label: '📊 Sin ventas hoy', text: '¿Por qué no tengo ventas registradas hoy?' });
+        else if (datosVentas?.hoy > 0) sugerencias.push({ label: `✅ ${datosVentas.hoy} ventas hoy`, text: `Muéstrame resumen de las ${datosVentas.hoy} ventas de hoy` });
+        if (datosClientes?.total > 100) sugerencias.push({ label: '👥 Clientes Top', text: '¿Cuáles son mis clientes más frecuentes?' });
+        if (datosVentas?.total > 0) sugerencias.push({ label: '💰 Ganancia neta', text: '¿Cuál es mi ganancia neta de este mes?' });
         return sugerencias.length > 0 ? sugerencias : suggestions;
     };
 
-    // Scroll automático al recibir mensajes
     useEffect(() => {
-        if (abierto) {
-            setTimeout(() => {
-                finRef.current?.scrollIntoView({ behavior: 'smooth' });
-            }, 100);
-        }
+        if (abierto) setTimeout(() => finRef.current?.scrollIntoView({ behavior: 'smooth' }), 100);
     }, [mensajes, abierto, enviando]);
 
-    // Establece la posición inicial al abrir el panel por primera vez
     useEffect(() => {
         if (abierto && posicion.x === null) {
-            const width = 360;
-            const height = 500;
-            const margin = 20;
-            setPosicion({
-                x: window.innerWidth - width - margin,
-                y: window.innerHeight - height - margin - 80,
-            });
+            const width = 360; const height = 500; const margin = 20;
+            setPosicion({ x: window.innerWidth - width - margin, y: window.innerHeight - height - margin - 80 });
         }
     }, [abierto]);
 
-    // Reajusta la posición cuando la ventana cambia de tamaño
     useEffect(() => {
         const handleResize = () => {
             if (posicion.x !== null && panelRef.current) {
                 const rect = panelRef.current.getBoundingClientRect();
-                const maxX = window.innerWidth - rect.width;
-                const maxY = window.innerHeight - rect.height;
-                setPosicion((prev) => ({
-                    x: Math.max(0, Math.min(prev.x, maxX)),
-                    y: Math.max(0, Math.min(prev.y, maxY)),
-                }));
+                setPosicion((prev) => ({ x: Math.max(0, Math.min(prev.x, window.innerWidth - rect.width)), y: Math.max(0, Math.min(prev.y, window.innerHeight - rect.height)) }));
             }
         };
         window.addEventListener('resize', handleResize);
@@ -262,7 +140,7 @@ export default function ChatBotFlotante({ perfilUsuario }) {
             { role: 'user', text: mensaje, time: obtenerHoraActual() }
         ];
         setMensajes(nuevosMensajes);
-        localStorage.setItem('chatbot_mensajes', JSON.stringify(nuevosMensajes));
+        localStorage.setItem(claveHistorial, JSON.stringify(nuevosMensajes));
         setTexto('');
         setEnviando(true);
         setMostrarIndicador(true);
@@ -331,7 +209,7 @@ export default function ChatBotFlotante({ perfilUsuario }) {
             const mensajeIA = { role: 'assistant', text: data.respuesta, time: obtenerHoraActual() };
             const mensajesActualizados = [...nuevosMensajes, mensajeIA];
             setMensajes(mensajesActualizados);
-            localStorage.setItem('chatbot_mensajes', JSON.stringify(mensajesActualizados));
+            localStorage.setItem(claveHistorial, JSON.stringify(mensajesActualizados));
             sonidoExito();
         } catch (err) {
             setConectado(false);
@@ -343,7 +221,7 @@ export default function ChatBotFlotante({ perfilUsuario }) {
             };
             const mensajesActualizados = [...nuevosMensajes, mensajeError];
             setMensajes(mensajesActualizados);
-            localStorage.setItem('chatbot_mensajes', JSON.stringify(mensajesActualizados));
+            localStorage.setItem(claveHistorial, JSON.stringify(mensajesActualizados));
             sonidoError();
         } finally {
             setEnviando(false);
@@ -371,7 +249,7 @@ export default function ChatBotFlotante({ perfilUsuario }) {
 
     const borrarHistorial = () => {
         if (window.confirm("¿Querés limpiar la conversación actual?")) {
-            localStorage.removeItem('chatbot_mensajes');
+            localStorage.removeItem(claveHistorial);
             const nombreEmpresa = perfilUsuario?.empresas?.nombre || 'tu negocio';
             const nombreUsuario = perfilUsuario?.nombre || 'Usuario';
             const saludoNuevo = [
@@ -382,7 +260,7 @@ export default function ChatBotFlotante({ perfilUsuario }) {
                 }
             ];
             setMensajes(saludoNuevo);
-            localStorage.setItem('chatbot_mensajes', JSON.stringify(saludoNuevo));
+            localStorage.setItem(claveHistorial, JSON.stringify(saludoNuevo));
             sonidoExito();
         }
     };

@@ -4,6 +4,7 @@ import { supabase } from './supabaseClient';
 import { useEmpresaInfo } from './utils/useEmpresa';
 
 const FORM_VACIO = {
+  tipo_contacto: 'Proveedores',
   nombre_empresa: '',
   representante_legal: '',
   documento_nro: '',
@@ -43,7 +44,7 @@ const Proveedores = () => {
         .from('clientes')
         .select('*')
         .eq('empresa_id', empresaId)
-        .eq('tipo_contacto', 'Proveedores')
+        .in('tipo_contacto', ['Proveedores', 'Ambos'])
         .order('nombre', { ascending: true });
 
       if (error) throw error;
@@ -78,6 +79,7 @@ const Proveedores = () => {
     setMenuAccionesAbierto(null);
     setProveedorEditando(proveedor);
     setForm({
+      tipo_contacto: proveedor.tipo_contacto || 'Proveedores',
       nombre_empresa: proveedor.nombre_empresa || '',
       representante_legal: proveedor.representante_legal || proveedor.nombre || '',
       documento_nro: proveedor.documento_nro || '',
@@ -102,7 +104,7 @@ const Proveedores = () => {
     try {
       const datos = {
         empresa_id: empresaId,
-        tipo_contacto: 'Proveedores',
+        tipo_contacto: form.tipo_contacto,
         nombre_empresa: form.nombre_empresa || null,
         nombre: form.representante_legal || form.nombre_empresa,
         representante_legal: form.representante_legal || null,
@@ -339,6 +341,14 @@ const Proveedores = () => {
             </div>
             <form onSubmit={guardarProveedor} className="p-5 overflow-y-auto flex flex-col gap-4 text-sm">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="md:col-span-2">
+                  <label className="block font-bold mb-1">Tipo de contacto:*</label>
+                  <select required value={form.tipo_contacto} onChange={(e) => setForm({ ...form, tipo_contacto: e.target.value })} className="w-full border rounded-md p-2 bg-white outline-none focus:ring-1 focus:ring-orange-500">
+                    <option value="Proveedores">Proveedores</option>
+                    <option value="Ambos">Ambos (Proveedor y Cliente)</option>
+                    <option value="Clientes">Clientes</option>
+                  </select>
+                </div>
                 <div>
                   <label className="block font-bold mb-1">Nombre de la empresa</label>
                   <input

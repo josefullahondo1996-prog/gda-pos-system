@@ -188,7 +188,9 @@ const PuntoDeVenta = ({ cajaInfo, session, perfilUsuario, onVolver, onSolicitarC
 
   const subtotal = carrito.reduce((acc, item) => acc + (item.precio_venta || item.precio || 0) * item.cantidad, 0);
   const totalArticulos = carrito.reduce((acc, item) => acc + item.cantidad, 0);
-  const totalConAjustes = Math.max(0, subtotal - Number(descuento || 0) + Number(cargoEmbalaje || 0));
+  const descuentoAplicado = Math.min(Math.max(0, Number(descuento) || 0), subtotal);
+  const cargoEmbalajeAplicado = Math.max(0, Number(cargoEmbalaje) || 0);
+  const totalConAjustes = Math.max(0, subtotal - descuentoAplicado + cargoEmbalajeAplicado);
   const vuelto = Number(montoPagado) > totalConAjustes ? Number(montoPagado) - totalConAjustes : 0;
   const saldoPendiente = Number(montoPagado) < totalConAjustes && Number(montoPagado) > 0
     ? totalConAjustes - Number(montoPagado)
@@ -249,8 +251,8 @@ const PuntoDeVenta = ({ cajaInfo, session, perfilUsuario, onVolver, onSolicitarC
       monto_pagado: montoPagadoFinal,
       saldo_pendiente: estadoPago === 'Credito' ? totalConAjustes : saldoPendienteFinal,
       articulos: totalArticulos,
-      descuento: Number(descuento) || 0,
-      cargo_embalaje: Number(cargoEmbalaje) || 0,
+      descuento: descuentoAplicado,
+      cargo_embalaje: cargoEmbalajeAplicado,
       nota_venta: notaVentaFinal || null,
       fecha: new Date().toISOString(),
       caja_id: cajaInfo?.id || null,
@@ -459,16 +461,24 @@ const PuntoDeVenta = ({ cajaInfo, session, perfilUsuario, onVolver, onSolicitarC
 
         <div className="w-full lg:w-[42%] flex flex-col border-r border-gray-200 bg-white overflow-hidden">
           <div className="p-3 border-b border-gray-100 flex gap-2 items-center">
-            <select
-              value={cliente}
-              onChange={(e) => setCliente(e.target.value)}
-              className="border border-gray-300 rounded-lg px-2 py-2 text-sm font-medium bg-white"
-            >
-              <option>Cliente Ocasional</option>
-              {clientesDisponibles.map((c) => (
-                <option key={c.id} value={c.nombre_empresa || c.nombre}>{c.nombre_empresa || c.nombre}</option>
-              ))}
-            </select>
+            <div className="relative">
+              <input
+                list="clientes-pos"
+                value={cliente}
+                onChange={(e) => setCliente(e.target.value)}
+                onFocus={(e) => e.target.select()}
+                className="border border-gray-300 rounded-lg px-3 py-2 text-sm font-medium bg-white w-56"
+                placeholder="Buscar cliente..."
+                aria-label="Buscar cliente"
+              />
+              <datalist id="clientes-pos">
+                <option value="Cliente Ocasional" />
+                {clientesDisponibles.map((c) => {
+                  const nombreCliente = c.nombre_empresa || c.nombre;
+                  return <option key={c.id} value={nombreCliente}>{c.tipo_contacto || 'Cliente'}</option>;
+                })}
+              </datalist>
+            </div>
             <button
               type="button"
               onClick={() => setMostrarNuevoCliente(true)}
@@ -498,11 +508,11 @@ const PuntoDeVenta = ({ cajaInfo, session, perfilUsuario, onVolver, onSolicitarC
             <div className="px-3 pb-3 grid grid-cols-2 gap-2 text-xs">
               <div>
                 <label className="font-bold text-gray-500 block mb-1">Descuento (Gs):</label>
-                <input type="number" value={descuento} onChange={(e) => setDescuento(e.target.value)} className="w-full border border-gray-300 rounded p-1.5" />
+                <input type="number" min="0" max={subtotal} step="1" value={descuento} onChange={(e) => setDescuento(e.target.value)} onBlur={() => setDescuento(String(descuentoAplicado || ''))} className="w-full border border-gray-300 rounded p-1.5" />
               </div>
               <div>
                 <label className="font-bold text-gray-500 block mb-1">Cargo de embalaje (Gs):</label>
-                <input type="number" value={cargoEmbalaje} onChange={(e) => setCargoEmbalaje(e.target.value)} className="w-full border border-gray-300 rounded p-1.5" />
+                <input type="number" min="0" step="1" value={cargoEmbalaje} onChange={(e) => setCargoEmbalaje(e.target.value)} onBlur={() => setCargoEmbalaje(String(cargoEmbalajeAplicado || ''))} className="w-full border border-gray-300 rounded p-1.5" />
               </div>
               <div className="col-span-2">
                 <label className="font-bold text-gray-500 block mb-1">Nota de venta:</label>
@@ -511,9 +521,9 @@ const PuntoDeVenta = ({ cajaInfo, session, perfilUsuario, onVolver, onSolicitarC
             </div>
           )}
 
-          <div className="flex-1 overflow-y-auto px-2">
-            <table className="w-full text-sm">
-              <thead className="sticky top-0 bg-white text-gray-400 text-xs uppercase">
+          <div className="flex-1 overflow-y-auto px-2 bg-gray-50/40">
+            <table className="w-full min-w-[560px] text-sm border-separate border-spacing-0">
+              <thead className="sticky top-0 z-10 bg-white text-gray-500 text-[10px] uppercase shadow-sm">
                 <tr>
                   <th className="text-left py-2">Producto</th>
                   <th className="text-center py-2">Cant.</th>
@@ -531,27 +541,27 @@ const PuntoDeVenta = ({ cajaInfo, session, perfilUsuario, onVolver, onSolicitarC
                   carrito.map((item) => {
                     const precio = item.precio_venta || item.precio || 0;
                     return (
-                      <tr key={item.id} className="border-b border-gray-50">
-                        <td className="py-2 font-medium text-gray-800">
-                          <div className="flex items-center gap-2">
-                            <div className="w-8 h-8 rounded bg-gray-50 border border-gray-100 flex-shrink-0 flex items-center justify-center overflow-hidden">
+                      <tr key={item.id} className="border-b border-gray-200 even:bg-white odd:bg-gray-50/70 hover:bg-orange-50">
+                        <td className="py-3 pr-2 font-medium text-gray-800 min-w-[190px]">
+                          <div className="flex items-center gap-2 min-w-0">
+                            <div className="w-9 h-9 rounded bg-white border border-gray-200 flex-shrink-0 flex items-center justify-center overflow-hidden shadow-sm">
                               {item.imagen_url ? (
                                 <img src={item.imagen_url} alt={item.nombre} className="w-full h-full object-cover" />
                               ) : (
                                 <span className="text-xs text-gray-300">📦</span>
                               )}
                             </div>
-                            <span>{item.nombre}</span>
+                            <span className="leading-tight line-clamp-2 break-words" title={item.nombre}>{item.nombre}</span>
                           </div>
                         </td>
-                        <td className="py-2 text-center">
+                        <td className="py-3 px-1 text-center whitespace-nowrap">
                           <div className="inline-flex items-center gap-1">
                             <button onClick={() => cambiarCantidad(item.id, item.cantidad - 1)} className="bg-gray-100 w-6 h-6 rounded text-gray-600 font-bold hover:bg-gray-200">-</button>
                             <span className="w-6 text-center">{item.cantidad}</span>
                             <button onClick={() => cambiarCantidad(item.id, item.cantidad + 1)} className="bg-gray-100 w-6 h-6 rounded text-gray-600 font-bold hover:bg-gray-200">+</button>
                           </div>
                         </td>
-                        <td className="py-2 text-right">
+                        <td className="py-3 px-1 text-right whitespace-nowrap">
                           <input
                             type="number"
                             value={precio}
@@ -559,7 +569,7 @@ const PuntoDeVenta = ({ cajaInfo, session, perfilUsuario, onVolver, onSolicitarC
                             className="w-24 text-right border border-gray-200 rounded px-1.5 py-1 text-gray-700 focus:outline-none focus:ring-1 focus:ring-orange-400"
                           />
                         </td>
-                        <td className="py-2 text-right">
+                        <td className="py-3 px-1 text-right whitespace-nowrap">
                           <input
                             type="number"
                             value={(precio * item.cantidad).toFixed(0)}
@@ -567,7 +577,7 @@ const PuntoDeVenta = ({ cajaInfo, session, perfilUsuario, onVolver, onSolicitarC
                             className="w-24 text-right border border-gray-200 rounded px-1.5 py-1 font-bold text-gray-800 focus:outline-none focus:ring-1 focus:ring-orange-400"
                           />
                         </td>
-                        <td className="py-2 text-center">
+                        <td className="py-3 pl-2 text-center whitespace-nowrap">
                           <button onClick={() => eliminarDelCarrito(item.id)} className="text-red-400 hover:text-red-600 font-bold">✕</button>
                         </td>
                       </tr>

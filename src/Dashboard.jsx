@@ -41,6 +41,8 @@ import InformeCajaPago from './InformeCajaPago';
 import VentasPorProducto from './VentasPorProducto';
 import CobroDeVentas from './CobroDeVentas';
 import GruposClientes from './GruposClientes';
+import Gastos from './Gastos';
+import CategoriasGastos from './CategoriasGastos';
 
 export default function Dashboard({ session, perfilUsuario, initialView = 'inicio' }) {
   const { notificar } = useNotificacion();
@@ -143,6 +145,17 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
       case '/compras/agregar':
       case '/agregar_compra':
         setVistaActiva('agregar_compra');
+        break;
+      case '/gastos':
+        setVistaActiva('gastos');
+        break;
+      case '/gastos/agregar':
+      case '/agregar_gasto':
+        setVistaActiva('agregar_gasto');
+        break;
+      case '/categorias_gastos':
+      case '/gastos/categorias':
+        setVistaActiva('categorias_gastos');
         break;
       case '/devoluciones_compra':
         setVistaActiva('devoluciones_compra');
@@ -299,6 +312,15 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
 
       case 'agregar_compra':
         return <GestorCompras vistaInicial="agregar" />;
+
+      case 'gastos':
+        return <Gastos />;
+
+      case 'agregar_gasto':
+        return <Gastos vistaInicial="agregar" />;
+
+      case 'categorias_gastos':
+        return <CategoriasGastos />;
 
       case 'devoluciones_compra':
         return <GestorCompras />;
@@ -483,6 +505,23 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
               </>
             )}
 
+            {/* MENÚ: GASTOS */}
+            {tieneCategoria('gastos') && (
+              <>
+                <button onClick={() => toggleMenu('gastos')} className={estiloBotonDesplegable('gastos')} title="Gastos">
+                  <div className="flex items-center gap-3"><ArrowDownToLine size={18} strokeWidth={2} /> {!sidebarColapsado && 'Gastos'}</div>
+                  {!sidebarColapsado && <span className="text-[10px]">{menuExpandido === 'gastos' ? '▼' : '◀'}</span>}
+                </button>
+                {menuExpandido === 'gastos' && !sidebarColapsado && (
+                  <div className="bg-[#151521] py-1 flex flex-col">
+                    <Link to="/gastos" onClick={() => irA('gastos', '/gastos')} className={estiloSubItem('gastos')}>🠖 Lista de gastos</Link>
+                    <Link to="/gastos/agregar" onClick={() => irA('agregar_gasto', '/gastos/agregar')} className={estiloSubItem('agregar_gasto')}>🠖 Agregar gasto</Link>
+                    <Link to="/gastos/categorias" onClick={() => irA('categorias_gastos', '/gastos/categorias')} className={estiloSubItem('categorias_gastos')}>🠖 Categorías de gastos</Link>
+                  </div>
+                )}
+              </>
+            )}
+
             {/* MENÚ: VENTAS */}
             {tieneCategoria('ventas_pos') && !soloPOS && (
               <>
@@ -610,6 +649,9 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
                 {vistaActiva === 'nuevo_gasto' && 'Gasto'}
                 {vistaActiva === 'compras' && 'Compras'}
                 {vistaActiva === 'agregar_compra' && 'Nueva Compra'}
+                {vistaActiva === 'gastos' && 'Gastos'}
+                {vistaActiva === 'agregar_gasto' && 'Agregar gasto'}
+                {vistaActiva === 'categorias_gastos' && 'Categorías de gastos'}
                 {vistaActiva === 'devoluciones_compra' && 'Devoluciones'}
                 {vistaActiva === 'cobros' && 'Pendientes'}
                 {vistaActiva === 'catalogo' && 'Productos'}

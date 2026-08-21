@@ -194,6 +194,7 @@ const AgregarCompra = () => {
     const [guardandoContacto, setGuardandoContacto] = useState(false);
 
     const [tipoPersona, setTipoPersona] = useState('Individual'); // 'Individual' | 'Empresa'
+    const [tipoContacto, setTipoContacto] = useState('Proveedores');
     const [codigoContacto, setCodigoContacto] = useState('');
     const [tipoDocContacto, setTipoDocContacto] = useState('RUC');
     const [nroDocContacto, setNroDocContacto] = useState('');
@@ -316,7 +317,7 @@ const AgregarCompra = () => {
 
             const { data, error } = await supabase.from('clientes').insert([{
                 empresa_id: empresaId,
-                tipo_contacto: 'Proveedores',
+                tipo_contacto: tipoContacto,
                 codigo_cliente: codigoGenerado,
                 tipo_documento: tipoDocContacto,
                 documento_nro: nroDocContacto || null,
@@ -656,6 +657,14 @@ const AgregarCompra = () => {
 
                         {/* Individual / Empresa + Código */}
                         <div className="flex flex-wrap justify-between items-start gap-4 mb-5">
+                            <div className="w-56">
+                                <label className="block text-xs font-bold text-orange-700/80 mb-1 tracking-wide">TIPO DE CONTACTO *</label>
+                                <select value={tipoContacto} onChange={(e) => setTipoContacto(e.target.value)} className="w-full border-2 border-orange-100 rounded-lg p-2 text-sm bg-white">
+                                    <option value="Clientes">Clientes</option>
+                                    <option value="Proveedores">Proveedores</option>
+                                    <option value="Ambos">Ambos (Proveedor y Cliente)</option>
+                                </select>
+                            </div>
                             <div className="flex bg-orange-100/60 p-1 rounded-full">
                                 <button
                                     type="button"

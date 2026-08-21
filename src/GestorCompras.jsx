@@ -55,6 +55,15 @@ export default function GestorCompras({ vistaInicial = 'lista' }) {
   const [cuentaPago, setCuentaPago] = useState('-- Seleccione cuenta --');
   const [notaPago, setNotaPago] = useState('');
 
+  const [compraPago, setCompraPago] = useState(null);
+  const [montoPagoCompra, setMontoPagoCompra] = useState('');
+  const [metodoPagoCompra, setMetodoPagoCompra] = useState('Efectivo');
+  const [fechaPagoCompra, setFechaPagoCompra] = useState(new Date().toISOString().slice(0, 10));
+  const [cuentaPagoCompra, setCuentaPagoCompra] = useState('-- Seleccione cuenta --');
+  const [notaPagoCompra, setNotaPagoCompra] = useState('');
+  const [documentoPagoCompra, setDocumentoPagoCompra] = useState(null);
+  const [guardandoPagoCompra, setGuardandoPagoCompra] = useState(false);
+
   const [listaProveedores, setListaProveedores] = useState([]);
 
   // --- ESTADOS DEL MODAL RÁPIDO DE PRODUCTO ---
@@ -91,6 +100,7 @@ export default function GestorCompras({ vistaInicial = 'lista' }) {
   const [mostrarModalProveedor, setMostrarModalProveedor] = useState(false);
   const [esEmpresaProv, setEsEmpresaProv] = useState(false);
   const [tipoDocProv, setTipoDocProv] = useState('RUC');
+  const [tipoContactoProv, setTipoContactoProv] = useState('Proveedores');
   const [nroDocProv, setNroDocProv] = useState('');
   const [prefijoProv, setPrefijoProv] = useState('');
   const [nombreProv, setNombreProv] = useState('');
@@ -310,7 +320,7 @@ export default function GestorCompras({ vistaInicial = 'lista' }) {
       .from('clientes')
       .insert([{
         empresa_id: empresaId,
-        tipo_contacto: 'Proveedores', codigo_cliente: codigoGenerado, tipo_documento: tipoDocProv,
+        tipo_contacto: tipoContactoProv, codigo_cliente: codigoGenerado, tipo_documento: tipoDocProv,
         documento_nro: nroDocProv || null, nombre_empresa: esEmpresaProv ? nombreEmpresaProv : null,
         nombre: nombreFinal, representante_legal: representanteLegalProv || null, celular: telefonoProv || null,
         email: emailProv || null, fecha_nacimiento: fechaNacimientoProv || null, direccion: direccionCompleta, vendedor_asignado: vendedorAsignadoProv || nombreEmpresa,
@@ -500,6 +510,82 @@ export default function GestorCompras({ vistaInicial = 'lista' }) {
     setCompraEditandoId(compra.id);
     setMostrarFormulario(true);
     setMenuAbierto(null);
+  };
+
+  const abrirModalPagoCompra = (compra) => {
+    setMenuAbierto(null);
+    setCompraPago(compra);
+    setMontoPagoCompra('');
+    setMetodoPagoCompra('Efectivo');
+    setFechaPagoCompra(new Date().toISOString().slice(0, 10));
+    setCuentaPagoCompra('-- Seleccione cuenta --');
+    setNotaPagoCompra('');
+    setDocumentoPagoCompra(null);
+  };
+
+  const guardarPagoCompra = async (e) => {
+    e.preventDefault();
+    if (!compraPago) return;
+
+    const monto = Number(montoPagoCompra);
+    const saldoActual = Number(compraPago.saldo_pendiente || 0);
+    if (!monto || monto <= 0) return notificar.info('Ingrese un monto válido.');
+    if (monto > saldoActual) return notificar.info('El pago no puede superar el saldo pendiente.');
+    if (cuentaPagoCompra === '-- Seleccione cuenta --') return notificar.info('Seleccione la caja o cuenta de pago.');
+
+    setGuardandoPagoCompra(true);
+    try {
+      const nuevoSaldo = Math.max(0, saldoActual - monto);
+      const nuevoEstado = nuevoSaldo <= 0 ? 'pagado' : 'pendiente';
+      const cajaElegida = cajasDisponibles.find((c) => c.id === cuentaPagoCompra);
+      if (!cajaElegida) throw new Error('La caja seleccionada no está disponible.');
+      let documentoUrl = null;
+
+      if (documentoPagoCompra) {
+        const nombreArchivo = `${empresaId}/compras/${compraPago.id}/${Date.now()}-${documentoPagoCompra.name}`;
+        const { error: errorSubida } = await supabase.storage
+          .from('comprobantes-pago')
+          .upload(nombreArchivo, documentoPagoCompra, { upsert: false });
+        if (errorSubida) throw errorSubida;
+        const { data: urlData } = supabase.storage.from('comprobantes-pago').getPublicUrl(nombreArchivo);
+        documentoUrl = urlData.publicUrl;
+      }
+
+      const { error } = await supabase
+        .from('compras')
+        .update({ saldo_pendiente: nuevoSaldo, estado: nuevoEstado })
+        .eq('id', compraPago.id)
+        .eq('empresa_id', empresaId);
+      if (error) throw error;
+
+      const { error: errorPago } = await supabase.from('pagos_compras').insert([{
+        empresa_id: empresaId,
+        compra_id: compraPago.id,
+        monto,
+        metodo_pago: metodoPagoCompra,
+        fecha: fechaPagoCompra ? new Date(`${fechaPagoCompra}T00:00:00`).toISOString() : new Date().toISOString(),
+        cuenta_pago: cajaElegida?.nombre || null,
+        nota: notaPagoCompra || null,
+        documento_url: documentoUrl,
+      }]);
+      if (errorPago) throw errorPago;
+
+      const { error: errorCaja } = await supabase
+        .from('cuentas_caja')
+        .update({ saldo: Number(cajaElegida.saldo || 0) - monto })
+        .eq('id', cajaElegida.id)
+        .eq('empresa_id', empresaId);
+      if (errorCaja) throw errorCaja;
+
+      sonidoExito();
+      notificar.exito(nuevoSaldo <= 0 ? '¡Compra pagada por completo!' : '¡Pago parcial registrado!');
+      setCompraPago(null);
+      await Promise.all([cargarTodasLasCompras(), cargarCajasDisponibles()]);
+    } catch (error) {
+      notificar.error('Error al registrar el pago: ' + error.message);
+    } finally {
+      setGuardandoPagoCompra(false);
+    }
   };
 
   const eliminarCompra = async (id) => {
@@ -933,6 +1019,9 @@ export default function GestorCompras({ vistaInicial = 'lista' }) {
                                   <button onClick={() => cargarCompraParaEditar(compra)} className="w-full text-left px-3 py-1.5 text-xs text-gray-700 hover:bg-gray-50 flex items-center gap-2">
                                     ✏️ Editar
                                   </button>
+                                  <button onClick={() => abrirModalPagoCompra(compra)} className="w-full text-left px-3 py-1.5 text-xs text-gray-700 hover:bg-gray-50 flex items-center gap-2">
+                                    💳 Monto total pagado o pago parcial
+                                  </button>
                                   <button onClick={() => eliminarCompra(compra.id)} className="w-full text-left px-3 py-1.5 text-xs text-red-600 hover:bg-red-50 flex items-center gap-2">
                                     🗑️ Borrar
                                   </button>
@@ -1168,6 +1257,37 @@ export default function GestorCompras({ vistaInicial = 'lista' }) {
         </div>
       )}
 
+      {compraPago && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[99998] p-4">
+          <div className="bg-white w-full max-w-xl rounded-xl shadow-2xl overflow-hidden">
+            <div className="bg-[#5145cd] px-6 py-4 flex items-center justify-between">
+              <h3 className="text-white text-base font-bold">Monto total pagado o pago parcial</h3>
+              <button type="button" onClick={() => setCompraPago(null)} className="text-white/80 hover:text-white text-2xl leading-none">×</button>
+            </div>
+            <form onSubmit={guardarPagoCompra} className="p-4 text-xs">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-4">
+                <div className="border rounded p-3 bg-gray-50"><span className="font-bold">Proveedor:</span><br />{compraPago.proveedor_nombre || '—'}</div>
+                <div className="border rounded p-3 bg-gray-50"><span className="font-bold">Número de referencia:</span><br />{compraPago.nro_factura || `PO-${compraPago.id}`}</div>
+                <div className="border rounded p-3 bg-gray-50"><span className="font-bold">Cantidad total:</span><br />{Number(compraPago.total || 0).toLocaleString('es-PY')} Gs</div>
+              </div>
+              <div className="mb-3 font-bold">Pago realizado: {Number(compraPago.total || 0) - Number(compraPago.saldo_pendiente || 0)} Gs</div>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+                <div><label className="block font-bold mb-1">Método de pago:*</label><select className="w-full border rounded p-2" value={metodoPagoCompra} onChange={(e) => setMetodoPagoCompra(e.target.value)}><option>Efectivo</option><option>Tarjeta</option><option>Transferencia</option></select></div>
+                <div><label className="block font-bold mb-1">Pagado el:*</label><input type="date" required className="w-full border rounded p-2" value={fechaPagoCompra} onChange={(e) => setFechaPagoCompra(e.target.value)} /></div>
+                <div><label className="block font-bold mb-1">Cantidad:*</label><input type="number" min="1" max={Number(compraPago.saldo_pendiente || 0)} required className="w-full border rounded p-2" value={montoPagoCompra} onChange={(e) => setMontoPagoCompra(e.target.value)} placeholder="0" /></div>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                <div><label className="block font-bold mb-1">Cuenta de pago:*</label><select required className="w-full border rounded p-2" value={cuentaPagoCompra} onChange={(e) => setCuentaPagoCompra(e.target.value)}><option value="-- Seleccione cuenta --">-- Seleccione cuenta --</option>{cajasDisponibles.map((caja) => <option key={caja.id} value={caja.id}>{caja.nombre} ({Number(caja.saldo || 0).toLocaleString('es-PY')} Gs)</option>)}</select></div>
+                <div><label className="block font-bold mb-1">Documento adjunto:</label><input type="file" className="w-full border rounded p-1.5" onChange={(e) => setDocumentoPagoCompra(e.target.files?.[0] || null)} />{documentoPagoCompra && <span className="text-gray-500">{documentoPagoCompra.name}</span>}</div>
+              </div>
+              <label className="block font-bold mb-1">Nota de pago:</label>
+              <textarea className="w-full border rounded p-2 h-16 mb-4" value={notaPagoCompra} onChange={(e) => setNotaPagoCompra(e.target.value)} />
+              <div className="flex justify-end gap-2"><button type="button" onClick={() => setCompraPago(null)} className="border rounded px-5 py-2 font-bold">Cerrar</button><button type="submit" disabled={guardandoPagoCompra} className="bg-[#fd7e14] text-white rounded px-5 py-2 font-bold disabled:opacity-60">{guardandoPagoCompra ? 'Guardando...' : 'Guardar'}</button></div>
+            </form>
+          </div>
+        </div>
+      )}
+
       {/* ======================================================================= */}
       {/* MODAL SOBREPUESTO: REGISTRAR NUEVO PROVEEDOR EN VIVO                    */}
       {/* ======================================================================= */}
@@ -1185,7 +1305,11 @@ export default function GestorCompras({ vistaInicial = 'lista' }) {
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6 items-end">
                   <div>
                     <label className="block font-bold text-gray-700 uppercase mb-1">TIPO DE CONTACTO *</label>
-                    <select className="w-full border rounded p-2.5 bg-white outline-none cursor-not-allowed" disabled><option>Proveedores</option></select>
+                    <select className="w-full border rounded p-2.5 bg-white outline-none" value={tipoContactoProv} onChange={(e) => setTipoContactoProv(e.target.value)}>
+                      <option value="Clientes">Clientes</option>
+                      <option value="Proveedores">Proveedores</option>
+                      <option value="Ambos">Ambos (Proveedor y Cliente)</option>
+                    </select>
                   </div>
                   <div className="flex border rounded overflow-hidden shadow-sm h-[42px]">
                     <button type="button" onClick={() => setEsEmpresaProv(false)} className={`flex-1 font-bold flex items-center justify-center gap-2 transition-colors ${!esEmpresaProv ? 'bg-gray-200 text-gray-800 border-b-2 border-blue-500' : 'bg-white text-gray-500'}`}><span></span> Individual</button>
