@@ -1,5 +1,6 @@
 import CierreCaja from './CierreCaja';
 import GastosDelTurno from './GastosDelTurno';
+import DetalleCaja from './DetalleCaja';
 import NuevoClientePOS from './NuevoClientePOS';
 import ModalPagoMultiple from './ModalPagoMultiple';
 import React, { useState, useEffect, useMemo } from 'react';
@@ -60,6 +61,7 @@ const PuntoDeVenta = ({ cajaInfo, session, perfilUsuario, onVolver, onSolicitarC
   // === CAMPOS EXTRA (Descuento / Embalaje / Nota) ===
   const [mostrarOpciones, setMostrarOpciones] = useState(false);
   const [mostrarGastos, setMostrarGastos] = useState(false);
+  const [mostrarDetalleCaja, setMostrarDetalleCaja] = useState(false);
   const [descuento, setDescuento] = useState('');
   const [cargoEmbalaje, setCargoEmbalaje] = useState('');
   const [notaVenta, setNotaVenta] = useState('');
@@ -198,7 +200,7 @@ const PuntoDeVenta = ({ cajaInfo, session, perfilUsuario, onVolver, onSolicitarC
     ? totalConAjustes - Number(montoPagado)
     : 0;
 
-  const procesarVenta = async (tipoOperacion = 'venta', datosPagoMultiple = null) => {
+  const procesarVenta = async (tipoOperacion = 'venta', datosPagoMultiple = null, metodoForzado = null, notaForzada = null) => {
     if (carrito.length === 0) return alert('El carrito está vacío');
 
     // Si viene del modal de Pago Múltiple, usamos esos valores; si no,
@@ -214,10 +216,10 @@ const PuntoDeVenta = ({ cajaInfo, session, perfilUsuario, onVolver, onSolicitarC
       montoPagadoFinal = 0;
     }
 
-    const metodoPagoFinal = datosPagoMultiple ? datosPagoMultiple.metodoPago : metodoPago;
+    const metodoPagoFinal = datosPagoMultiple ? datosPagoMultiple.metodoPago : (metodoForzado || metodoPago);
     const notaVentaFinal = datosPagoMultiple
       ? [notaVenta, datosPagoMultiple.notaPagos].filter(Boolean).join(' | ')
-      : notaVenta;
+      : (notaForzada || notaVenta);
 
     // Verificación final de stock antes de cobrar (por si cambió algo mientras armabas el carrito)
     const sinStockSuficiente = carrito.filter((item) => {
@@ -320,6 +322,20 @@ const PuntoDeVenta = ({ cajaInfo, session, perfilUsuario, onVolver, onSolicitarC
       }
       return null;
     }
+  };
+
+  const cobrarConMetodo = (metodo) => {
+    if (carrito.length === 0) return alert('El carrito está vacío');
+    procesarVenta('venta', null, metodo);
+  };
+
+  const procesarDelivery = () => {
+    if (carrito.length === 0) return alert('El carrito está vacío');
+    const direccion = window.prompt('Dirección de entrega:');
+    if (direccion === null) return;
+    const contacto = window.prompt('Teléfono o referencia (opcional):') || '';
+    const notaDelivery = `Delivery · Dirección: ${direccion}${contacto ? ` · Contacto: ${contacto}` : ''}`;
+    procesarVenta('pendiente', null, metodoPago, [notaVenta, notaDelivery].filter(Boolean).join(' | '));
   };
 
   const emitirFactura = async () => {
@@ -447,7 +463,7 @@ const PuntoDeVenta = ({ cajaInfo, session, perfilUsuario, onVolver, onSolicitarC
           </span>
         </div>
         <div className="flex flex-wrap justify-end gap-1.5 text-[11px] font-bold">
-          <button onClick={() => notificar.info('El detalle se registra desde la operación de venta.')} className="bg-emerald-50 text-emerald-700 border border-emerald-100 px-2.5 py-1.5 rounded hover:bg-emerald-100 whitespace-nowrap">
+          <button onClick={() => setMostrarDetalleCaja(true)} className="bg-emerald-50 text-emerald-700 border border-emerald-100 px-2.5 py-1.5 rounded hover:bg-emerald-100 whitespace-nowrap">
             ▣ Registrar detalles
           </button>
           <button onClick={cerrarRegistro} className="bg-red-50 text-red-600 border border-red-100 px-2.5 py-1.5 rounded hover:bg-red-100 whitespace-nowrap">
@@ -462,7 +478,7 @@ const PuntoDeVenta = ({ cajaInfo, session, perfilUsuario, onVolver, onSolicitarC
           <button onClick={() => notificar.info('La devolución se gestiona desde Todas las ventas.')} className="bg-red-50 text-red-700 border border-red-100 px-2.5 py-1.5 rounded hover:bg-red-100 whitespace-nowrap">
             ↩ Devolución de venta
           </button>
-          <button onClick={() => notificar.info('El módulo Delivery aún no está habilitado.')} className="bg-blue-50 text-blue-700 border border-blue-100 px-2.5 py-1.5 rounded hover:bg-blue-100 whitespace-nowrap">
+          <button onClick={procesarDelivery} className="bg-blue-50 text-blue-700 border border-blue-100 px-2.5 py-1.5 rounded hover:bg-blue-100 whitespace-nowrap">
             ◇ Delivery
           </button>
           <button onClick={pantallaCompleta} className="bg-gray-50 text-gray-700 border border-gray-200 px-2.5 py-1.5 rounded hover:bg-gray-100 whitespace-nowrap">
@@ -479,7 +495,7 @@ const PuntoDeVenta = ({ cajaInfo, session, perfilUsuario, onVolver, onSolicitarC
 
       <div className="flex flex-1 overflow-hidden">
 
-        <div className="w-full lg:w-[42%] flex flex-col border-r border-gray-200 bg-white overflow-hidden">
+        <div className="w-full lg:w-[56%] flex flex-col border-r border-gray-200 bg-white overflow-hidden">
           <div className="p-3 border-b border-gray-100 flex gap-2 items-center">
             <div className="relative">
               <input
@@ -639,12 +655,15 @@ const PuntoDeVenta = ({ cajaInfo, session, perfilUsuario, onVolver, onSolicitarC
             </div>
           )}
 
-          <div className="border-t border-gray-200 p-3 grid grid-cols-2 gap-2 text-xs font-bold">
-            <button onClick={() => procesarVenta('pendiente')} className="bg-gray-100 text-gray-700 py-2 rounded-lg hover:bg-gray-200">Pedido Pendiente</button>
-            <button onClick={() => procesarVenta('cotizacion')} className="bg-gray-100 text-gray-700 py-2 rounded-lg hover:bg-gray-200">Cotización</button>
-            <button onClick={() => procesarVenta('credito')} className="bg-indigo-50 text-indigo-700 py-2 rounded-lg hover:bg-indigo-100">Venta a crédito</button>
-            <button onClick={() => setMostrarPagoMultiple(true)} disabled={carrito.length === 0} className="bg-sky-50 text-sky-700 py-2 rounded-lg hover:bg-sky-100 disabled:opacity-50 disabled:cursor-not-allowed">Pago múltiple</button>
-            <button onClick={vaciarCarrito} className="bg-red-50 text-red-600 py-2 rounded-lg hover:bg-red-100 col-span-2">Cancelar</button>
+          <div className="border-t border-gray-200 p-3 flex gap-2 overflow-x-auto text-xs font-bold">
+            <button onClick={() => procesarVenta('pendiente')} disabled={carrito.length === 0} className="shrink-0 whitespace-nowrap bg-gray-100 text-gray-700 px-3 py-2 rounded-lg hover:bg-gray-200 disabled:opacity-50">📝 Pedido Pendiente</button>
+            <button onClick={() => procesarVenta('cotizacion')} disabled={carrito.length === 0} className="shrink-0 whitespace-nowrap bg-gray-100 text-gray-700 px-3 py-2 rounded-lg hover:bg-gray-200 disabled:opacity-50">📄 Cotización</button>
+            <button onClick={procesarDelivery} disabled={carrito.length === 0} className="shrink-0 whitespace-nowrap bg-blue-50 text-blue-700 px-3 py-2 rounded-lg hover:bg-blue-100 disabled:opacity-50">🚚 Delivery</button>
+            <button onClick={() => procesarVenta('credito')} disabled={carrito.length === 0} className="shrink-0 whitespace-nowrap bg-indigo-50 text-indigo-700 px-3 py-2 rounded-lg hover:bg-indigo-100 disabled:opacity-50">💳 Venta a crédito</button>
+            <button onClick={() => cobrarConMetodo('Tarjeta')} disabled={carrito.length === 0} className="shrink-0 whitespace-nowrap bg-pink-50 text-pink-700 px-3 py-2 rounded-lg hover:bg-pink-100 disabled:opacity-50">💳 Tarjeta</button>
+            <button onClick={() => setMostrarPagoMultiple(true)} disabled={carrito.length === 0} className="shrink-0 whitespace-nowrap bg-sky-50 text-sky-700 px-3 py-2 rounded-lg hover:bg-sky-100 disabled:opacity-50">▣ Pago múltiple</button>
+            <button onClick={() => cobrarConMetodo('Efectivo')} disabled={carrito.length === 0} className="shrink-0 whitespace-nowrap bg-emerald-50 text-emerald-700 px-3 py-2 rounded-lg hover:bg-emerald-100 disabled:opacity-50">💵 Efectivo</button>
+            <button onClick={vaciarCarrito} className="shrink-0 whitespace-nowrap bg-red-50 text-red-600 px-3 py-2 rounded-lg hover:bg-red-100">✕ Cancelar</button>
           </div>
           <button
             onClick={() => procesarVenta('venta')}
@@ -711,6 +730,9 @@ const PuntoDeVenta = ({ cajaInfo, session, perfilUsuario, onVolver, onSolicitarC
       </div>
       {mostrarGastos && (
         <GastosDelTurno cajaInfo={cajaInfo} onClose={() => setMostrarGastos(false)} />
+      )}
+      {mostrarDetalleCaja && (
+        <DetalleCaja cajaInfo={cajaInfo} empresaId={empresaId} nombreEmpresa={nombreEmpresa} session={session} onClose={() => setMostrarDetalleCaja(false)} />
       )}
       {mostrarNuevoCliente && (
         <NuevoClientePOS
