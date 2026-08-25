@@ -42,9 +42,12 @@ import CobroDeVentas from './CobroDeVentas';
 import GruposClientes from './GruposClientes';
 import Gastos from './Gastos';
 import CategoriasGastos from './CategoriasGastos';
+import VendedoresComisiones from './VendedoresComisiones';
+import { useUbicacionUsuario } from './utils/useUbicacion';
 
 export default function Dashboard({ session, perfilUsuario, initialView = 'inicio' }) {
   // === CONTROL DE ACCESO POR ROL (va primero, vistaActiva lo necesita) ===
+  const { id: ubicacionUsuarioId, ve_todas: usuarioVeTodas } = useUbicacionUsuario();
   const nombreRol = (perfilUsuario?.roles?.nombre || '').toLowerCase();
   const esAdmin = nombreRol.includes('admin');
   const permisosRol = perfilUsuario?.roles?.permisos || null;
@@ -68,7 +71,7 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
       agregar_gasto: 'gastos', categorias_gastos: 'gastos', todas_ventas: 'ventas_pos',
       pos: 'ventas_pos', cobros: 'ventas_pos', cajas: 'caja', informe_caja_pago: 'caja',
       caja_registradora: 'informes', ganancias_perdidas: 'informes',
-      ventas_por_producto: 'informes', cobro_de_ventas: 'informes', usuarios: 'usuarios', roles: 'roles',
+      ventas_por_producto: 'informes', cobro_de_ventas: 'informes', vendedores_comisiones: 'informes', usuarios: 'usuarios', roles: 'roles',
     };
     const categoria = categoriaPorVista[vista];
     return !categoria || tieneCategoria(categoria);
@@ -83,6 +86,7 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
   const [vistaActiva, setVistaActiva] = useState(soloPOS ? 'pos' : initialView);
   const [menuExpandido, setMenuExpandido] = useState('ventas');
   const [cajaActual, setCajaActual] = useState(null);
+  const [cargandoCaja, setCargandoCaja] = useState(true);
   const [reporteCierre, setReporteCierre] = useState(null);
   const [refreshInicio, setRefreshInicio] = useState(0);
   const [refreshKey, setRefreshKey] = useState(0);
@@ -142,6 +146,44 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
   };
 
   const posPantallaCompleta = vistaActiva === 'pos' && !!cajaActual;
+
+  useEffect(() => {
+    let activo = true;
+    const recuperarCajaAbierta = async () => {
+      const empresaId = perfilUsuario?.empresas?.id || perfilUsuario?.empresa_id;
+      if (!empresaId) {
+        if (activo) setCargandoCaja(false);
+        return;
+      }
+
+      const nombreUsuario = [perfilUsuario?.nombre, perfilUsuario?.apellido].filter(Boolean).join(' ').trim()
+        || perfilUsuario?.nombre_usuario || perfilUsuario?.email || '';
+      let consulta = supabase
+        .from('caja_registros')
+        .select('*')
+        .eq('empresa_id', empresaId)
+        .eq('estado', 'Abierta')
+        .order('fecha_apertura', { ascending: false })
+        .limit(10);
+
+      if (!usuarioVeTodas && ubicacionUsuarioId) {
+        consulta = consulta.eq('ubicacion_id', ubicacionUsuarioId);
+      }
+
+      const { data, error } = await consulta;
+      if (!activo) return;
+      if (error && error.code !== '42P01') {
+        console.error('Error al recuperar la caja abierta:', error.message);
+      } else {
+        const cajaDelUsuario = (data || []).find((caja) => !caja.usuario || caja.usuario === nombreUsuario);
+        setCajaActual(cajaDelUsuario || null);
+      }
+      setCargandoCaja(false);
+    };
+
+    recuperarCajaAbierta();
+    return () => { activo = false; };
+  }, [perfilUsuario, ubicacionUsuarioId, usuarioVeTodas]);
 
   // Para el cajero exclusivo, "volver a Inicio" en realidad vuelve al POS,
   // porque no tiene permiso para ver Inicio ni ningún otro módulo.
@@ -273,6 +315,10 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
       case '/ganancias-perdidas':
         setVistaActiva('ganancias_perdidas');
         break;
+      case '/vendedores-comisiones':
+      case '/vendedores_comisiones':
+        setVistaActiva('vendedores_comisiones');
+        break;
       default:
         setVistaActiva(initialView);
         break;
@@ -312,6 +358,9 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
 
       case 'pos':
         // Validación exclusiva: Si la caja está cerrada, obliga a abrirla antes del POS
+        if (cargandoCaja) {
+          return <div className="p-10 text-center text-gray-500 font-bold">Verificando caja abierta...</div>;
+        }
         if (!cajaActual) {
           return <AbrirCaja onCajaAbierta={(caja) => setCajaActual(caja)} perfilUsuario={perfilUsuario} />;
         }
@@ -420,6 +469,9 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
 
       case 'cobro_de_ventas':
         return <CobroDeVentas perfilUsuario={perfilUsuario} />;
+
+      case 'vendedores_comisiones':
+        return <VendedoresComisiones />;
 
       default:
         return <GraficosDashboard />;
@@ -646,6 +698,7 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
                     <Link to="/ventas-por-producto" onClick={() => irA('ventas_por_producto', '/ventas-por-producto')} className={estiloSubItem('ventas_por_producto')}>🠖 Ventas por producto</Link>
                     <Link to="/cobro-de-ventas" onClick={() => irA('cobro_de_ventas', '/cobro-de-ventas')} className={estiloSubItem('cobro_de_ventas')}>🠖 Cobros de venta</Link>
                     <Link to="/caja_registradora" onClick={() => irA('caja_registradora', '/caja_registradora')} className={estiloSubItem('caja_registradora')}>🠖 Caja registradora</Link>
+                    <Link to="/vendedores-comisiones" onClick={() => irA('vendedores_comisiones', '/vendedores-comisiones')} className={estiloSubItem('vendedores_comisiones')}>🠖 Vendedores / Comisiones</Link>
                   </div>
                 )}
               </>
@@ -737,6 +790,7 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
                 {vistaActiva === 'informe_caja_pago' && 'Informe de Pago'}
                 {vistaActiva === 'ventas_por_producto' && 'Ventas por Producto'}
                 {vistaActiva === 'cobro_de_ventas' && 'Cobros de Venta'}
+                {vistaActiva === 'vendedores_comisiones' && 'Vendedores / Comisiones'}
               </h2>
             </div>
             <div className="flex items-center gap-2 md:gap-3">

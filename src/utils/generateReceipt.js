@@ -20,7 +20,7 @@ const normalizarItems = (venta) => {
  * @param {object} venta     - venta con .items / .detalle, .cliente, .cliente_ruc, .total, etc.
  * @param {object} empresa   - { nombre, ruc, telefono, direccion }
  * @param {'80mm'|'58mm'} formato
- * @param {boolean} autoImprimir (ignorado; siempre se lanza window.print al cargar)
+ * @param {boolean} autoImprimir abre el diálogo de impresión automáticamente
  */
 export const generateReceipt = (venta, empresa = {}, formato = '80mm', autoImprimir = false) => {
   try {
@@ -208,7 +208,7 @@ export const generateReceipt = (venta, empresa = {}, formato = '80mm', autoImpri
 
   <script>
     window.onload = function () {
-      setTimeout(function () { window.print(); }, 300);
+      if (${autoImprimir ? 'true' : 'false'}) setTimeout(function () { window.print(); }, 300);
     };
     window.onafterprint = function () { window.close(); };
   <\/script>

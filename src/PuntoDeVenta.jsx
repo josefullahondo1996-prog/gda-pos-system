@@ -9,7 +9,6 @@ import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { sonidoExito, sonidoError } from './utils/sonido';
 import { generateReceipt } from './utils/generateReceipt';
-import { generarFacturaElectronica } from './utils/goekuaService';
 import { useEmpresaInfo } from './utils/useEmpresa';
 import { useUbicacionUsuario } from './utils/useUbicacion';
 import { cargarMapaStockPorUbicacion } from './utils/stockUbicacion';
@@ -20,10 +19,7 @@ const formatGs = (valor) => `Gs ${Number(valor || 0).toLocaleString('es-PY')}`;
 const PuntoDeVenta = ({ cajaInfo, session, perfilUsuario, onVolver, onSolicitarCierre, onNuevoGasto }) => {
   const { id: empresaId, nombre: nombreEmpresa, direccion: direccionEmpresa, telefono: telefonoEmpresa, ruc: rucEmpresa } = useEmpresaInfo();
   const { notificar } = useNotificacion();
-  const [ultimaVenta, setUltimaVenta] = useState(null);
   const [formatoTicket, setFormatoTicket] = useState(() => localStorage.getItem('gda_formato_ticket') || '80mm');
-  const [impresoraComandaOcupada, setImpresoraComandaOcupada] = useState(false);
-  const [facturando, setFacturando] = useState(false);
 
   const cambiarFormatoTicket = (formato) => {
     setFormatoTicket(formato);
@@ -47,6 +43,8 @@ const PuntoDeVenta = ({ cajaInfo, session, perfilUsuario, onVolver, onSolicitarC
   const [mostrarPagoMultiple, setMostrarPagoMultiple] = useState(false);
   const [cuentasCaja, setCuentasCaja] = useState([]);
   const [clientesDisponibles, setClientesDisponibles] = useState([]);
+  const [personalServicio, setPersonalServicio] = useState('');
+  const [usuariosServicio, setUsuariosServicio] = useState([]);
   // === ESTADOS PRINCIPALES ===
   const [productos, setProductos] = useState([]);
   const [carrito, setCarrito] = useState([]);
@@ -61,6 +59,7 @@ const PuntoDeVenta = ({ cajaInfo, session, perfilUsuario, onVolver, onSolicitarC
   // === CAMPOS EXTRA (Descuento / Embalaje / Nota) ===
   const [mostrarOpciones, setMostrarOpciones] = useState(false);
   const [mostrarGastos, setMostrarGastos] = useState(false);
+  const [abrirFormularioGasto, setAbrirFormularioGasto] = useState(false);
   const [mostrarDetalleCaja, setMostrarDetalleCaja] = useState(false);
   const [descuento, setDescuento] = useState('');
   const [cargoEmbalaje, setCargoEmbalaje] = useState('');
@@ -81,6 +80,20 @@ const PuntoDeVenta = ({ cajaInfo, session, perfilUsuario, onVolver, onSolicitarC
       if (data) setClientesDisponibles(data);
     };
     if (empresaId) cargarClientes();
+  }, [empresaId]);
+
+  useEffect(() => {
+    const cargarUsuariosServicio = async () => {
+      if (!empresaId) return;
+      const { data, error } = await supabase
+        .from('usuarios')
+        .select('id, nombre, apellido, activo, comision_ventas')
+        .eq('empresa_id', empresaId)
+        .eq('activo', true)
+        .order('nombre');
+      if (!error) setUsuariosServicio(data || []);
+    };
+    cargarUsuariosServicio();
   }, [empresaId]);
 
   // Cuentas de caja reales (las mismas que administrás en "Caja / Banco"),
@@ -188,6 +201,7 @@ const PuntoDeVenta = ({ cajaInfo, session, perfilUsuario, onVolver, onSolicitarC
     setDescuento('');
     setCargoEmbalaje('');
     setNotaVenta('');
+    setPersonalServicio('');
   };
 
   const subtotal = carrito.reduce((acc, item) => acc + (item.precio_venta || item.precio || 0) * item.cantidad, 0);
@@ -248,6 +262,8 @@ const PuntoDeVenta = ({ cajaInfo, session, perfilUsuario, onVolver, onSolicitarC
 
     const nuevaVenta = {
       empresa_id: empresaId,
+      usuario_nombre: [perfilUsuario?.nombre, perfilUsuario?.apellido].filter(Boolean).join(' ').trim() || perfilUsuario?.nombre_usuario || null,
+      personal_servicio: personalServicio || null,
       cliente,
       total: totalConAjustes,
       metodo_pago: metodoPagoFinal,
@@ -300,7 +316,6 @@ const PuntoDeVenta = ({ cajaInfo, session, perfilUsuario, onVolver, onSolicitarC
       );
       const clienteRuc = clienteData?.documento_nro || '';
       const ventaParaTicket = { ...nuevaVenta, id: ventaId, cliente_nombre: cliente, cliente_ruc: clienteRuc, items: carrito };
-      setUltimaVenta(ventaParaTicket);
       generateReceipt(
         ventaParaTicket,
         { nombre: nombreEmpresa, direccion: direccionEmpresa, telefono: telefonoEmpresa, ruc: rucEmpresa },
@@ -336,25 +351,6 @@ const PuntoDeVenta = ({ cajaInfo, session, perfilUsuario, onVolver, onSolicitarC
     const contacto = window.prompt('Teléfono o referencia (opcional):') || '';
     const notaDelivery = `Delivery · Dirección: ${direccion}${contacto ? ` · Contacto: ${contacto}` : ''}`;
     procesarVenta('pendiente', null, metodoPago, [notaVenta, notaDelivery].filter(Boolean).join(' | '));
-  };
-
-  const emitirFactura = async () => {
-    if (!ultimaVenta || facturando) return;
-    setFacturando(true);
-    try {
-      const res = await generarFacturaElectronica(ultimaVenta.id, empresaId);
-      if (!res.success) {
-        alert(`Error al emitir factura: ${res.error}`);
-      } else {
-        alert('¡Factura electrónica emitida y enviada a SIFEN exitosamente!');
-        // Opcional: Actualizar el estado de ultimaVenta si queremos deshabilitar el botón
-        setUltimaVenta({ ...ultimaVenta, goekua_id: res.goekua_id });
-      }
-    } catch (error) {
-      alert(`Error inesperado: ${error.message}`);
-    } finally {
-      setFacturando(false);
-    }
   };
 
   // El modal de Pago Múltiple ya calculó cuánto se pagó, con qué método(s) y
@@ -469,7 +465,7 @@ const PuntoDeVenta = ({ cajaInfo, session, perfilUsuario, onVolver, onSolicitarC
           <button onClick={cerrarRegistro} className="bg-red-50 text-red-600 border border-red-100 px-2.5 py-1.5 rounded hover:bg-red-100 whitespace-nowrap">
             🔒 Cerrar registro
           </button>
-          <button onClick={() => setMostrarGastos(true)} className="bg-orange-50 text-orange-700 border border-orange-100 px-2.5 py-1.5 rounded hover:bg-orange-100 whitespace-nowrap">
+          <button onClick={() => { setAbrirFormularioGasto(false); setMostrarGastos(true); }} className="bg-orange-50 text-orange-700 border border-orange-100 px-2.5 py-1.5 rounded hover:bg-orange-100 whitespace-nowrap">
             🧾 Gastos
           </button>
           <button onClick={() => notificar.info('Calculadora disponible próximamente.')} className="bg-gray-50 text-gray-700 border border-gray-200 px-2.5 py-1.5 rounded hover:bg-gray-100 whitespace-nowrap">
@@ -487,7 +483,7 @@ const PuntoDeVenta = ({ cajaInfo, session, perfilUsuario, onVolver, onSolicitarC
           <button onClick={() => notificar.info('La sustitución de personal aún no está habilitada.')} className="bg-indigo-50 text-indigo-700 border border-indigo-100 px-2.5 py-1.5 rounded hover:bg-indigo-100 whitespace-nowrap">
             ♙ Sustitución de personal
           </button>
-          <button onClick={() => { if (onNuevoGasto) onNuevoGasto(); else setMostrarGastos(true); }} className="bg-red-50 text-red-700 border border-red-100 px-2.5 py-1.5 rounded hover:bg-red-100 whitespace-nowrap">
+          <button onClick={() => { setAbrirFormularioGasto(true); setMostrarGastos(true); }} className="bg-red-50 text-red-700 border border-red-100 px-2.5 py-1.5 rounded hover:bg-red-100 whitespace-nowrap">
             ⊖ Agregar gasto
           </button>
         </div>
@@ -541,18 +537,28 @@ const PuntoDeVenta = ({ cajaInfo, session, perfilUsuario, onVolver, onSolicitarC
           </button>
 
           {mostrarOpciones && (
-            <div className="px-3 pb-3 grid grid-cols-2 gap-2 text-xs">
-              <div>
-                <label className="font-bold text-gray-500 block mb-1">Descuento (Gs):</label>
-                <input type="number" min="0" max={subtotal} step="1" value={descuento} onChange={(e) => setDescuento(e.target.value)} onBlur={() => setDescuento(String(descuentoAplicado || ''))} className="w-full border border-gray-300 rounded p-1.5" />
+            <div className="mx-3 mb-3 rounded-lg border border-gray-200 bg-gray-50 p-2 grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-2 text-[11px]">
+              <div className="min-w-0">
+                <label className="font-bold text-gray-500 block mb-1 truncate">Descuento (Gs)</label>
+                <input type="number" min="0" max={subtotal} step="1" value={descuento} onChange={(e) => setDescuento(e.target.value)} onBlur={() => setDescuento(String(descuentoAplicado || ''))} className="w-full h-8 border border-gray-300 rounded px-2 bg-white" />
               </div>
-              <div>
-                <label className="font-bold text-gray-500 block mb-1">Cargo de embalaje (Gs):</label>
-                <input type="number" min="0" step="1" value={cargoEmbalaje} onChange={(e) => setCargoEmbalaje(e.target.value)} onBlur={() => setCargoEmbalaje(String(cargoEmbalajeAplicado || ''))} className="w-full border border-gray-300 rounded p-1.5" />
+              <div className="min-w-0">
+                <label className="font-bold text-gray-500 block mb-1 truncate">Cargo de embalaje (Gs)</label>
+                <input type="number" min="0" step="1" value={cargoEmbalaje} onChange={(e) => setCargoEmbalaje(e.target.value)} onBlur={() => setCargoEmbalaje(String(cargoEmbalajeAplicado || ''))} className="w-full h-8 border border-gray-300 rounded px-2 bg-white" />
               </div>
-              <div className="col-span-2">
-                <label className="font-bold text-gray-500 block mb-1">Nota de venta:</label>
-                <input type="text" value={notaVenta} onChange={(e) => setNotaVenta(e.target.value)} className="w-full border border-gray-300 rounded p-1.5" />
+              <div className="min-w-0">
+                <label className="font-bold text-gray-500 block mb-1 truncate">Personal de servicio / vendedor</label>
+                <select value={personalServicio} onChange={(e) => setPersonalServicio(e.target.value)} className="w-full h-8 border border-gray-300 rounded px-2 bg-white truncate">
+                  <option value="">Seleccionar personal de servicio</option>
+                  {usuariosServicio.map((usuario) => {
+                    const nombre = [usuario.nombre, usuario.apellido].filter(Boolean).join(' ').trim();
+                    return <option key={usuario.id} value={nombre}>{nombre}</option>;
+                  })}
+                </select>
+              </div>
+              <div className="min-w-0">
+                <label className="font-bold text-gray-500 block mb-1 truncate">Nota de venta</label>
+                <input type="text" value={notaVenta} onChange={(e) => setNotaVenta(e.target.value)} className="w-full h-8 border border-gray-300 rounded px-2 bg-white" />
               </div>
             </div>
           )}
@@ -629,33 +635,41 @@ const PuntoDeVenta = ({ cajaInfo, session, perfilUsuario, onVolver, onSolicitarC
             <span>Total: {formatGs(totalConAjustes)}</span>
           </div>
 
-          <div className="border-t border-gray-200 p-3 grid grid-cols-2 gap-2">
-            <div>
-              <label className="text-xs font-bold text-gray-500 block mb-1">Paga con (Gs):</label>
-              <input type="number" placeholder="Ej: 100000" value={montoPagado} onChange={(e) => setMontoPagado(e.target.value)} className="w-full border border-gray-300 rounded-lg p-2 font-bold" />
+          <div className="shrink-0 border-t-2 border-gray-300 bg-white p-2 shadow-[0_-3px_10px_rgba(0,0,0,0.05)]">
+            <div className="flex flex-wrap items-end gap-2">
+              <div className="w-36 shrink-0">
+                <label className="text-[10px] font-bold text-gray-500 block mb-1">Paga con (Gs)</label>
+                <input type="number" placeholder="Ej: 100000" value={montoPagado} onChange={(e) => setMontoPagado(e.target.value)} className="w-full h-8 border border-gray-300 rounded px-2 font-bold text-sm" />
+              </div>
+              <div className="w-40 shrink-0">
+                <label className="text-[10px] font-bold text-gray-500 block mb-1">Método de pago</label>
+                <select value={metodoPago} onChange={(e) => setMetodoPago(e.target.value)} className="w-full h-8 border border-gray-300 rounded px-2 text-xs font-bold bg-white">
+                  <option value="Efectivo">💵 Efectivo</option>
+                  <option value="Tarjeta">💳 Tarjeta</option>
+                  <option value="Transferencia">🏦 Transf.</option>
+                </select>
+              </div>
+              <button
+                onClick={() => procesarVenta('venta')}
+                disabled={carrito.length === 0}
+                className={`h-8 flex-1 min-w-[150px] rounded-lg font-black text-sm text-white transition-all ${carrito.length === 0 ? 'bg-gray-300 cursor-not-allowed' : 'bg-orange-500 hover:bg-orange-600'}`}
+              >
+                COBRAR {formatGs(totalConAjustes)}
+              </button>
             </div>
-            <div>
-              <label className="text-xs font-bold text-gray-500 block mb-1">Método:</label>
-              <select value={metodoPago} onChange={(e) => setMetodoPago(e.target.value)} className="w-full border border-gray-300 rounded-lg p-2 text-sm font-bold bg-white">
-                <option value="Efectivo">💵 Efectivo</option>
-                <option value="Tarjeta">💳 Tarjeta</option>
-                <option value="Transferencia">🏦 Transf.</option>
-              </select>
-            </div>
-          </div>
 
           {vuelto > 0 && (
-            <div className="mx-3 mb-2 bg-green-50 text-green-800 p-2 rounded-lg flex justify-between font-bold border border-green-200 text-sm">
+            <div className="mt-2 bg-green-50 text-green-800 p-1.5 rounded flex justify-between font-bold border border-green-200 text-xs">
               <span>Vuelto:</span><span>{formatGs(vuelto)}</span>
             </div>
           )}
           {saldoPendiente > 0 && (
-            <div className="mx-3 mb-2 bg-red-50 text-red-800 p-2 rounded-lg flex justify-between font-bold border border-red-200 text-sm">
+            <div className="mt-2 bg-red-50 text-red-800 p-1.5 rounded flex justify-between font-bold border border-red-200 text-xs">
               <span>Queda debiendo:</span><span>{formatGs(saldoPendiente)}</span>
             </div>
           )}
 
-          <div className="border-t border-gray-200 p-3 flex gap-2 overflow-x-auto text-xs font-bold">
+            <div className="mt-2 flex gap-1.5 overflow-x-auto text-[10px] font-bold pb-0.5">
             <button onClick={() => procesarVenta('pendiente')} disabled={carrito.length === 0} className="shrink-0 whitespace-nowrap bg-gray-100 text-gray-700 px-3 py-2 rounded-lg hover:bg-gray-200 disabled:opacity-50">📝 Pedido Pendiente</button>
             <button onClick={() => procesarVenta('cotizacion')} disabled={carrito.length === 0} className="shrink-0 whitespace-nowrap bg-gray-100 text-gray-700 px-3 py-2 rounded-lg hover:bg-gray-200 disabled:opacity-50">📄 Cotización</button>
             <button onClick={procesarDelivery} disabled={carrito.length === 0} className="shrink-0 whitespace-nowrap bg-blue-50 text-blue-700 px-3 py-2 rounded-lg hover:bg-blue-100 disabled:opacity-50">🚚 Delivery</button>
@@ -664,14 +678,8 @@ const PuntoDeVenta = ({ cajaInfo, session, perfilUsuario, onVolver, onSolicitarC
             <button onClick={() => setMostrarPagoMultiple(true)} disabled={carrito.length === 0} className="shrink-0 whitespace-nowrap bg-sky-50 text-sky-700 px-3 py-2 rounded-lg hover:bg-sky-100 disabled:opacity-50">▣ Pago múltiple</button>
             <button onClick={() => cobrarConMetodo('Efectivo')} disabled={carrito.length === 0} className="shrink-0 whitespace-nowrap bg-emerald-50 text-emerald-700 px-3 py-2 rounded-lg hover:bg-emerald-100 disabled:opacity-50">💵 Efectivo</button>
             <button onClick={vaciarCarrito} className="shrink-0 whitespace-nowrap bg-red-50 text-red-600 px-3 py-2 rounded-lg hover:bg-red-100">✕ Cancelar</button>
+            </div>
           </div>
-          <button
-            onClick={() => procesarVenta('venta')}
-            disabled={carrito.length === 0}
-            className={`m-3 py-4 rounded-xl font-black text-lg text-white shadow-lg transition-all ${carrito.length === 0 ? 'bg-gray-300 cursor-not-allowed' : 'bg-orange-500 hover:bg-orange-600'}`}
-          >
-            COBRAR {formatGs(totalConAjustes)}
-          </button>
         </div>
 
         <div className="hidden lg:flex flex-col flex-1 p-4 overflow-hidden">
@@ -729,7 +737,7 @@ const PuntoDeVenta = ({ cajaInfo, session, perfilUsuario, onVolver, onSolicitarC
         </div>
       </div>
       {mostrarGastos && (
-        <GastosDelTurno cajaInfo={cajaInfo} onClose={() => setMostrarGastos(false)} />
+        <GastosDelTurno cajaInfo={cajaInfo} abrirFormulario={abrirFormularioGasto} onClose={() => { setMostrarGastos(false); setAbrirFormularioGasto(false); }} />
       )}
       {mostrarDetalleCaja && (
         <DetalleCaja cajaInfo={cajaInfo} empresaId={empresaId} nombreEmpresa={nombreEmpresa} session={session} onClose={() => setMostrarDetalleCaja(false)} />
@@ -763,63 +771,6 @@ const PuntoDeVenta = ({ cajaInfo, session, perfilUsuario, onVolver, onSolicitarC
             if (onSolicitarCierre) onSolicitarCierre(reporte);
           }}
         />
-      )}
-      {ultimaVenta && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl shadow-2xl w-full max-w-sm overflow-hidden p-6 flex flex-col items-center text-center">
-            <div className="w-16 h-16 rounded-full bg-green-100 text-green-600 flex items-center justify-center text-3xl font-bold mb-4">
-              ✓
-            </div>
-            <h3 className="text-xl font-bold text-gray-800 mb-1">¡Venta procesada con éxito!</h3>
-            <p className="text-sm text-gray-500 mb-3">Total: {formatGs(ultimaVenta.total)}</p>
-            <div className="flex items-center gap-1 bg-gray-100 rounded-lg p-1 mb-4">
-              <button
-                onClick={() => cambiarFormatoTicket('80mm')}
-                className={`text-xs font-bold px-3 py-1.5 rounded ${formatoTicket === '80mm' ? 'bg-white shadow text-gray-800' : 'text-gray-500'}`}
-              >
-                80mm
-              </button>
-              <button
-                onClick={() => cambiarFormatoTicket('58mm')}
-                className={`text-xs font-bold px-3 py-1.5 rounded ${formatoTicket === '58mm' ? 'bg-white shadow text-gray-800' : 'text-gray-500'}`}
-              >
-                58mm
-              </button>
-            </div>
-            <div className="flex flex-col gap-2 w-full">
-              <button
-                onClick={() => {
-                  generateReceipt(
-                    { ...ultimaVenta, cliente_nombre: ultimaVenta.cliente_nombre },
-                    { nombre: nombreEmpresa, direccion: direccionEmpresa, telefono: telefonoEmpresa, ruc: rucEmpresa },
-                    formatoTicket,
-                    true
-                  );
-                }}
-                className="w-full bg-orange-500 hover:bg-orange-600 text-white font-bold text-sm px-5 py-2.5 rounded"
-              >
-                🖨️ Volver a imprimir
-              </button>
-              
-              {!ultimaVenta.goekua_id && (
-                <button
-                  onClick={emitirFactura}
-                  disabled={facturando}
-                  className="w-full bg-[#004284] hover:bg-blue-800 text-white font-bold text-sm px-5 py-2.5 rounded disabled:opacity-50"
-                >
-                  {facturando ? 'Emitiendo...' : '📄 Emitir Factura Electrónica'}
-                </button>
-              )}
-
-              <button
-                onClick={() => setUltimaVenta(null)}
-                className="w-full border border-gray-300 text-gray-600 font-bold text-sm px-5 py-2.5 rounded hover:bg-gray-50"
-              >
-                Cerrar
-              </button>
-            </div>
-          </div>
-        </div>
       )}
     </div>
   );

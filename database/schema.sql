@@ -190,6 +190,8 @@ CREATE TABLE ventas (
     nota_venta text,
     fecha timestamptz,
     caja_id uuid,
+    usuario_nombre text,
+    personal_servicio text,
     creado_en timestamptz NOT NULL DEFAULT now()
 );
 

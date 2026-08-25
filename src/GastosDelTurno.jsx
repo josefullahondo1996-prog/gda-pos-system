@@ -21,7 +21,7 @@ const CUENTAS_PAGO = [
   'Caja venta (PYG)',
 ];
 
-const GastosDelTurno = ({ cajaInfo, onClose }) => {
+const GastosDelTurno = ({ cajaInfo, onClose, abrirFormulario = false }) => {
   const { id: empresaId } = useEmpresaInfo();
   const [gastos, setGastos] = useState([]);
   const [cargando, setCargando] = useState(true);
@@ -34,6 +34,7 @@ const GastosDelTurno = ({ cajaInfo, onClose }) => {
   const [categoria, setCategoria] = useState('');
   const [metodoPago, setMetodoPago] = useState('Efectivo');
   const [cuentaPago, setCuentaPago] = useState('');
+  const [cuentasCaja, setCuentasCaja] = useState([]);
 
   const cargarGastos = async () => {
     setCargando(true);
@@ -55,6 +56,24 @@ const GastosDelTurno = ({ cajaInfo, onClose }) => {
     if (empresaId || cajaInfo?.id) cargarGastos();
   }, [empresaId, cajaInfo?.id]);
 
+  useEffect(() => {
+    setMostrarForm(abrirFormulario);
+  }, [abrirFormulario]);
+
+  useEffect(() => {
+    const cargarCuentasCaja = async () => {
+      if (!empresaId) return;
+      const { data } = await supabase
+        .from('cuentas_caja')
+        .select('id, nombre, saldo, moneda')
+        .eq('empresa_id', empresaId)
+        .eq('activo', true)
+        .order('nombre');
+      setCuentasCaja(data || []);
+    };
+    cargarCuentasCaja();
+  }, [empresaId]);
+
   const totalGastos = gastos.reduce((acc, g) => acc + Number(g.monto || 0), 0);
 
   const limpiarFormulario = () => {
@@ -70,6 +89,9 @@ const GastosDelTurno = ({ cajaInfo, onClose }) => {
     if (!descripcion || !monto || !categoria || !cuentaPago) {
       return alert('Completá descripción, monto, categoría y cuenta de pago.');
     }
+    const cuenta = cuentasCaja.find((item) => item.id === cuentaPago);
+    if (!cuenta) return alert('Seleccioná una cuenta de pago válida.');
+    if (Number(monto) > Number(cuenta.saldo || 0)) return alert('La cuenta de pago no tiene saldo suficiente.');
     setGuardando(true);
     try {
       const nuevoGasto = {
@@ -77,13 +99,21 @@ const GastosDelTurno = ({ cajaInfo, onClose }) => {
         monto: parseFloat(monto),
         categoria,
         metodo_pago: metodoPago,
-        cuenta_pago: cuentaPago,
+        cuenta_pago: cuenta.nombre,
+        fecha: new Date().toISOString().slice(0, 10),
       };
       if (empresaId) nuevoGasto.empresa_id = empresaId;
       if (cajaInfo?.id) nuevoGasto.caja_id = cajaInfo.id;
 
       const { error } = await supabase.from('gastos').insert([nuevoGasto]);
       if (error) throw error;
+
+      const { error: errorCaja } = await supabase
+        .from('cuentas_caja')
+        .update({ saldo: Number(cuenta.saldo || 0) - Number(monto) })
+        .eq('id', cuenta.id)
+        .eq('empresa_id', empresaId);
+      if (errorCaja) throw errorCaja;
 
       limpiarFormulario();
       setMostrarForm(false);
@@ -237,8 +267,8 @@ const GastosDelTurno = ({ cajaInfo, onClose }) => {
                   required
                 >
                   <option value="">-- Seleccione --</option>
-                  {CUENTAS_PAGO.map((c) => (
-                    <option key={c} value={c}>{c}</option>
+                  {cuentasCaja.map((cuenta) => (
+                    <option key={cuenta.id} value={cuenta.id}>{cuenta.nombre} ({formatGs(cuenta.saldo)})</option>
                   ))}
                 </select>
               </div>
