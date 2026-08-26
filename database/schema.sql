@@ -184,7 +184,7 @@ CREATE TABLE ventas (
     estado_pago text,
     monto_pagado numeric(12,2) NOT NULL DEFAULT 0,
     saldo_pendiente numeric(12,2) NOT NULL DEFAULT 0,
-    articulos integer NOT NULL DEFAULT 0,
+    articulos numeric NOT NULL DEFAULT 0,
     descuento numeric(12,2) NOT NULL DEFAULT 0,
     cargo_embalaje numeric(12,2) NOT NULL DEFAULT 0,
     nota_venta text,

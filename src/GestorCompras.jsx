@@ -140,7 +140,7 @@ export default function GestorCompras({ vistaInicial = 'lista' }) {
   useEffect(() => {
     const cargarUbicaciones = async () => {
       if (!empresaId) return;
-      const { data } = await supabase.from('ubicaciones_comerciales').select('id, nombre, codigo_ubicacion').eq('empresa_id', empresaId).order('creado_en');
+      const { data } = await supabase.from('ubicaciones_comerciales').select('id, nombre, codigo_ubicacion').eq('empresa_id', empresaId).eq('activo', true).order('creado_en');
       if (data) setUbicacionesDisponibles(data);
     };
     cargarUbicaciones();
@@ -238,12 +238,12 @@ export default function GestorCompras({ vistaInicial = 'lista' }) {
     const copia = [...itemsCompra];
     copia[index][campo] = valor;
     if (campo === 'cantidad' || campo === 'costo') {
-      copia[index].subtotal = (parseInt(copia[index].cantidad) || 0) * (parseFloat(copia[index].costo) || 0);
+      copia[index].subtotal = (parseFloat(copia[index].cantidad) || 0) * (parseFloat(copia[index].costo) || 0);
     }
     setItemsCompra(copia);
   };
 
-  const totalArticulos = itemsCompra.reduce((acc, i) => acc + (parseInt(i.cantidad) || 0), 0);
+  const totalArticulos = itemsCompra.reduce((acc, i) => acc + (parseFloat(i.cantidad) || 0), 0);
   const totalNetoItems = itemsCompra.reduce((acc, i) => acc + i.subtotal, 0);
   const descuentoCalculado = tipoDescuento === 'Fijo' ? Number(importeDescuento) : (tipoDescuento === 'Porcentaje' ? (totalNetoItems * (Number(importeDescuento) / 100)) : 0);
   const totalCompraFinal = totalNetoItems - descuentoCalculado + Number(cargosEnvio);

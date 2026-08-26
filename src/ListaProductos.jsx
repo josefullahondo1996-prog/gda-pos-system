@@ -58,7 +58,20 @@ export default function ListaProductos() {
 
   useEffect(() => {
     cargarProductos();
-  }, []);
+  }, [empresaId]);
+
+  useEffect(() => {
+    const actualizarCuandoCambiaStock = () => {
+      cargarProductos();
+      if (empresaId) cargarMapaStockPorUbicacion(empresaId).then(setMapaStockUbicacion);
+    };
+    window.addEventListener('stock-actualizado', actualizarCuandoCambiaStock);
+    window.addEventListener('focus', actualizarCuandoCambiaStock);
+    return () => {
+      window.removeEventListener('stock-actualizado', actualizarCuandoCambiaStock);
+      window.removeEventListener('focus', actualizarCuandoCambiaStock);
+    };
+  }, [empresaId]);
 
   useEffect(() => {
     const cargarListasFiltro = async () => {
@@ -67,7 +80,7 @@ export default function ListaProductos() {
         supabase.from('marcas').select('id, nombre').eq('empresa_id', empresaId).order('nombre'),
         supabase.from('unidades').select('id, nombre').eq('empresa_id', empresaId).order('nombre'),
         supabase.from('categorias_productos').select('id, nombre').eq('empresa_id', empresaId).order('nombre'),
-        supabase.from('ubicaciones_comerciales').select('id, nombre').eq('empresa_id', empresaId).order('nombre'),
+        supabase.from('ubicaciones_comerciales').select('id, nombre').eq('empresa_id', empresaId).eq('activo', true).order('nombre'),
       ]);
       if (rMarcas.data) setMarcasDisponibles(rMarcas.data);
       if (rUnidades.data) setUnidadesDisponibles(rUnidades.data);
@@ -90,6 +103,11 @@ export default function ListaProductos() {
     if (!error && data) setProductos(data);
   };
 
+  const stockVisible = (producto) => {
+    const stockSucursal = sucursalActiva ? mapaStockUbicacion[producto.id]?.[sucursalActiva] : undefined;
+    return stockSucursal !== undefined ? Number(stockSucursal) : Number(producto.stock_actual) || 0;
+  };
+
   useEffect(() => {
     if (!empresaId) return;
     cargarMapaStockPorUbicacion(empresaId).then(setMapaStockUbicacion);
@@ -105,7 +123,7 @@ export default function ListaProductos() {
     const coincideUnidad = filtroUnidad === 'Todos' || String(p.unidad_id) === filtroUnidad;
     const coincideIva = filtroIva === 'Todos' || p.iva === filtroIva;
     const coincideUbicacion = filtroUbicacionLista === 'Todos' || Number(mapaStockUbicacion[p.id]?.[filtroUbicacionLista] || 0) > 0;
-    const stockActual = Number(p.stock_actual) || 0;
+    const stockActual = stockVisible(p);
     const umbral = Number(p.alerta_stock_bajo) || 5;
     const coincideEstadoStock =
       filtroEstadoStock === 'Todos' ||
@@ -547,12 +565,12 @@ export default function ListaProductos() {
                         {Number(prod.precio_venta || 0).toLocaleString('es-PY')} Gs
                       </td>
                       <td className="p-3 text-center">
-                        <span className={`px-2 py-0.5 rounded-sm font-bold text-[11px] ${Number(prod.stock_actual) <= Number(prod.alerta_stock_bajo || 5) ? 'bg-red-100 text-red-700' : 'bg-gray-100 text-gray-700'}`}>
-                          {prod.stock_actual ?? 0} UNID
+                        <span className={`px-2 py-0.5 rounded-sm font-bold text-[11px] ${stockVisible(prod) <= Number(prod.alerta_stock_bajo || 5) ? 'bg-red-100 text-red-700' : 'bg-gray-100 text-gray-700'}`}>
+                          {stockVisible(prod)} {prod.unidad || 'UNID'}
                         </span>
                         {sucursalActiva && (
                           <div className="text-[10px] text-gray-400 mt-1">
-                            En {nombreSucursalActiva}: <span className="font-bold text-gray-600">{mapaStockUbicacion[prod.id]?.[sucursalActiva] ?? 0} UNID</span>
+                            En {nombreSucursalActiva}: <span className="font-bold text-gray-600">{mapaStockUbicacion[prod.id]?.[sucursalActiva] ?? 0} {prod.unidad || 'UNID'}</span>
                           </div>
                         )}
                       </td>

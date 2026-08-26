@@ -20,30 +20,42 @@ export const SucursalProvider = ({ children }) => {
   // '' significa "Todas las sucursales" (solo disponible si usuarioVeTodas)
   const [sucursalActiva, setSucursalActivaState] = useState('');
 
-  // Carga la lista de sucursales de la empresa una sola vez
+  const cargarUbicaciones = async () => {
+    if (!empresaId) return;
+    const { data } = await supabase
+      .from('ubicaciones_comerciales')
+      .select('id, nombre')
+      .eq('empresa_id', empresaId)
+      .eq('activo', true)
+      .order('nombre');
+    if (data) setUbicaciones(data);
+  };
+
   useEffect(() => {
-    const cargarUbicaciones = async () => {
-      if (!empresaId) return;
-      const { data } = await supabase
-        .from('ubicaciones_comerciales')
-        .select('id, nombre')
-        .eq('empresa_id', empresaId)
-        .order('nombre');
-      if (data) setUbicaciones(data);
-    };
     cargarUbicaciones();
+    window.addEventListener('ubicaciones-actualizadas', cargarUbicaciones);
+    return () => window.removeEventListener('ubicaciones-actualizadas', cargarUbicaciones);
   }, [empresaId]);
+
+  useEffect(() => {
+    if (sucursalActiva && !ubicaciones.some((u) => u.id === sucursalActiva)) {
+      setSucursalActivaState('');
+    }
+  }, [ubicaciones, sucursalActiva]);
 
   // Si el usuario está fijo a una sola sucursal, lo bloqueamos ahí apenas se sabe su permiso
   useEffect(() => {
     if (!cargandoPermiso && !usuarioVeTodas && ubicacionUsuarioId) {
-      setSucursalActivaState(ubicacionUsuarioId);
+      if (ubicaciones.some((u) => u.id === ubicacionUsuarioId)) {
+        setSucursalActivaState(ubicacionUsuarioId);
+      }
     }
-  }, [cargandoPermiso, usuarioVeTodas, ubicacionUsuarioId]);
+  }, [cargandoPermiso, usuarioVeTodas, ubicacionUsuarioId, ubicaciones]);
 
   // Guard: nadie sin permiso puede forzar otra sucursal, aunque intente llamar al setter directo
   const setSucursalActiva = (nuevoId) => {
     if (!usuarioVeTodas) return;
+    if (nuevoId && !ubicaciones.some((u) => u.id === nuevoId)) return;
     setSucursalActivaState(nuevoId);
   };
 

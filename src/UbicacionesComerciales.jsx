@@ -99,6 +99,7 @@ export default function UbicacionesComerciales() {
         const { error } = await supabase.from('ubicaciones_comerciales').update({ activo: !u.activo }).eq('id', u.id).eq('empresa_id', empresaId);
         if (error) return alert('Error al actualizar el estado: ' + error.message);
         sonidoExito();
+        window.dispatchEvent(new Event('ubicaciones-actualizadas'));
         cargarUbicaciones();
     };
 

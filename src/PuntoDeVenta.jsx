@@ -13,6 +13,7 @@ import { useEmpresaInfo } from './utils/useEmpresa';
 import { useUbicacionUsuario } from './utils/useUbicacion';
 import { cargarMapaStockPorUbicacion } from './utils/stockUbicacion';
 import { useNotificacion } from './NotificacionContext';
+import { cantidadInicial, pasoCantidad, cantidadValida } from './utils/cantidadProducto';
 
 const formatGs = (valor) => `Gs ${Number(valor || 0).toLocaleString('es-PY')}`;
 
@@ -142,20 +143,21 @@ const PuntoDeVenta = ({ cajaInfo, session, perfilUsuario, onVolver, onSolicitarC
 
   const agregarAlCarrito = (producto) => {
     const itemExistente = carrito.find((item) => item.id === producto.id);
-    const cantidadActual = itemExistente ? itemExistente.cantidad : 0;
+    const incremento = pasoCantidad(producto.unidad);
+    const cantidadActual = itemExistente ? Number(itemExistente.cantidad) : 0;
     const stockDisponible = stockEnSucursal(producto);
 
-    if (stockDisponible !== null && stockDisponible !== undefined && cantidadActual + 1 > stockDisponible) {
+    if (stockDisponible !== null && stockDisponible !== undefined && cantidadActual + incremento > Number(stockDisponible)) {
       alert(`No hay suficiente stock de "${producto.nombre}". Disponible: ${stockDisponible}`);
       return;
     }
 
     if (itemExistente) {
       setCarrito(carrito.map((item) =>
-        item.id === producto.id ? { ...item, cantidad: item.cantidad + 1 } : item
+        item.id === producto.id ? { ...item, cantidad: Number((cantidadActual + incremento).toFixed(4)) } : item
       ));
     } else {
-      setCarrito([...carrito, { ...producto, cantidad: 1 }]);
+      setCarrito([...carrito, { ...producto, cantidad: cantidadInicial(producto.unidad, stockDisponible) }]);
     }
   };
 
@@ -164,16 +166,17 @@ const PuntoDeVenta = ({ cajaInfo, session, perfilUsuario, onVolver, onSolicitarC
   };
 
   const cambiarCantidad = (id, nuevaCantidad) => {
-    if (nuevaCantidad < 1) return;
+    nuevaCantidad = Number(nuevaCantidad);
+    if (!cantidadValida(nuevaCantidad)) return;
     const productoOriginal = productos.find((p) => p.id === id);
     const stockDisponible = productoOriginal ? stockEnSucursal(productoOriginal) : undefined;
     if (stockDisponible !== null && stockDisponible !== undefined && nuevaCantidad > stockDisponible) {
       alert(`Solo quedan ${stockDisponible} unidades de este producto en stock.`);
-      if (stockDisponible < 1) return;
+      if (stockDisponible <= 0) return;
       nuevaCantidad = stockDisponible;
     }
     setCarrito(carrito.map((item) =>
-      item.id === id ? { ...item, cantidad: Number(nuevaCantidad) } : item
+      item.id === id ? { ...item, cantidad: nuevaCantidad } : item
     ));
   };
 
@@ -270,7 +273,7 @@ const PuntoDeVenta = ({ cajaInfo, session, perfilUsuario, onVolver, onSolicitarC
       estado_pago: estadoPago,
       monto_pagado: montoPagadoFinal,
       saldo_pendiente: estadoPago === 'Credito' ? totalConAjustes : saldoPendienteFinal,
-      articulos: totalArticulos,
+      articulos: carrito.length,
       descuento: descuentoAplicado,
       cargo_embalaje: cargoEmbalajeAplicado,
       nota_venta: notaVentaFinal || null,
@@ -300,6 +303,33 @@ const PuntoDeVenta = ({ cajaInfo, session, perfilUsuario, onVolver, onSolicitarC
         p_ubicacion_id: ubicacionActivaId || null,
       });
       if (error) throw error;
+
+      // Algunas versiones de la RPC solo actualizan el detalle o el stock por
+      // sucursal. Sincronizamos el stock global únicamente si aún conserva el
+      // valor anterior, para no descontarlo dos veces.
+      for (const item of carrito) {
+        const productoAntes = productos.find((p) => p.id === item.id);
+        const stockAntes = Number(productoAntes?.stock_actual);
+        if (!Number.isFinite(stockAntes)) continue;
+
+        const { data: productoDespues } = await supabase
+          .from('productos')
+          .select('stock_actual')
+          .eq('id', item.id)
+          .eq('empresa_id', empresaId)
+          .single();
+        const stockActual = Number(productoDespues?.stock_actual);
+        if (stockActual !== stockAntes) continue;
+
+        await supabase
+          .from('productos')
+          .update({ stock_actual: Math.max(0, stockAntes - Number(item.cantidad)) })
+          .eq('id', item.id)
+          .eq('empresa_id', empresaId)
+          .eq('stock_actual', stockAntes);
+      }
+
+      window.dispatchEvent(new Event('stock-actualizado'));
 
       // Reflejamos el nuevo stock en la grilla al instante, sin esperar a recargar la página
       setProductos((prev) =>
@@ -332,7 +362,8 @@ const PuntoDeVenta = ({ cajaInfo, session, perfilUsuario, onVolver, onSolicitarC
         alert(error.message);
       } else {
         alert(
-          'Error al procesar la venta. No se guardó nada (la operación es atómica). Revisá la consola para más detalle.'
+          'Error al procesar la venta. No se guardó nada (la operación es atómica).\n\nDetalle técnico: ' +
+          (error.message || 'Error desconocido')
         );
       }
       return null;
@@ -598,9 +629,17 @@ const PuntoDeVenta = ({ cajaInfo, session, perfilUsuario, onVolver, onSolicitarC
                         </td>
                         <td className="py-3 px-1 text-center whitespace-nowrap">
                           <div className="inline-flex items-center gap-1">
-                            <button onClick={() => cambiarCantidad(item.id, item.cantidad - 1)} className="bg-gray-100 w-6 h-6 rounded text-gray-600 font-bold hover:bg-gray-200">-</button>
-                            <span className="w-6 text-center">{item.cantidad}</span>
-                            <button onClick={() => cambiarCantidad(item.id, item.cantidad + 1)} className="bg-gray-100 w-6 h-6 rounded text-gray-600 font-bold hover:bg-gray-200">+</button>
+                            <button onClick={() => cambiarCantidad(item.id, item.cantidad - pasoCantidad(item.unidad))} className="bg-gray-100 w-6 h-6 rounded text-gray-600 font-bold hover:bg-gray-200">-</button>
+                            <input
+                              type="number"
+                              min={pasoCantidad(item.unidad)}
+                              step={pasoCantidad(item.unidad)}
+                              value={item.cantidad}
+                              onChange={(e) => cambiarCantidad(item.id, e.target.value)}
+                              className="w-16 text-center border border-gray-200 rounded px-1 py-0.5"
+                              aria-label={`Cantidad de ${item.nombre} en ${item.unidad || 'unidad'}`}
+                            />
+                            <button onClick={() => cambiarCantidad(item.id, item.cantidad + pasoCantidad(item.unidad))} className="bg-gray-100 w-6 h-6 rounded text-gray-600 font-bold hover:bg-gray-200">+</button>
                           </div>
                         </td>
                         <td className="py-3 px-1 text-right whitespace-nowrap">

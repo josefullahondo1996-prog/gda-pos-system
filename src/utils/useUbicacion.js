@@ -19,7 +19,7 @@ export const useUbicacionUsuario = () => {
 
             const { data, error } = await supabase
                 .from('usuarios')
-                .select('todas_localizaciones, ubicacion_id, ubicaciones_comerciales(id, nombre, codigo_ubicacion)')
+                .select('todas_localizaciones, ubicacion_id, ubicaciones_comerciales(id, nombre, codigo_ubicacion, activo)')
                 .eq('auth_user_id', session.user.id)
                 .maybeSingle();
 
@@ -27,9 +27,9 @@ export const useUbicacionUsuario = () => {
 
             if (!error && data) {
                 setUbicacion({
-                    id: data.ubicacion_id || null,
-                    nombre: data.ubicaciones_comerciales?.nombre || '',
-                    codigo: data.ubicaciones_comerciales?.codigo_ubicacion || '',
+                    id: data.ubicaciones_comerciales?.activo ? data.ubicacion_id : null,
+                    nombre: data.ubicaciones_comerciales?.activo ? data.ubicaciones_comerciales.nombre : '',
+                    codigo: data.ubicaciones_comerciales?.activo ? data.ubicaciones_comerciales.codigo_ubicacion : '',
                     ve_todas: data.todas_localizaciones ?? true,
                     cargando: false,
                 });
