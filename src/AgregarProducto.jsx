@@ -3,6 +3,7 @@ import { supabase } from './supabaseClient';
 import AperturaStock from './AperturaStock';
 import { sonidoExito } from './utils/sonido';
 import { useEmpresaInfo } from './utils/useEmpresa';
+import { useLanguage } from './LanguageContext';
 
 const GARANTIAS = ['Sin garantía', '30 días', '3 meses', '6 meses', '1 año'];
 
@@ -18,6 +19,7 @@ const GRUPOS_PRECIO_INICIALES = [
 ];
 
 const AgregarProducto = ({ onGuardado, onCancelar, productoEditar }) => {
+    const { t } = useLanguage();
     const { id: empresaId, nombre: nombreEmpresa } = useEmpresaInfo();
     const [nombre, setNombre] = useState('');
     const [sku, setSku] = useState('');
@@ -264,7 +266,7 @@ const AgregarProducto = ({ onGuardado, onCancelar, productoEditar }) => {
             }
 
             sonidoExito();
-            alert(productoEditar ? '¡Producto actualizado con éxito!' : '¡Producto guardado con éxito!');
+            alert(productoEditar ? t('productUpdated') : t('productSaved'));
 
             if (opcion === 'agregar_otro') {
                 limpiarFormulario();
@@ -297,10 +299,10 @@ const AgregarProducto = ({ onGuardado, onCancelar, productoEditar }) => {
             {/* Breadcrumb */}
             <div className="flex items-center justify-between mb-4">
                 <p className="text-xs font-bold text-gray-500">
-                    <span className="text-blue-600">CDEpos</span> / Productos / <span className="text-gray-700">{productoEditar ? 'Editar producto' : 'Agregar nuevo producto'}</span>
+                    <span className="text-blue-600">CDEpos</span> / {t('products')} / <span className="text-gray-700">{productoEditar ? t('editProduct') : t('addNewProduct')}</span>
                 </p>
                 <button onClick={() => onCancelar && onCancelar()} className="text-xs font-bold text-gray-500 hover:text-gray-800">
-                    ← Volver a la lista
+                    ← {t('backToList')}
                 </button>
             </div>
 
@@ -311,20 +313,20 @@ const AgregarProducto = ({ onGuardado, onCancelar, productoEditar }) => {
 
                     {/* Información del producto */}
                     <div className="bg-white p-5 rounded-lg shadow-sm border-t-2 border-[#004284]">
-                        <h3 className="font-bold text-gray-700 mb-4 flex items-center gap-2">📦 Información del producto</h3>
+                        <h3 className="font-bold text-gray-700 mb-4 flex items-center gap-2">📦 {t('productInformation')}</h3>
 
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
                             <div>
-                                <label className="block text-xs font-bold text-gray-500 mb-1">Nombre del producto *</label>
+                                <label className="block text-xs font-bold text-gray-500 mb-1">{t('productName')} *</label>
                                 <input
                                     className="w-full border border-gray-300 rounded p-2 text-sm"
-                                    placeholder="Nombre del producto"
+                                    placeholder={t('productName')}
                                     value={nombre}
                                     onChange={(e) => setNombre(e.target.value)}
                                 />
                             </div>
                             <div>
-                                <label className="block text-xs font-bold text-gray-500 mb-1">SKU/Código de Barra / Tipo de código de barras</label>
+                                <label className="block text-xs font-bold text-gray-500 mb-1">{t('skuBarcodeType')}</label>
                                 <div className="flex border border-gray-300 rounded overflow-hidden">
                                     <input
                                         className="w-20 p-2 text-sm border-r border-gray-300 outline-none"
@@ -347,9 +349,9 @@ const AgregarProducto = ({ onGuardado, onCancelar, productoEditar }) => {
 
                         <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-4">
                             <div>
-                                <label className="block text-xs font-bold text-gray-500 mb-1">Unidad *</label>
+                                <label className="block text-xs font-bold text-gray-500 mb-1">{t('units')} *</label>
                                 <select className="w-full border border-gray-300 rounded p-2 text-sm bg-white" value={unidad} onChange={(e) => setUnidad(e.target.value)}>
-                                    <option value="">Seleccione</option>
+                                    <option value="">{t('select')}</option>
                                     {unidadesDisponibles.map((u) => <option key={u.id} value={u.nombre}>{u.nombre}</option>)}
                                 </select>
                             </div>
@@ -361,9 +363,9 @@ const AgregarProducto = ({ onGuardado, onCancelar, productoEditar }) => {
                                 </select>
                             </div>
                             <div>
-                                <label className="block text-xs font-bold text-gray-500 mb-1">Categoría</label>
+                                <label className="block text-xs font-bold text-gray-500 mb-1">{t('categories')}</label>
                                 <select className="w-full border border-gray-300 rounded p-2 text-sm bg-white" value={categoria} onChange={(e) => setCategoria(e.target.value)}>
-                                    <option value="">Seleccione</option>
+                                    <option value="">{t('select')}</option>
                                     {categoriasDisponibles.filter((c) => !c.categoria_padre_id).map((padre) => (
                                         <React.Fragment key={padre.id}>
                                             <option value={padre.nombre}>{padre.nombre}</option>
@@ -375,26 +377,26 @@ const AgregarProducto = ({ onGuardado, onCancelar, productoEditar }) => {
                                 </select>
                             </div>
                             <div>
-                                <label className="block text-xs font-bold text-gray-500 mb-1">Subcategoría</label>
-                                <input className="w-full border border-gray-300 rounded p-2 text-sm" placeholder="Subcategoría" value={subcategoria} onChange={(e) => setSubcategoria(e.target.value)} />
+                                <label className="block text-xs font-bold text-gray-500 mb-1">{t('subcategory')}</label>
+                                <input className="w-full border border-gray-300 rounded p-2 text-sm" placeholder={t('subcategory')} value={subcategoria} onChange={(e) => setSubcategoria(e.target.value)} />
                             </div>
                             <div>
-                                <label className="block text-xs font-bold text-gray-500 mb-1">Garantía</label>
+                                <label className="block text-xs font-bold text-gray-500 mb-1">{t('warranty')}</label>
                                 <select className="w-full border border-gray-300 rounded p-2 text-sm bg-white" value={garantia} onChange={(e) => setGarantia(e.target.value)}>
-                                    <option value="">Seleccione</option>
+                                    <option value="">{t('select')}</option>
                                     {GARANTIAS.map((g) => <option key={g} value={g}>{g}</option>)}
                                 </select>
                             </div>
                         </div>
 
                         <div>
-                            <label className="block text-xs font-bold text-gray-500 mb-1">Ubicaciones comerciales *</label>
+                            <label className="block text-xs font-bold text-gray-500 mb-1">{t('commercialLocations')} *</label>
                             <div className="border border-gray-300 rounded p-2 flex flex-wrap gap-2">
                                 <span className="bg-blue-500 text-white text-xs font-bold px-2 py-1 rounded flex items-center gap-1">
                                     ✕ {nombreEmpresa} (BL0001)
                                 </span>
                             </div>
-                            <p className="text-[11px] text-gray-400 mt-1">Seleccioná en qué sucursales estará disponible</p>
+                            <p className="text-[11px] text-gray-400 mt-1">{t('selectAvailableLocations')}</p>
                         </div>
                     </div>
 
@@ -404,7 +406,7 @@ const AgregarProducto = ({ onGuardado, onCancelar, productoEditar }) => {
                             onClick={() => setMostrarDatosTipo(!mostrarDatosTipo)}
                             className="w-full text-left px-4 py-3 font-bold text-gray-700 flex justify-between items-center"
                         >
-                            Datos y tipo (descripción, folleto, stock)
+                            {t('dataAndType')} 
                             <span className="text-blue-500">{mostrarDatosTipo ? '▲' : '▼'}</span>
                         </button>
 
@@ -412,45 +414,45 @@ const AgregarProducto = ({ onGuardado, onCancelar, productoEditar }) => {
                             <div className="p-5 border-t border-gray-100">
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-5">
                                     <div>
-                                        <label className="block text-xs font-bold text-gray-500 mb-1">Descripción del producto</label>
+                                        <label className="block text-xs font-bold text-gray-500 mb-1">{t('productDescription')}</label>
                                         <textarea
                                             className="w-full border border-gray-300 rounded p-2 text-sm h-20"
-                                            placeholder="Descripción del producto"
+                                            placeholder={t('productDescription')}
                                             value={descripcion}
                                             onChange={(e) => setDescripcion(e.target.value)}
                                         />
                                     </div>
                                     <div>
-                                        <label className="block text-xs font-bold text-gray-500 mb-1">Folleto del producto</label>
+                                        <label className="block text-xs font-bold text-gray-500 mb-1">{t('productBrochure')}</label>
                                         <div className="flex items-center gap-2 border border-gray-300 rounded p-2">
-                                            <button type="button" className="bg-gray-100 text-gray-600 text-xs font-bold px-3 py-1.5 rounded border">Seleccionar archivo</button>
-                                            <span className="text-xs text-gray-400">Ningún archivo seleccionado</span>
+                                            <button type="button" className="bg-gray-100 text-gray-600 text-xs font-bold px-3 py-1.5 rounded border">{t('selectFile')}</button>
+                                            <span className="text-xs text-gray-400">{t('noFileSelected')}</span>
                                         </div>
                                         <p className="text-[11px] text-gray-400 mt-1">Tamaño máximo de archivo: 5MB</p>
                                     </div>
                                 </div>
 
-                                <p className="text-xs font-bold text-blue-600 mb-3">📊 STOCK Y ALERTAS</p>
+                                <p className="text-xs font-bold text-blue-600 mb-3">📊 {t('stockAndAlerts')}</p>
                                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                                     <div>
-                                        <label className="block text-xs font-bold text-gray-500 mb-1">¿Administrar Stock?</label>
+                                        <label className="block text-xs font-bold text-gray-500 mb-1">{t('manageStockQuestion')}</label>
                                         <label className="flex items-center gap-2 border border-gray-300 rounded p-2 w-fit">
                                             <input type="checkbox" checked={administraStock} onChange={(e) => setAdministraStock(e.target.checked)} />
-                                            <span className="text-sm">Sí</span>
+                                            <span className="text-sm">{t('yes')}</span>
                                         </label>
                                     </div>
                                     <div>
-                                        <label className="block text-xs font-bold text-gray-500 mb-1">Cantidad para alerta</label>
+                                        <label className="block text-xs font-bold text-gray-500 mb-1">{t('alertQuantity')}</label>
                                         <input
                                             type="number"
                                             className="w-full border border-gray-300 rounded p-2 text-sm"
-                                            placeholder="Cantidad para alerta"
+                                            placeholder={t('alertQuantity')}
                                             value={cantidadAlerta}
                                             onChange={(e) => setCantidadAlerta(e.target.value)}
                                         />
                                     </div>
                                     <div>
-                                        <label className="block text-xs font-bold text-gray-500 mb-1">Expira en</label>
+                                        <label className="block text-xs font-bold text-gray-500 mb-1">{t('expiresIn')}</label>
                                         <div className="flex border border-gray-300 rounded overflow-hidden">
                                             <input
                                                 type="number"
@@ -500,13 +502,13 @@ const AgregarProducto = ({ onGuardado, onCancelar, productoEditar }) => {
                     <div className="bg-white rounded-lg shadow-sm border border-orange-200">
                         <div className="flex items-center gap-2 px-5 py-3 border-b border-gray-100">
                             <span className="w-3 h-3 bg-orange-500 rounded-full"></span>
-                            <h3 className="font-bold text-gray-700">Precios e impuestos</h3>
+                            <h3 className="font-bold text-gray-700">{t('pricesAndTaxes')}</h3>
                         </div>
 
                         <div className="p-5">
                             <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
                                 <div>
-                                    <label className="block text-xs font-bold text-gray-500 mb-1">Impuesto aplicable:</label>
+                                    <label className="block text-xs font-bold text-gray-500 mb-1">{t('applicableTax')}:</label>
                                     <select className="w-full border border-gray-300 rounded p-2 text-sm bg-white" value={ivaPct} onChange={(e) => handleIvaPct(Number(e.target.value))}>
                                         <option value={10}>IVA 10%</option>
                                         <option value={5}>IVA 5%</option>
@@ -514,14 +516,14 @@ const AgregarProducto = ({ onGuardado, onCancelar, productoEditar }) => {
                                     </select>
                                 </div>
                                 <div>
-                                    <label className="block text-xs font-bold text-gray-500 mb-1">Tipo de impuesto sobre el precio de venta:</label>
+                                    <label className="block text-xs font-bold text-gray-500 mb-1">{t('salePriceTaxType')}:</label>
                                     <select className="w-full border border-gray-300 rounded p-2 text-sm bg-white" value={tipoImpuestoPrecio} onChange={(e) => setTipoImpuestoPrecio(e.target.value)}>
                                         <option>Incluido</option>
                                         <option>No incluido</option>
                                     </select>
                                 </div>
                                 <div>
-                                    <label className="block text-xs font-bold text-gray-500 mb-1">Tipo de producto:</label>
+                                    <label className="block text-xs font-bold text-gray-500 mb-1">{t('productType')}:</label>
                                     <select className="w-full border border-gray-300 rounded p-2 text-sm bg-white" value={tipoProducto} onChange={(e) => setTipoProducto(e.target.value)}>
                                         <option>Individual</option>
                                         <option>Combo</option>
@@ -532,28 +534,28 @@ const AgregarProducto = ({ onGuardado, onCancelar, productoEditar }) => {
 
                             <div className="border border-gray-200 rounded-lg overflow-hidden">
                                 <div className="grid grid-cols-3 text-white text-xs font-bold">
-                                    <div className="bg-green-600 px-3 py-2">Precio de compra predeterminado</div>
+                                    <div className="bg-green-600 px-3 py-2">{t('defaultPurchasePrice')}</div>
                                     <div className="bg-green-600 px-3 py-2 border-l border-green-500">x Margen (%) ℹ️</div>
-                                    <div className="bg-green-600 px-3 py-2 border-l border-green-500">Precio de venta predeterminado</div>
+                                    <div className="bg-green-600 px-3 py-2 border-l border-green-500">{t('defaultSalePrice')}</div>
                                 </div>
                                 <div className="grid grid-cols-3 gap-4 p-4">
                                     <div className="grid grid-cols-2 gap-2">
                                         <div>
-                                            <label className="block text-[11px] font-bold text-gray-500 mb-1">IVA no incluido:*</label>
+                                            <label className="block text-[11px] font-bold text-gray-500 mb-1">{t('taxNotIncluded')}:*</label>
                                             <input
                                                 type="number"
                                                 className="w-full border border-gray-300 rounded p-2 text-sm"
-                                                placeholder="IVA no incluido"
+                                                placeholder={t('taxNotIncluded')}
                                                 value={precioCompraSinIva}
                                                 onChange={(e) => handlePrecioCompraSinIva(e.target.value)}
                                             />
                                         </div>
                                         <div>
-                                            <label className="block text-[11px] font-bold text-gray-500 mb-1">IVA incluido:*</label>
+                                            <label className="block text-[11px] font-bold text-gray-500 mb-1">{t('taxIncluded')}:*</label>
                                             <input
                                                 type="number"
                                                 className="w-full border border-gray-300 rounded p-2 text-sm"
-                                                placeholder="IVA incluido"
+                                                placeholder={t('taxIncluded')}
                                                 value={precioCompraConIva}
                                                 onChange={(e) => handlePrecioCompraConIva(e.target.value)}
                                             />

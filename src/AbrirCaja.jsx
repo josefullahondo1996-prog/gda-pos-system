@@ -1,10 +1,12 @@
 import React, { useState } from 'react';
 import { supabase } from './supabaseClient';
 import { sonidoExito, sonidoError } from './utils/sonido';
+import { useLanguage } from './LanguageContext';
 import { useEmpresaInfo } from './utils/useEmpresa';
 import { useUbicacionUsuario } from './utils/useUbicacion';
 
 const AbrirCaja = ({ onCajaAbierta, perfilUsuario }) => {
+  const { t } = useLanguage();
   const { id: empresaId } = useEmpresaInfo();
   const { id: ubicacionUsuarioId, nombre: nombreUbicacionUsuario, ve_todas: usuarioVeTodas, cargando: cargandoUbicacion } = useUbicacionUsuario();
   const [saldoInicial, setSaldoInicial] = useState('');
@@ -68,19 +70,19 @@ const AbrirCaja = ({ onCajaAbierta, perfilUsuario }) => {
   return (
     <div className="p-6 bg-[#f4f6f9] min-h-screen w-full font-sans text-gray-800">
 
-      <h1 className="text-2xl font-bold text-gray-800 mb-6">Abrir caja registradora</h1>
+        <h1 className="text-2xl font-bold text-gray-800 mb-6">{t('openCashRegister')}</h1>
 
       <div className="bg-white border border-gray-200 rounded-lg shadow-sm p-8 max-w-4xl mx-auto mt-4">
 
         <form onSubmit={handleAbrirCaja}>
 
           <div className="text-center mb-6">
-            <h2 className="text-gray-600 text-lg mb-3">Ingrese el saldo inicial en Caja</h2>
+            <h2 className="text-gray-600 text-lg mb-3">{t('enterOpeningBalance')}</h2>
             <hr className="border-gray-300 w-3/4 mx-auto" />
           </div>
 
           <div className="flex flex-col items-center justify-center gap-2 mb-6">
-            <label className="font-bold text-sm text-gray-700">Sucursal:</label>
+            <label className="font-bold text-sm text-gray-700">{t('branch')}:</label>
             {usuarioVeTodas ? (
               <select
                 required
@@ -88,21 +90,21 @@ const AbrirCaja = ({ onCajaAbierta, perfilUsuario }) => {
                 value={ubicacionIdCaja}
                 onChange={(e) => setUbicacionIdCaja(e.target.value)}
               >
-                <option value="">Seleccioná una sucursal</option>
+                <option value="">{t('selectBranch')}</option>
                 {ubicacionesDisponibles.map((u) => (
                   <option key={u.id} value={u.id}>{u.nombre}{u.codigo_ubicacion ? ` (${u.codigo_ubicacion})` : ''}</option>
                 ))}
               </select>
             ) : (
               <div className="w-full md:w-96 border border-gray-200 bg-gray-50 rounded p-2 text-sm text-gray-700 text-center font-bold">
-                {cargandoUbicacion ? 'Cargando...' : (nombreUbicacionUsuario || 'Sin sucursal asignada')}
+                {cargandoUbicacion ? t('loading') : (nombreUbicacionUsuario || t('noBranchAssigned'))}
               </div>
             )}
           </div>
 
           <div className="flex flex-col md:flex-row items-center justify-center gap-4 mb-6">
             <label className="font-bold text-sm text-gray-700 w-full md:w-auto text-right">
-              Efectivo en Moneda Base:
+              {t('cashInBaseCurrency')}:
             </label>
 
             <div className="flex w-full md:w-96 border border-gray-300 rounded overflow-hidden focus-within:border-blue-500 focus-within:ring-1 focus-within:ring-blue-500">
@@ -112,7 +114,7 @@ const AbrirCaja = ({ onCajaAbierta, perfilUsuario }) => {
               <input
                 type="number"
                 required
-                placeholder="Ingresar cantidad"
+                placeholder={t('enterAmount')}
                 value={saldoInicial}
                 onChange={(e) => setSaldoInicial(e.target.value)}
                 className="w-full px-3 py-2 text-sm outline-none"
@@ -126,7 +128,7 @@ const AbrirCaja = ({ onCajaAbierta, perfilUsuario }) => {
               disabled={cargando}
               className={`bg-[#fd7e14] text-white font-bold py-2 px-6 rounded shadow-sm hover:bg-[#e86e04] transition-colors ${cargando ? 'opacity-70 cursor-not-allowed' : ''}`}
             >
-              {cargando ? 'Abriendo...' : 'Abrir registro'}
+              {cargando ? t('opening') : t('openRegisterButton')}
             </button>
           </div>
 

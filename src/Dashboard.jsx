@@ -12,6 +12,7 @@ import ConfiguracionFacturaElectronica from './ConfiguracionFacturaElectronica';
 import OT from './OT';
 import UbicacionesComerciales from './UbicacionesComerciales';
 import ListaVentas from './ListaVentas';
+import { LanguageSelector, useLanguage } from './LanguageContext';
 
 // 1. IMPORTACIÓN DE TODOS LOS MÓDULOS DEL ERP
 import Inicio from './Inicio';
@@ -46,6 +47,7 @@ import VendedoresComisiones from './VendedoresComisiones';
 import { useUbicacionUsuario } from './utils/useUbicacion';
 
 export default function Dashboard({ session, perfilUsuario, initialView = 'inicio' }) {
+  const { t, locale } = useLanguage();
   // === CONTROL DE ACCESO POR ROL (va primero, vistaActiva lo necesita) ===
   const { id: ubicacionUsuarioId, ve_todas: usuarioVeTodas } = useUbicacionUsuario();
   const nombreRol = (perfilUsuario?.roles?.nombre || '').toLowerCase();
@@ -121,16 +123,16 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
 
     const avisos = [];
     (comprasResult.data || []).forEach((compra) => avisos.push({
-      id: `compra-${compra.id}`, tipo: 'warning', titulo: 'Compra pendiente',
+      id: `compra-${compra.id}`, tipo: 'warning', titulo: t('purchasePending'),
       texto: `${compra.proveedor_nombre || 'Proveedor'} · ${Number(compra.saldo_pendiente || 0).toLocaleString('es-PY')} Gs`,
     }));
     (cajasResult.data || []).forEach((caja) => avisos.push({
-      id: `caja-${caja.id}`, tipo: 'info', titulo: 'Caja abierta',
-      texto: caja.usuario ? `Abierta por ${caja.usuario}` : 'Hay una caja abierta',
+      id: `caja-${caja.id}`, tipo: 'info', titulo: t('openRegister'),
+      texto: caja.usuario ? `${t('openedBy')} ${caja.usuario}` : t('registerOpen'),
     }));
     (productosResult.data || []).filter((producto) => Number(producto.stock_actual || 0) <= Number(producto.alerta_stock_bajo ?? 5)).slice(0, 5).forEach((producto) => avisos.push({
-      id: `stock-${producto.id}`, tipo: 'danger', titulo: 'Stock bajo',
-      texto: `${producto.nombre} · ${Number(producto.stock_actual || 0)} unidades`,
+      id: `stock-${producto.id}`, tipo: 'danger', titulo: t('lowStock'),
+      texto: `${producto.nombre} · ${Number(producto.stock_actual || 0)} ${t('unitsLabel')}`,
     }));
     setNotificacionesSistema(avisos.slice(0, 12));
   };
@@ -330,9 +332,9 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
     if (!puedeVerVista(vistaActiva)) {
       return (
         <div className="bg-white rounded-xl border border-red-100 p-8 text-center shadow-sm">
-          <h2 className="text-lg font-bold text-gray-800">Acceso restringido</h2>
-          <p className="text-sm text-gray-500 mt-2">Tu rol no tiene permiso para acceder a este módulo.</p>
-          <button onClick={irAInicio} className="mt-4 bg-orange-500 text-white rounded px-4 py-2 text-sm font-bold">Volver al inicio</button>
+          <h2 className="text-lg font-bold text-gray-800">{t('restrictedAccess')}</h2>
+          <p className="text-sm text-gray-500 mt-2">{t('noModulePermission')}</p>
+          <button onClick={irAInicio} className="mt-4 bg-orange-500 text-white rounded px-4 py-2 text-sm font-bold">{t('backHome')}</button>
         </div>
       );
     }
@@ -359,7 +361,7 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
       case 'pos':
         // Validación exclusiva: Si la caja está cerrada, obliga a abrirla antes del POS
         if (cargandoCaja) {
-          return <div className="p-10 text-center text-gray-500 font-bold">Verificando caja abierta...</div>;
+          return <div className="p-10 text-center text-gray-500 font-bold">{t('checkingOpenRegister')}</div>;
         }
         if (!cajaActual) {
           return <AbrirCaja onCajaAbierta={(caja) => setCajaActual(caja)} perfilUsuario={perfilUsuario} />;
@@ -540,12 +542,12 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
           <nav className="flex-1 overflow-y-auto overflow-x-hidden py-2 flex flex-col bg-[#1e1e2d]">
             {!soloPOS && tieneCategoria('ot') && (
               <>
-                <Link to="/" onClick={() => irA('inicio', '/')} className={estiloBotonSimple('inicio')} title="Inicio">
-                  <LayoutDashboard size={18} strokeWidth={2} /> {!sidebarColapsado && 'Inicio'}
+                <Link to="/" onClick={() => irA('inicio', '/')} className={estiloBotonSimple('inicio')} title={t('home')}>
+                  <LayoutDashboard size={18} strokeWidth={2} /> {!sidebarColapsado && t('home')}
                 </Link>
 
-                <Link to="/ot" onClick={() => irA('ot', '/ot')} className={estiloBotonSimple('ot')} title="OT">
-                  <Wrench size={18} strokeWidth={2} /> {!sidebarColapsado && 'OT'}
+                <Link to="/ot" onClick={() => irA('ot', '/ot')} className={estiloBotonSimple('ot')} title={t('workOrders')}>
+                  <Wrench size={18} strokeWidth={2} /> {!sidebarColapsado && t('workOrders')}
                 </Link>
               </>
             )}
@@ -553,17 +555,17 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
             {/* MENÚ: GESTIÓN DE USUARIOS */}
             {(tieneCategoria('usuarios') || tieneCategoria('roles')) && (
               <>
-                <button onClick={() => toggleMenu('usuarios')} className={estiloBotonDesplegable('usuarios')} title="Gestión de usuarios">
-                  <div className="flex items-center gap-3"><Users size={18} strokeWidth={2} /> {!sidebarColapsado && 'Gestión de usuarios'}</div>
+                <button onClick={() => toggleMenu('usuarios')} className={estiloBotonDesplegable('usuarios')} title={t('userManagement')}>
+                  <div className="flex items-center gap-3"><Users size={18} strokeWidth={2} /> {!sidebarColapsado && t('userManagement')}</div>
                   {!sidebarColapsado && <span className="text-[10px]">{menuExpandido === 'usuarios' ? '▼' : '◀'}</span>}
                 </button>
                 {menuExpandido === 'usuarios' && !sidebarColapsado && (
                   <div className="bg-[#151521] py-1 flex flex-col">
                     {tieneCategoria('usuarios') && (
-                      <Link to="/usuarios" onClick={() => irA('usuarios', '/usuarios')} className={estiloSubItem('usuarios')}>🠖 Usuarios</Link>
+                      <Link to="/usuarios" onClick={() => irA('usuarios', '/usuarios')} className={estiloSubItem('usuarios')}>🠖 {t('users')}</Link>
                     )}
                     {tieneCategoria('roles') && (
-                      <Link to="/roles" onClick={() => irA('roles', '/roles')} className={estiloSubItem('roles')}>🠖 Roles</Link>
+                      <Link to="/roles" onClick={() => irA('roles', '/roles')} className={estiloSubItem('roles')}>🠖 {t('roles')}</Link>
                     )}
                   </div>
                 )}
@@ -573,15 +575,15 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
             {/* MENÚ: CLIENTE / PROVEEDOR */}
             {tieneCategoria('clientes_proveedores') && (
               <>
-                <button onClick={() => toggleMenu('contactos')} className={estiloBotonDesplegable('contactos')} title="Cliente/Proveedor">
-                  <div className="flex items-center gap-3"><Contact size={18} strokeWidth={2} /> {!sidebarColapsado && 'Cliente/Proveedor'}</div>
+                <button onClick={() => toggleMenu('contactos')} className={estiloBotonDesplegable('contactos')} title={t('contacts')}>
+                  <div className="flex items-center gap-3"><Contact size={18} strokeWidth={2} /> {!sidebarColapsado && t('contacts')}</div>
                   {!sidebarColapsado && <span className="text-[10px]">{menuExpandido === 'contactos' ? '▼' : '◀'}</span>}
                 </button>
                 {menuExpandido === 'contactos' && !sidebarColapsado && (
                   <div className="bg-[#151521] py-1 flex flex-col">
-                    <Link to="/proveedores" onClick={() => irA('proveedores', '/proveedores')} className={estiloSubItem('proveedores')}>🠖 Proveedores</Link>
-                    <Link to="/clientes" onClick={() => irA('clientes', '/clientes')} className={estiloSubItem('clientes')}>🠖 Clientes</Link>
-                    <Link to="/grupos_clientes" onClick={() => irA('grupos_clientes', '/grupos_clientes')} className={estiloSubItem('grupos_clientes')}>🠖 Grupos de clientes</Link>
+                    <Link to="/proveedores" onClick={() => irA('proveedores', '/proveedores')} className={estiloSubItem('proveedores')}>🠖 {t('suppliers')}</Link>
+                    <Link to="/clientes" onClick={() => irA('clientes', '/clientes')} className={estiloSubItem('clientes')}>🠖 {t('customers')}</Link>
+                    <Link to="/grupos_clientes" onClick={() => irA('grupos_clientes', '/grupos_clientes')} className={estiloSubItem('grupos_clientes')}>🠖 {t('customerGroups')}</Link>
                   </div>
                 )}
               </>
@@ -590,17 +592,17 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
             {/* MENÚ: PRODUCTOS */}
             {tieneCategoria('productos') && (
               <>
-                <button onClick={() => toggleMenu('productos')} className={estiloBotonDesplegable('productos')} title="Productos">
-                  <div className="flex items-center gap-3"><Package size={18} strokeWidth={2} /> {!sidebarColapsado && 'Productos'}</div>
+                <button onClick={() => toggleMenu('productos')} className={estiloBotonDesplegable('productos')} title={t('products')}>
+                  <div className="flex items-center gap-3"><Package size={18} strokeWidth={2} /> {!sidebarColapsado && t('products')}</div>
                   {!sidebarColapsado && <span className="text-[10px]">{menuExpandido === 'productos' ? '▼' : '◀'}</span>}
                 </button>
                 {menuExpandido === 'productos' && !sidebarColapsado && (
                   <div className="bg-[#151521] py-1 flex flex-col">
-                    <Link to="/catalogo" onClick={() => irA('catalogo', '/catalogo')} className={estiloSubItem('catalogo')}>🠖 Lista de productos</Link>
-                    <Link to="/agregar_producto" onClick={() => irA('agregar_producto', '/agregar_producto')} className={estiloSubItem('agregar_producto')}>🠖 Agregar producto</Link>
-                    <Link to="/marcas" onClick={() => irA('marcas', '/marcas')} className={estiloSubItem('marcas')}>🠖 Marcas</Link>
-                    <Link to="/categorias" onClick={() => irA('categorias', '/categorias')} className={estiloSubItem('categorias')}>🠖 Categorías</Link>
-                    <Link to="/unidades" onClick={() => irA('unidades', '/unidades')} className={estiloSubItem('unidades')}>🠖 Unidades</Link>
+                    <Link to="/catalogo" onClick={() => irA('catalogo', '/catalogo')} className={estiloSubItem('catalogo')}>🠖 {t('productList')}</Link>
+                    <Link to="/agregar_producto" onClick={() => irA('agregar_producto', '/agregar_producto')} className={estiloSubItem('agregar_producto')}>🠖 {t('addProduct')}</Link>
+                    <Link to="/marcas" onClick={() => irA('marcas', '/marcas')} className={estiloSubItem('marcas')}>🠖 {t('brands')}</Link>
+                    <Link to="/categorias" onClick={() => irA('categorias', '/categorias')} className={estiloSubItem('categorias')}>🠖 {t('categories')}</Link>
+                    <Link to="/unidades" onClick={() => irA('unidades', '/unidades')} className={estiloSubItem('unidades')}>🠖 {t('units')}</Link>
                   </div>
                 )}
               </>
@@ -609,15 +611,15 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
             {/* MENÚ: COMPRAS (RECONECTADO) */}
             {tieneCategoria('compras') && (
               <>
-                <button onClick={() => toggleMenu('compras')} className={estiloBotonDesplegable('compras')} title="Compras">
-                  <div className="flex items-center gap-3"><ArrowDownToLine size={18} strokeWidth={2} /> {!sidebarColapsado && 'Compras'}</div>
+                <button onClick={() => toggleMenu('compras')} className={estiloBotonDesplegable('compras')} title={t('purchases')}>
+                  <div className="flex items-center gap-3"><ArrowDownToLine size={18} strokeWidth={2} /> {!sidebarColapsado && t('purchases')}</div>
                   {!sidebarColapsado && <span className="text-[10px]">{menuExpandido === 'compras' ? '▼' : '◀'}</span>}
                 </button>
                 {menuExpandido === 'compras' && !sidebarColapsado && (
                   <div className="bg-[#151521] py-1 flex flex-col">
-                    <Link to="/compras" onClick={() => irA('compras', '/compras')} className={estiloSubItem('compras')}>🠖 Lista de compras</Link>
-                    <Link to="/agregar_compra" onClick={() => irA('agregar_compra', '/agregar_compra')} className={estiloSubItem('agregar_compra')}>🠖 Agregar compra</Link>
-                    <Link to="/devoluciones_compra" onClick={() => irA('devoluciones_compra', '/devoluciones_compra')} className={estiloSubItem('devoluciones_compra')}>🠖 Lista de devoluciones de compra</Link>
+                    <Link to="/compras" onClick={() => irA('compras', '/compras')} className={estiloSubItem('compras')}>🠖 {t('purchaseList')}</Link>
+                    <Link to="/agregar_compra" onClick={() => irA('agregar_compra', '/agregar_compra')} className={estiloSubItem('agregar_compra')}>🠖 {t('addPurchase')}</Link>
+                    <Link to="/devoluciones_compra" onClick={() => irA('devoluciones_compra', '/devoluciones_compra')} className={estiloSubItem('devoluciones_compra')}>🠖 {t('purchaseReturns')}</Link>
                   </div>
                 )}
               </>
@@ -626,15 +628,15 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
             {/* MENÚ: GASTOS */}
             {tieneCategoria('gastos') && (
               <>
-                <button onClick={() => toggleMenu('gastos')} className={estiloBotonDesplegable('gastos')} title="Gastos">
-                  <div className="flex items-center gap-3"><ArrowDownToLine size={18} strokeWidth={2} /> {!sidebarColapsado && 'Gastos'}</div>
+                <button onClick={() => toggleMenu('gastos')} className={estiloBotonDesplegable('gastos')} title={t('expenses')}>
+                  <div className="flex items-center gap-3"><ArrowDownToLine size={18} strokeWidth={2} /> {!sidebarColapsado && t('expenses')}</div>
                   {!sidebarColapsado && <span className="text-[10px]">{menuExpandido === 'gastos' ? '▼' : '◀'}</span>}
                 </button>
                 {menuExpandido === 'gastos' && !sidebarColapsado && (
                   <div className="bg-[#151521] py-1 flex flex-col">
-                    <Link to="/gastos" onClick={() => irA('gastos', '/gastos')} className={estiloSubItem('gastos')}>🠖 Lista de gastos</Link>
-                    <Link to="/gastos/agregar" onClick={() => irA('agregar_gasto', '/gastos/agregar')} className={estiloSubItem('agregar_gasto')}>🠖 Agregar gasto</Link>
-                    <Link to="/gastos/categorias" onClick={() => irA('categorias_gastos', '/gastos/categorias')} className={estiloSubItem('categorias_gastos')}>🠖 Categorías de gastos</Link>
+                    <Link to="/gastos" onClick={() => irA('gastos', '/gastos')} className={estiloSubItem('gastos')}>🠖 {t('expenseList')}</Link>
+                    <Link to="/gastos/agregar" onClick={() => irA('agregar_gasto', '/gastos/agregar')} className={estiloSubItem('agregar_gasto')}>🠖 {t('addExpense')}</Link>
+                    <Link to="/gastos/categorias" onClick={() => irA('categorias_gastos', '/gastos/categorias')} className={estiloSubItem('categorias_gastos')}>🠖 {t('expenseCategories')}</Link>
                   </div>
                 )}
               </>
@@ -643,15 +645,15 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
             {/* MENÚ: VENTAS */}
             {tieneCategoria('ventas_pos') && !soloPOS && (
               <>
-                <button onClick={() => toggleMenu('ventas')} className={estiloBotonDesplegable('ventas')} title="Ventas">
-                  <div className="flex items-center gap-3"><ArrowUpFromLine size={18} strokeWidth={2} /> {!sidebarColapsado && 'Ventas'}</div>
+                <button onClick={() => toggleMenu('ventas')} className={estiloBotonDesplegable('ventas')} title={t('sales')}>
+                  <div className="flex items-center gap-3"><ArrowUpFromLine size={18} strokeWidth={2} /> {!sidebarColapsado && t('sales')}</div>
                   {!sidebarColapsado && <span className="text-[10px]">{menuExpandido === 'ventas' ? '▼' : '◀'}</span>}
                 </button>
                 {menuExpandido === 'ventas' && !sidebarColapsado && (
                   <div className="bg-[#151521] py-1 flex flex-col">
-                    <Link to="/todas_ventas" onClick={() => irA('todas_ventas', '/todas_ventas')} className={estiloSubItem('todas_ventas')}>🠖 Todas las ventas</Link>
-                    <Link to="/pos" onClick={() => irA('pos', '/pos')} className={estiloSubItem('pos')}>🠖 Punto de venta</Link>
-                    <Link to="/cobros" onClick={() => irA('cobros', '/cobros')} className={estiloSubItem('cobros')}>🠖 Pedidos Pendientes</Link>
+                    <Link to="/todas_ventas" onClick={() => irA('todas_ventas', '/todas_ventas')} className={estiloSubItem('todas_ventas')}>🠖 {t('allSales')}</Link>
+                    <Link to="/pos" onClick={() => irA('pos', '/pos')} className={estiloSubItem('pos')}>🠖 {t('pos')}</Link>
+                    <Link to="/cobros" onClick={() => irA('cobros', '/cobros')} className={estiloSubItem('cobros')}>🠖 {t('pendingOrders')}</Link>
                   </div>
                 )}
               </>
@@ -659,13 +661,13 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
 
             {soloPOS && (
               <Link to="/pos" onClick={() => irA('pos', '/pos')} className={estiloBotonSimple('pos')} title="Punto de venta">
-                <ArrowUpFromLine size={18} strokeWidth={2} /> {!sidebarColapsado && 'Punto de venta'}
+                <ArrowUpFromLine size={18} strokeWidth={2} /> {!sidebarColapsado && t('pos')}
               </Link>
             )}
 
             {!tieneCategoria('ventas_pos') && tieneCategoria('caja') && (
               <Link to="/pos" onClick={() => irA('pos', '/pos')} className={estiloBotonSimple('pos')} title="Caja registradora">
-                <ArrowUpFromLine size={18} strokeWidth={2} /> {!sidebarColapsado && 'Caja registradora'}
+                <ArrowUpFromLine size={18} strokeWidth={2} /> {!sidebarColapsado && t('cashRegister')}
               </Link>
             )}
 
@@ -673,13 +675,13 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
             {tieneCategoria('caja') && (
               <>
                 <button onClick={() => toggleMenu('caja_banco')} className={estiloBotonDesplegable('caja_banco')} title="Caja / Banco">
-                  <div className="flex items-center gap-3"><CreditCard size={18} strokeWidth={2} /> {!sidebarColapsado && 'Caja / Banco'}</div>
+                  <div className="flex items-center gap-3"><CreditCard size={18} strokeWidth={2} /> {!sidebarColapsado && t('cashBank')}</div>
                   {!sidebarColapsado && <span className="text-[10px]">{menuExpandido === 'caja_banco' ? '▼' : '◀'}</span>}
                 </button>
                 {menuExpandido === 'caja_banco' && !sidebarColapsado && (
                   <div className="bg-[#151521] py-1 flex flex-col">
-                    <Link to="/cajas" onClick={() => irA('cajas', '/cajas')} className={estiloSubItem('cajas')}>🠖 Lista de cajas</Link>
-                    <Link to="/informe-caja-pago" onClick={() => irA('informe_caja_pago', '/informe-caja-pago')} className={estiloSubItem('informe_caja_pago')}>🠖 Informe de caja de pago</Link>
+                    <Link to="/cajas" onClick={() => irA('cajas', '/cajas')} className={estiloSubItem('cajas')}>🠖 {t('cashRegisters')}</Link>
+                    <Link to="/informe-caja-pago" onClick={() => irA('informe_caja_pago', '/informe-caja-pago')} className={estiloSubItem('informe_caja_pago')}>🠖 {t('paymentReport')}</Link>
                   </div>
                 )}
               </>
@@ -689,16 +691,16 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
             {tieneCategoria('informes') && (
               <>
                 <button onClick={() => toggleMenu('informes')} className={estiloBotonDesplegable('informes')} title="Informes">
-                  <div className="flex items-center gap-3"><BarChart3 size={18} strokeWidth={2} /> {!sidebarColapsado && 'Informes'}</div>
+                  <div className="flex items-center gap-3"><BarChart3 size={18} strokeWidth={2} /> {!sidebarColapsado && t('reports')}</div>
                   {!sidebarColapsado && <span className="text-[10px]">{menuExpandido === 'informes' ? '▼' : '◀'}</span>}
                 </button>
                 {menuExpandido === 'informes' && !sidebarColapsado && (
                   <div className="bg-[#151521] py-1 flex flex-col">
-                    <Link to="/ganancias_perdidas" onClick={() => irA('ganancias_perdidas', '/ganancias_perdidas')} className={estiloSubItem('ganancias_perdidas')}>🠖 Ganancias y Pérdidas</Link>
-                    <Link to="/ventas-por-producto" onClick={() => irA('ventas_por_producto', '/ventas-por-producto')} className={estiloSubItem('ventas_por_producto')}>🠖 Ventas por producto</Link>
-                    <Link to="/cobro-de-ventas" onClick={() => irA('cobro_de_ventas', '/cobro-de-ventas')} className={estiloSubItem('cobro_de_ventas')}>🠖 Cobros de venta</Link>
-                    <Link to="/caja_registradora" onClick={() => irA('caja_registradora', '/caja_registradora')} className={estiloSubItem('caja_registradora')}>🠖 Caja registradora</Link>
-                    <Link to="/vendedores-comisiones" onClick={() => irA('vendedores_comisiones', '/vendedores-comisiones')} className={estiloSubItem('vendedores_comisiones')}>🠖 Vendedores / Comisiones</Link>
+                    <Link to="/ganancias_perdidas" onClick={() => irA('ganancias_perdidas', '/ganancias_perdidas')} className={estiloSubItem('ganancias_perdidas')}>🠖 {t('profitLoss')}</Link>
+                    <Link to="/ventas-por-producto" onClick={() => irA('ventas_por_producto', '/ventas-por-producto')} className={estiloSubItem('ventas_por_producto')}>🠖 {t('salesByProduct')}</Link>
+                    <Link to="/cobro-de-ventas" onClick={() => irA('cobro_de_ventas', '/cobro-de-ventas')} className={estiloSubItem('cobro_de_ventas')}>🠖 {t('salesCollections')}</Link>
+                    <Link to="/caja_registradora" onClick={() => irA('caja_registradora', '/caja_registradora')} className={estiloSubItem('caja_registradora')}>🠖 {t('cashRegister')}</Link>
+                    <Link to="/vendedores-comisiones" onClick={() => irA('vendedores_comisiones', '/vendedores-comisiones')} className={estiloSubItem('vendedores_comisiones')}>🠖 {t('sellersCommissions')}</Link>
                   </div>
                 )}
               </>
@@ -708,14 +710,14 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
             {esAdmin && (
               <>
                 <button onClick={() => toggleMenu('configuraciones')} className={estiloBotonDesplegable('configuraciones')} title="Configuraciones">
-                  <div className="flex items-center gap-3"><Settings size={18} strokeWidth={2} /> {!sidebarColapsado && 'Configuraciones'}</div>
+                  <div className="flex items-center gap-3"><Settings size={18} strokeWidth={2} /> {!sidebarColapsado && t('settings')}</div>
                   {!sidebarColapsado && <span className="text-[10px]">{menuExpandido === 'configuraciones' ? '▼' : '◀'}</span>}
                 </button>
                 {menuExpandido === 'configuraciones' && !sidebarColapsado && (
                   <div className="bg-[#151521] py-1 flex flex-col">
-                    <Link to="/config_empresa" onClick={() => irA('config_empresa', '/config_empresa')} className={estiloSubItem('config_empresa')}>🠖 Configuración de la empresa</Link>
-                    <Link to="/ubicaciones_comerciales" onClick={() => irA('ubicaciones_comerciales', '/ubicaciones_comerciales')} className={estiloSubItem('ubicaciones_comerciales')}>🠖 Ubicaciones comerciales</Link>
-                    <Link to="/config_factura" onClick={() => irA('config_factura', '/config_factura')} className={estiloSubItem('config_factura')}>🠖 Configuración de factura</Link>
+                    <Link to="/config_empresa" onClick={() => irA('config_empresa', '/config_empresa')} className={estiloSubItem('config_empresa')}>🠖 {t('companySettings')}</Link>
+                    <Link to="/ubicaciones_comerciales" onClick={() => irA('ubicaciones_comerciales', '/ubicaciones_comerciales')} className={estiloSubItem('ubicaciones_comerciales')}>🠖 {t('commercialLocations')}</Link>
+                    <Link to="/config_factura" onClick={() => irA('config_factura', '/config_factura')} className={estiloSubItem('config_factura')}>🠖 {t('invoiceSettings')}</Link>
                   </div>
                 )}
               </>
@@ -726,10 +728,10 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
           <div className="p-4 border-t border-gray-700 bg-[#1e1e2d] flex flex-col gap-2">
             <button
               onClick={cerrarSesion}
-              title="Cerrar sesión"
+              title={t('logout')}
               className="w-full bg-red-600 hover:bg-red-700 text-white py-1.5 rounded text-sm font-bold transition flex items-center justify-center gap-2"
             >
-              <LogOut size={16} strokeWidth={2} /> {!sidebarColapsado && 'Cerrar Sesión'}
+              <LogOut size={16} strokeWidth={2} /> {!sidebarColapsado && t('logout')}
             </button>
           </div>
         </aside>
@@ -762,65 +764,66 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
               </button>
 
               <h2 className="text-gray-800 font-bold text-base md:text-lg truncate max-w-[150px] md:max-w-none">
-                {vistaActiva === 'inicio' && 'Inicio'}
-                {vistaActiva === 'pos' && 'Punto de Venta'}
+                {vistaActiva === 'inicio' && t('home')}
+                {vistaActiva === 'pos' && t('pos')}
                 {vistaActiva === 'reporte_cierre' && 'Cierre'}
                 {vistaActiva === 'nuevo_gasto' && 'Gasto'}
-                {vistaActiva === 'compras' && 'Compras'}
-                {vistaActiva === 'agregar_compra' && 'Nueva Compra'}
-                {vistaActiva === 'gastos' && 'Gastos'}
-                {vistaActiva === 'agregar_gasto' && 'Agregar gasto'}
-                {vistaActiva === 'categorias_gastos' && 'Categorías de gastos'}
-                {vistaActiva === 'devoluciones_compra' && 'Devoluciones'}
-                {vistaActiva === 'cobros' && 'Pendientes'}
-                {vistaActiva === 'catalogo' && 'Productos'}
-                {vistaActiva === 'agregar_producto' && 'Nuevo Producto'}
-                {vistaActiva === 'marcas' && 'Marcas'}
-                {vistaActiva === 'unidades' && 'Unidades'}
-                {vistaActiva === 'clientes' && 'Clientes'}
-                {vistaActiva === 'caja_registradora' && 'Caja'}
-                {vistaActiva === 'ganancias_perdidas' && 'G/P'}
-                {vistaActiva === 'usuarios' && 'Usuarios'}
-                {vistaActiva === 'roles' && 'Roles'}
-                {vistaActiva === 'config_empresa' && 'Empresa'}
-                {vistaActiva === 'config_factura' && 'Facturación'}
-                {vistaActiva === 'ubicaciones_comerciales' && 'Ubicaciones'}
-                {vistaActiva === 'todas_ventas' && 'Ventas'}
-                {vistaActiva === 'cajas' && 'Banco'}
-                {vistaActiva === 'informe_caja_pago' && 'Informe de Pago'}
-                {vistaActiva === 'ventas_por_producto' && 'Ventas por Producto'}
-                {vistaActiva === 'cobro_de_ventas' && 'Cobros de Venta'}
-                {vistaActiva === 'vendedores_comisiones' && 'Vendedores / Comisiones'}
+                {vistaActiva === 'compras' && t('purchases')}
+                {vistaActiva === 'agregar_compra' && t('addPurchase')}
+                {vistaActiva === 'gastos' && t('expenses')}
+                {vistaActiva === 'agregar_gasto' && t('addExpense')}
+                {vistaActiva === 'categorias_gastos' && t('expenseCategories')}
+                {vistaActiva === 'devoluciones_compra' && t('purchaseReturns')}
+                {vistaActiva === 'cobros' && t('pendingOrders')}
+                {vistaActiva === 'catalogo' && t('products')}
+                {vistaActiva === 'agregar_producto' && t('addProduct')}
+                {vistaActiva === 'marcas' && t('brands')}
+                {vistaActiva === 'unidades' && t('units')}
+                {vistaActiva === 'clientes' && t('customers')}
+                {vistaActiva === 'caja_registradora' && t('cashRegister')}
+                {vistaActiva === 'ganancias_perdidas' && t('profitLoss')}
+                {vistaActiva === 'usuarios' && t('users')}
+                {vistaActiva === 'roles' && t('roles')}
+                {vistaActiva === 'config_empresa' && t('companySettings')}
+                {vistaActiva === 'config_factura' && t('invoiceSettings')}
+                {vistaActiva === 'ubicaciones_comerciales' && t('commercialLocations')}
+                {vistaActiva === 'todas_ventas' && t('allSales')}
+                {vistaActiva === 'cajas' && t('cashBank')}
+                {vistaActiva === 'informe_caja_pago' && t('paymentReport')}
+                {vistaActiva === 'ventas_por_producto' && t('salesByProduct')}
+                {vistaActiva === 'cobro_de_ventas' && t('salesCollections')}
+                {vistaActiva === 'vendedores_comisiones' && t('sellersCommissions')}
               </h2>
             </div>
             <div className="flex items-center gap-2 md:gap-3">
+              <LanguageSelector compact />
               <button
                 onClick={() => irA('pos', '/pos')}
                 className="bg-orange-500 hover:bg-orange-600 text-white rounded-md px-3 py-2 text-xs font-bold flex items-center gap-2 shadow-sm whitespace-nowrap"
-                title="Punto de venta"
+                title={t('pos')}
               >
                 <ShoppingCart size={15} />
-                <span className="hidden sm:inline">Punto de venta</span>
+                <span className="hidden sm:inline">{t('pos')}</span>
               </button>
               <span className="hidden md:inline text-xs font-medium text-gray-600 whitespace-nowrap">
-                {fechaHora.toLocaleDateString('es-PY')}
+                {fechaHora.toLocaleDateString(locale)}
               </span>
               <div className="relative">
                 <button
                   type="button"
                   onClick={() => setMostrarNotificaciones((actual) => !actual)}
                   className="relative w-8 h-8 rounded-md text-gray-500 hover:bg-gray-100 hover:text-orange-500 flex items-center justify-center"
-                  title="Notificaciones"
-                  aria-label="Notificaciones"
+                  title={t('notificationLabel')}
+                  aria-label={t('notificationLabel')}
                 >
                   <Bell size={17} />
                   {notificacionesSistema.length > 0 && <span className="absolute -top-1 -right-1 min-w-4 h-4 px-1 rounded-full bg-red-500 text-white text-[9px] font-black flex items-center justify-center">{notificacionesSistema.length}</span>}
                 </button>
                 {mostrarNotificaciones && (
                   <div className="absolute right-0 top-10 z-50 w-80 max-w-[calc(100vw-2rem)] bg-white border border-gray-200 rounded-xl shadow-xl overflow-hidden">
-                    <div className="px-4 py-3 border-b flex items-center justify-between"><span className="font-bold text-gray-800">Notificaciones</span><span className="text-[10px] text-gray-400">Datos en tiempo real</span></div>
+                    <div className="px-4 py-3 border-b flex items-center justify-between"><span className="font-bold text-gray-800">{t('notifications')}</span><span className="text-[10px] text-gray-400">{t('realtimeData')}</span></div>
                     <div className="max-h-80 overflow-y-auto">
-                      {notificacionesSistema.length === 0 ? <p className="p-5 text-center text-sm text-gray-400">No hay notificaciones nuevas.</p> : notificacionesSistema.map((aviso) => <div key={aviso.id} className="px-4 py-3 border-b last:border-0 hover:bg-gray-50"><p className={`text-xs font-bold ${aviso.tipo === 'danger' ? 'text-red-600' : aviso.tipo === 'warning' ? 'text-orange-600' : 'text-blue-600'}`}>{aviso.titulo}</p><p className="text-xs text-gray-600 mt-0.5">{aviso.texto}</p></div>)}
+                      {notificacionesSistema.length === 0 ? <p className="p-5 text-center text-sm text-gray-400">{t('noNotifications')}</p> : notificacionesSistema.map((aviso) => <div key={aviso.id} className="px-4 py-3 border-b last:border-0 hover:bg-gray-50"><p className={`text-xs font-bold ${aviso.tipo === 'danger' ? 'text-red-600' : aviso.tipo === 'warning' ? 'text-orange-600' : 'text-blue-600'}`}>{aviso.titulo}</p><p className="text-xs text-gray-600 mt-0.5">{aviso.texto}</p></div>)}
                     </div>
                   </div>
                 )}
@@ -850,7 +853,7 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
               className={`flex flex-col items-center gap-1 flex-1 ${vistaActiva === 'inicio' ? 'text-orange-500' : 'text-gray-500'}`}
             >
               <LayoutDashboard size={20} />
-              <span className="text-[10px] font-medium">Inicio</span>
+              <span className="text-[10px] font-medium">{t('home')}</span>
             </button>
             <button
               onClick={() => irA('pos', '/pos')}
@@ -864,21 +867,21 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
               className={`flex flex-col items-center gap-1 flex-1 ${vistaActiva === 'todas_ventas' ? 'text-orange-500' : 'text-gray-500'}`}
             >
               <ArrowUpFromLine size={20} />
-              <span className="text-[10px] font-medium">Ventas</span>
+              <span className="text-[10px] font-medium">{t('sales')}</span>
             </button>
             <button
               onClick={() => irA('catalogo', '/catalogo')}
               className={`flex flex-col items-center gap-1 flex-1 ${vistaActiva === 'catalogo' ? 'text-orange-500' : 'text-gray-500'}`}
             >
               <Package size={20} />
-              <span className="text-[10px] font-medium">Stock</span>
+              <span className="text-[10px] font-medium">{t('products')}</span>
             </button>
             <button
               onClick={() => setMenuMovilAbierto(true)}
               className="flex flex-col items-center gap-1 flex-1 text-gray-500"
             >
               <Menu size={20} />
-              <span className="text-[10px] font-medium">Más</span>
+              <span className="text-[10px] font-medium">{t('settings')}</span>
             </button>
           </nav>
         )}

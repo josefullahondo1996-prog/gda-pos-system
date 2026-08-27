@@ -2,8 +2,10 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { supabase } from './supabaseClient';
 import { useEmpresaInfo } from './utils/useEmpresa';
 import { useUbicacionUsuario } from './utils/useUbicacion';
+import { useLanguage } from './LanguageContext';
 
 const VentasPorProducto = ({ perfilUsuario }) => {
+  const { t } = useLanguage();
   const { id: empresaId } = useEmpresaInfo();
   const { ve_todas: usuarioVeTodas } = useUbicacionUsuario();
 
@@ -398,17 +400,17 @@ const VentasPorProducto = ({ perfilUsuario }) => {
       {/* Encabezado */}
       <div className="mb-6">
         <h1 className="text-2xl font-bold text-gray-800">
-          Ventas por producto
+          {t('salesByProduct')}
         </h1>
       </div>
 
       {/* Panel de Filtros */}
       <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-200 mb-6">
-        <div className="text-sm font-bold text-gray-600 mb-3">Filtros</div>
+        <div className="text-sm font-bold text-gray-600 mb-3">{t('filters')}</div>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
           {/* Buscar Producto */}
           <div>
-            <label className="block text-xs font-bold text-gray-600 mb-2">Buscar producto:</label>
+            <label className="block text-xs font-bold text-gray-600 mb-2">{t('searchProduct')}:</label>
             <input
               type="text"
               placeholder="Introduzca el no"
@@ -420,7 +422,7 @@ const VentasPorProducto = ({ perfilUsuario }) => {
 
           {/* Cliente */}
           <div>
-            <label className="block text-xs font-bold text-gray-600 mb-2">Cliente:</label>
+            <label className="block text-xs font-bold text-gray-600 mb-2">{t('customers')}:</label>
             <select
               value={filtroCliente}
               onChange={(e) => setFiltroCliente(e.target.value)}
@@ -437,7 +439,7 @@ const VentasPorProducto = ({ perfilUsuario }) => {
 
           {/* Nombre del grupo de clientes */}
           <div>
-            <label className="block text-xs font-bold text-gray-600 mb-2">Nombre del grupo de clientes:</label>
+            <label className="block text-xs font-bold text-gray-600 mb-2">{t('customerGroupName')}:</label>
             <select
               value={filtroGrupoClientes}
               onChange={(e) => setFiltroGrupoClientes(e.target.value)}
@@ -449,7 +451,7 @@ const VentasPorProducto = ({ perfilUsuario }) => {
 
           {/* Categoría */}
           <div>
-            <label className="block text-xs font-bold text-gray-600 mb-2">Categoría:</label>
+            <label className="block text-xs font-bold text-gray-600 mb-2">{t('categories')}:</label>
             <select
               value={filtroCategoria}
               onChange={(e) => setFiltroCategoria(e.target.value)}
@@ -466,7 +468,7 @@ const VentasPorProducto = ({ perfilUsuario }) => {
 
           {/* Marca */}
           <div>
-            <label className="block text-xs font-bold text-gray-600 mb-2">Marca:</label>
+            <label className="block text-xs font-bold text-gray-600 mb-2">{t('brands')}:</label>
             <select
               value={filtroMarca}
               onChange={(e) => setFiltroMarca(e.target.value)}

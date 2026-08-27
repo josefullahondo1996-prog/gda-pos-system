@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { supabase } from './supabaseClient';
 import { useEmpresaInfo } from './utils/useEmpresa';
+import { useLanguage } from './LanguageContext';
 
 const PROVEEDORES = [
     { valor: 'goekua', nombre: 'Servicio de Facturación Integrado', url: '' },
@@ -8,6 +9,7 @@ const PROVEEDORES = [
 ];
 
 export default function ConfiguracionFacturaElectronica() {
+    const { t } = useLanguage();
     const { id: empresaId, nombre: nombreEmpresa, ruc: rucEmpresa } = useEmpresaInfo();
     const [proveedor, setProveedor] = useState('goekua');
     const [apiKey, setApiKey] = useState('');
@@ -48,11 +50,11 @@ export default function ConfiguracionFacturaElectronica() {
         alert('Configuración guardada exitosamente. El sistema utilizará esta clave para emitir las facturas con SIFEN.');
     };
 
-    if (cargando) return <p className="text-sm text-gray-400 p-6">Cargando...</p>;
+    if (cargando) return <p className="text-sm text-gray-400 p-6">{t('loading')}</p>;
 
     return (
         <div className="max-w-3xl">
-            <h2 className="text-2xl font-bold text-gray-800 mb-1">Configuración de facturación electrónica</h2>
+            <h2 className="text-2xl font-bold text-gray-800 mb-1">{t('electronicInvoicing')}</h2>
             <p className="text-gray-400 text-sm mb-6">Conectá tu negocio con el SIFEN de la DNIT (Paraguay) a través de un proveedor tecnológico.</p>
 
             {/* Guía paso a paso, visible dentro del propio sistema */}

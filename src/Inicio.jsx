@@ -13,6 +13,7 @@ import {
   AreaChart, Area, BarChart, Bar, XAxis, Tooltip, ResponsiveContainer,
   PieChart, Pie, Cell, Legend, CartesianGrid,
 } from 'recharts';
+import { useLanguage } from './LanguageContext';
 
 const formatCurrency = (value) => `Gs ${Math.round(Number(value) || 0).toLocaleString('es-PY')}`;
 
@@ -43,6 +44,7 @@ const MESES_CORTOS = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'S
 const COLORS = ['#3b82f6', '#f59e0b', '#ef4444', '#10b981', '#8b5cf6'];
 
 const Inicio = ({ perfilUsuario }) => {
+    const { t, locale } = useLanguage();
   const { id: empresaId, nombre: nombreDelNegocio } = useEmpresaInfo();
   // Sucursal elegida en el selector global del header (compartida con toda la app)
   const { sucursalActiva: filtroUbicacion } = useSucursalActiva();
@@ -312,14 +314,14 @@ const Inicio = ({ perfilUsuario }) => {
     for (let i = 0; i < cantDias; i++) {
       const d = new Date(desde); d.setDate(d.getDate() + i);
       if (d > hasta) break;
-      const key = d.toLocaleDateString('es-PY', { day: '2-digit', month: 'short' });
+      const key = d.toLocaleDateString(locale, { day: '2-digit', month: 'short' });
       mapa[key] = 0;
       orden.push(key);
     }
     ventasF.forEach((v) => {
       const f = toDate(v.fecha);
       if (!f) return;
-      const key = f.toLocaleDateString('es-PY', { day: '2-digit', month: 'short' });
+      const key = f.toLocaleDateString(locale, { day: '2-digit', month: 'short' });
       if (mapa[key] !== undefined) mapa[key] += getNumericValue(v, ['total', 'monto', 'valor']);
     });
     return orden.map((name) => ({ name, total: mapa[name] }));
@@ -394,7 +396,7 @@ const Inicio = ({ perfilUsuario }) => {
       const ms = Date.now() - ap.getTime();
       const horas = Math.floor(Math.abs(ms) / 3600000);
       const minutos = Math.floor((Math.abs(ms) % 3600000) / 60000);
-      const hora = ap.toLocaleTimeString('es-PY', { hour: '2-digit', minute: '2-digit' });
+      const hora = ap.toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' });
       return `Abierta hace ${horas}h ${minutos}min (desde ${hora})`;
     };
     return cajasAbiertas.map((caja) => {
@@ -526,14 +528,14 @@ const Inicio = ({ perfilUsuario }) => {
         <h3 className="text-xl font-black text-gray-800 tracking-tight">{formatCurrency(value)}</h3>
         {trend !== undefined && trend !== null ? (
           <p className={`text-xs font-bold flex items-center gap-1 ${trend < 0 ? 'text-red-500' : 'text-green-500'}`}>
-            {trend < 0 ? '↓' : '↑'} {Math.abs(trend).toFixed(1)}% <span className="text-gray-400 font-normal">vs período anterior</span>
+            {trend < 0 ? '↓' : '↑'} {Math.abs(trend).toFixed(1)}% <span className="text-gray-400 font-normal">{t('vsPreviousPeriod')}</span>
           </p>
         ) : sublabel && <p className="text-xs text-gray-400">{sublabel}</p>}
       </div>
     </div>
   );
 
-  if (cargando) return <div className="p-10 text-center font-bold text-orange-500">Cargando datos reales...</div>;
+  if (cargando) return <div className="p-10 text-center font-bold text-orange-500">{t('loadingData')}</div>;
   if (error) return <div className="p-10 text-center font-bold text-red-500">{error}</div>;
 
   return (
@@ -545,7 +547,7 @@ const Inicio = ({ perfilUsuario }) => {
           <div className="relative z-10 flex flex-col sm:flex-row sm:flex-wrap justify-between sm:items-end gap-4">
             <div>
               <h1 className="text-2xl sm:text-3xl font-extrabold mb-1 break-words">{saludo}, {perfilUsuario?.empresas?.nombre || 'tu negocio'} 👋</h1>
-              <p className="text-slate-400 text-sm font-medium">Resumen de tu negocio — <span className="capitalize">{fechaHoy}</span></p>
+              <p className="text-slate-400 text-sm font-medium">{t('businessSummary')} — <span className="capitalize">{fechaHoy}</span></p>
             </div>
             <FiltroFecha value={rango} onChange={(nuevoRango) => setRango(nuevoRango)} />
           </div>
@@ -554,10 +556,10 @@ const Inicio = ({ perfilUsuario }) => {
 
         {/* KPIs FILA 1 */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-6">
-          <CardKpi icon={ShoppingCart} gradient="from-blue-500 to-blue-700" label="Ventas Totales" value={totalVentas} trend={variacionVsAnterior} />
-          <CardKpi icon={TrendingUp} gradient="from-teal-400 to-emerald-600" label="Utilidad" value={neto} sublabel="ventas − compras − gastos" />
-          <CardKpi icon={FileWarning} gradient="from-orange-400 to-amber-600" label="Factura a Pagar" value={deudaCompras} sublabel="pendiente a proveedores" />
-          <CardKpi icon={MinusCircle} gradient="from-red-500 to-rose-600" label="Gastos" value={totalGastos} sublabel="del período" />
+          <CardKpi icon={ShoppingCart} gradient="from-blue-500 to-blue-700" label={t('totalSales')} value={totalVentas} trend={variacionVsAnterior} />
+          <CardKpi icon={TrendingUp} gradient="from-teal-400 to-emerald-600" label={t('profit')} value={neto} sublabel={t('salesMinusCosts')} />
+          <CardKpi icon={FileWarning} gradient="from-orange-400 to-amber-600" label={t('billToPay')} value={deudaCompras} sublabel={t('pendingSuppliers')} />
+          <CardKpi icon={MinusCircle} gradient="from-red-500 to-rose-600" label={t('expenses')} value={totalGastos} sublabel={t('period')} />
         </div>
 
         {/* KPIs FILA 2 */}
@@ -565,14 +567,14 @@ const Inicio = ({ perfilUsuario }) => {
           <div className="bg-white p-4 rounded-2xl flex items-center gap-4 shadow-sm border border-gray-50 hover:shadow-md transition-shadow">
             <div className="bg-indigo-50 text-indigo-600 p-2.5 rounded-xl"><Package size={20} strokeWidth={2.2} /></div>
             <div>
-              <p className="text-[10px] font-bold text-gray-400 uppercase">Compras totales</p>
+              <p className="text-[10px] font-bold text-gray-400 uppercase">{t('totalPurchases')}</p>
               <h4 className="font-bold text-gray-800">{formatCurrency(totalCompras)}</h4>
             </div>
           </div>
           <div className="bg-white p-4 rounded-2xl flex items-center gap-4 shadow-sm border border-gray-50 hover:shadow-md transition-shadow">
             <div className="bg-orange-50 text-orange-600 p-2.5 rounded-xl"><AlertTriangle size={20} strokeWidth={2.2} /></div>
             <div>
-              <p className="text-[10px] font-bold text-gray-400 uppercase">Compra adeudada</p>
+              <p className="text-[10px] font-bold text-gray-400 uppercase">{t('purchaseDebt')}</p>
               <h4 className="font-bold text-gray-800">{formatCurrency(deudaCompras)}</h4>
             </div>
           </div>
@@ -580,7 +582,7 @@ const Inicio = ({ perfilUsuario }) => {
             <div className="flex items-center gap-4">
               <div className="bg-purple-50 text-purple-600 p-2.5 rounded-xl"><Handshake size={20} strokeWidth={2.2} /></div>
               <div>
-                <p className="text-[10px] font-bold text-gray-400 uppercase">Créditos otorgados</p>
+                <p className="text-[10px] font-bold text-gray-400 uppercase">{t('creditsGranted')}</p>
                 <h4 className="font-bold text-gray-800">{formatCurrency(deudaVentas)}</h4>
               </div>
             </div>
@@ -594,14 +596,14 @@ const Inicio = ({ perfilUsuario }) => {
         <div className="bg-white p-6 rounded-3xl shadow-sm border border-gray-50 mb-6 transition-all duration-300 hover:shadow-xl hover:border-gray-200">
           <h3 className="font-black text-gray-800 mb-1 flex items-center gap-2">
             <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 inline-block animate-pulse" />
-            <Wallet size={20} className="text-emerald-600" /> Cajas Abiertas
+            <Wallet size={20} className="text-emerald-600" /> {t('openRegisters')}
             {cajasAbiertasConDatos.length > 0 && (
               <span className="bg-emerald-100 text-emerald-700 text-xs font-black px-2 py-0.5 rounded-full">{cajasAbiertasConDatos.length}</span>
             )}
           </h3>
-          <p className="text-[10px] text-gray-400 mb-4">Se actualiza sola cada 20 segundos — no hace falta recargar la página.</p>
+          <p className="text-[10px] text-gray-400 mb-4">{t('autoRefresh')}</p>
           {cajasAbiertasConDatos.length === 0 ? (
-            <p className="text-center text-gray-400 text-sm py-8">No hay ninguna caja abierta en este momento.</p>
+            <p className="text-center text-gray-400 text-sm py-8">{t('noOpenRegisters')}</p>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {cajasAbiertasConDatos.map((caja) => (
@@ -617,22 +619,22 @@ const Inicio = ({ perfilUsuario }) => {
                     <button 
                       onClick={() => forzarCierreCaja(caja.id)}
                       className="text-[10px] bg-red-100 text-red-600 px-2 py-1 rounded hover:bg-red-200 transition-colors font-bold"
-                      title="Cerrar esta caja si quedó abierta por error"
+                      title={t('forceCloseHelp')}
                     >
-                      Forzar Cierre
+                      {t('forceClose')}
                     </button>
                   </div>
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mt-3 pt-3 border-t border-emerald-100">
                     <div>
-                      <p className="text-[9px] font-bold text-gray-400 uppercase">Ventas</p>
+                      <p className="text-[9px] font-bold text-gray-400 uppercase">{t('sales')}</p>
                       <p className="text-xs font-bold text-gray-800">{formatCurrency(caja.totalVentasCaja)}</p>
                     </div>
                     <div>
-                      <p className="text-[9px] font-bold text-gray-400 uppercase">Efectivo</p>
+                      <p className="text-[9px] font-bold text-gray-400 uppercase">{t('cash')}</p>
                       <p className="text-xs font-bold text-gray-800">{formatCurrency(caja.totalEfectivo)}</p>
                     </div>
                     <div>
-                      <p className="text-[9px] font-bold text-gray-400 uppercase">Tarjeta</p>
+                      <p className="text-[9px] font-bold text-gray-400 uppercase">{t('card')}</p>
                       <p className="text-xs font-bold text-gray-800">{formatCurrency(caja.totalTarjeta)}</p>
                     </div>
                     <div>
@@ -666,13 +668,13 @@ const Inicio = ({ perfilUsuario }) => {
                   </AreaChart>
                 </ResponsiveContainer>
               ) : (
-                <div className="flex h-full items-center justify-center text-gray-400">No hay ventas en este período.</div>
+                <div className="flex h-full items-center justify-center text-gray-400">{t('noSalesPeriod')}</div>
               )}
             </div>
           </div>
 
           <div className="bg-white p-6 rounded-3xl shadow-sm border border-gray-50 transition-all duration-300 hover:shadow-xl hover:border-gray-200">
-            <h3 className="font-black text-gray-800 mb-6 flex items-center gap-2"><PieChartIcon size={20} className="text-blue-500" /> Composición</h3>
+            <h3 className="font-black text-gray-800 mb-6 flex items-center gap-2"><PieChartIcon size={20} className="text-blue-500" /> {t('composition')}</h3>
             <div className="h-[240px] sm:h-[300px] w-full min-w-0">
               {datosPie.length > 0 ? (
                 <ResponsiveContainer width="100%" height="100%">
@@ -685,7 +687,7 @@ const Inicio = ({ perfilUsuario }) => {
                   </PieChart>
                 </ResponsiveContainer>
               ) : (
-                <div className="flex h-full items-center justify-center text-gray-400">Sin datos en este período.</div>
+                <div className="flex h-full items-center justify-center text-gray-400">{t('noDataPeriod')}</div>
               )}
             </div>
           </div>
@@ -694,7 +696,7 @@ const Inicio = ({ perfilUsuario }) => {
         {/* VENTAS VS COMPRAS VS GASTOS + TOP PRODUCTOS */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
           <div className="lg:col-span-2 bg-white p-6 rounded-3xl shadow-sm border border-gray-50 transition-all duration-300 hover:shadow-xl hover:border-gray-200">
-            <h3 className="font-black text-gray-800 mb-6 flex items-center gap-2"><BarChart3 size={20} className="text-blue-500" /> Ventas vs Compras vs Gastos (6 meses)</h3>
+            <h3 className="font-black text-gray-800 mb-6 flex items-center gap-2"><BarChart3 size={20} className="text-blue-500" /> {t('salesPurchasesExpenses')} (6 meses)</h3>
             <div className="h-[230px] sm:h-[280px] w-full min-w-0">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={datos6meses}>
@@ -711,10 +713,10 @@ const Inicio = ({ perfilUsuario }) => {
           </div>
 
           <div className="bg-white p-6 rounded-3xl shadow-sm border border-gray-50 transition-all duration-300 hover:shadow-xl hover:border-gray-200">
-            <h3 className="font-black text-gray-800 mb-4 flex items-center gap-2"><Trophy size={20} className="text-yellow-500" /> Top 5 Productos</h3>
+            <h3 className="font-black text-gray-800 mb-4 flex items-center gap-2"><Trophy size={20} className="text-yellow-500" /> {t('topProducts')}</h3>
             {!hayDetalleVentas || topProductos.length === 0 ? (
               <div className="text-center text-gray-400 text-sm py-10">
-                Aún no hay ventas con detalle en este período.
+                {t('noDetailedSales')}
               </div>
             ) : (
               <div className="flex flex-col gap-3">
@@ -734,7 +736,7 @@ const Inicio = ({ perfilUsuario }) => {
         {/* RECOMENDACIONES */}
         {recomendaciones.length > 0 && (
           <div className="bg-white p-6 rounded-3xl shadow-sm border border-gray-50 mb-6 transition-all duration-300 hover:shadow-xl hover:border-gray-200">
-            <h3 className="font-black text-gray-800 mb-4 flex items-center gap-2"><Lightbulb size={20} className="text-amber-500" /> Recomendaciones para tu negocio</h3>
+            <h3 className="font-black text-gray-800 mb-4 flex items-center gap-2"><Lightbulb size={20} className="text-amber-500" /> {t('recommendations')}</h3>
             <div className="flex flex-col gap-2">
               {recomendaciones.map((r, i) => (
                 <div key={i} className={`border rounded-lg px-4 py-3 transition-all duration-300 hover:shadow-md hover:-translate-y-1 cursor-pointer ${colorRecomendacion(r.tipo)}`}>
@@ -748,7 +750,7 @@ const Inicio = ({ perfilUsuario }) => {
 
         {/* AÑO FISCAL ACTUAL */}
         <div className="bg-white p-6 rounded-3xl shadow-sm border border-gray-50 mb-6 transition-all duration-300 hover:shadow-xl hover:border-gray-200">
-          <h3 className="font-black text-gray-800 mb-6 flex items-center gap-2"><CalendarRange size={20} className="text-blue-500" /> Año fiscal actual de ventas</h3>
+          <h3 className="font-black text-gray-800 mb-6 flex items-center gap-2"><CalendarRange size={20} className="text-blue-500" /> {t('currentFiscalYear')}</h3>
           <div className="h-[280px] w-full">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={datosAnioFiscal}>
@@ -765,9 +767,9 @@ const Inicio = ({ perfilUsuario }) => {
         <div className="bg-white p-6 rounded-3xl shadow-sm border border-gray-50 mb-6 transition-all duration-300 hover:shadow-xl hover:border-gray-200">
           <div className="flex gap-2 mb-4 border-b border-gray-100">
             {[
-              { key: 'cobrar', label: 'Deudas por Cobrar', icon: Wallet, count: deudasCobrar.length },
-              { key: 'pagar', label: 'Deudas por Pagar', icon: FileWarning, count: deudasPagar.length },
-              { key: 'stock', label: 'Stock Bajo', icon: Boxes, count: stockBajo.length },
+              { key: 'cobrar', label: t('accountsReceivable'), icon: Wallet, count: deudasCobrar.length },
+              { key: 'pagar', label: t('accountsPayable'), icon: FileWarning, count: deudasPagar.length },
+              { key: 'stock', label: t('lowStock'), icon: Boxes, count: stockBajo.length },
             ].map((tab) => (
               <button
                 key={tab.key}
@@ -782,15 +784,15 @@ const Inicio = ({ perfilUsuario }) => {
 
           {tabActiva === 'cobrar' && (
             deudasCobrar.length === 0 ? (
-              <p className="text-center text-gray-400 text-sm py-8">No hay deudas por cobrar. 🎉</p>
+              <p className="text-center text-gray-400 text-sm py-8">{t('noReceivables')} 🎉</p>
             ) : (
               <table className="w-full text-sm">
                 <thead className="text-gray-400 text-xs uppercase">
                   <tr>
-                    <th className="text-left py-2">Cliente</th>
-                    <th className="text-left py-2">Factura No.</th>
-                    <th className="text-right py-2">Cantidad Debida</th>
-                    <th className="text-right py-2">Acción</th>
+                    <th className="text-left py-2">{t('customers')}</th>
+                    <th className="text-left py-2">{t('invoiceNumber')}</th>
+                    <th className="text-right py-2">{t('amountDue')}</th>
+                    <th className="text-right py-2">{t('action')}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -816,11 +818,11 @@ const Inicio = ({ perfilUsuario }) => {
 
           {tabActiva === 'pagar' && (
             deudasPagar.length === 0 ? (
-              <p className="text-center text-gray-400 text-sm py-8">No hay deudas con proveedores. 🎉</p>
+              <p className="text-center text-gray-400 text-sm py-8">{t('noPayables')} 🎉</p>
             ) : (
               <table className="w-full text-sm">
                 <thead className="text-gray-400 text-xs uppercase">
-                  <tr><th className="text-left py-2">Proveedor</th><th className="text-left py-2">Factura</th><th className="text-right py-2">Monto</th></tr>
+                  <tr><th className="text-left py-2">{t('suppliers')}</th><th className="text-left py-2">{t('invoice')}</th><th className="text-right py-2">{t('amount')}</th></tr>
                 </thead>
                 <tbody>
                   {deudasPagar.map((d, i) => (
@@ -837,11 +839,11 @@ const Inicio = ({ perfilUsuario }) => {
 
           {tabActiva === 'stock' && (
             stockBajo.length === 0 ? (
-              <p className="text-center text-gray-400 text-sm py-8">Todo tu stock está en buen nivel. 🎉</p>
+              <p className="text-center text-gray-400 text-sm py-8">{t('stockGood')} 🎉</p>
             ) : (
               <table className="w-full text-sm">
                 <thead className="text-gray-400 text-xs uppercase">
-                  <tr><th className="text-left py-2">Producto</th><th className="text-left py-2">SKU</th><th className="text-right py-2">Stock</th></tr>
+                  <tr><th className="text-left py-2">{t('products')}</th><th className="text-left py-2">SKU</th><th className="text-right py-2">{t('stock')}</th></tr>
                 </thead>
                 <tbody>
                   {stockBajo.map((p, i) => (

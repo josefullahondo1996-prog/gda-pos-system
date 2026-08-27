@@ -3,6 +3,7 @@ import { supabase } from './supabaseClient';
 import { useEmpresaInfo } from './utils/useEmpresa';
 import { useNotificacion } from './NotificacionContext';
 import { sonidoExito } from './utils/sonido';
+import { useLanguage } from './LanguageContext';
 
 const CATEGORIAS = [
   'Compra de mercadería',
@@ -29,6 +30,7 @@ const FORM_VACIO = {
 const formatGs = (value) => `${Number(value || 0).toLocaleString('es-PY')} Gs`;
 
 export default function Gastos({ vistaInicial = 'lista' }) {
+  const { t, locale } = useLanguage();
   const { id: empresaId, nombre: nombreEmpresa } = useEmpresaInfo();
   const { notificar, confirmar } = useNotificacion();
   const [vista, setVista] = useState(vistaInicial);
@@ -210,7 +212,7 @@ export default function Gastos({ vistaInicial = 'lista' }) {
       <div className="w-full min-w-0">
         <form onSubmit={guardarGasto} className="w-full space-y-4 text-xs text-gray-700">
           <div className="w-full bg-white rounded-lg shadow-sm border-t-2 border-[#004284] p-4 md:p-5">
-            <div className="flex justify-between items-center border-b pb-3 mb-4"><h1 className="text-xl font-bold text-gray-800">Agregar gasto</h1><button type="button" onClick={() => setVista('lista')} className="border rounded px-4 py-2 font-bold">Volver</button></div>
+            <div className="flex justify-between items-center border-b pb-3 mb-4"><h1 className="text-xl font-bold text-gray-800">{t('addExpense')}</h1><button type="button" onClick={() => setVista('lista')} className="border rounded px-4 py-2 font-bold">{t('backToList')}</button></div>
             <h2 className="font-bold border-b pb-2 mb-4">▣ Datos del gasto</h2>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div><label className="block font-bold mb-1">Ubicación de la empresa:*</label><input readOnly className="w-full border rounded p-2 bg-gray-50" value={nombreEmpresa || 'Mi negocio'} /></div>
@@ -240,22 +242,22 @@ export default function Gastos({ vistaInicial = 'lista' }) {
 
   return (
     <div className="bg-transparent text-sm text-gray-700">
-      <h1 className="text-2xl font-bold text-gray-800 mb-1">Gastos</h1>
+      <h1 className="text-2xl font-bold text-gray-800 mb-1">{t('expenses')}</h1>
       <div className="bg-white rounded-lg shadow-sm border-t-2 border-[#004284] mb-4">
         <div className="p-4 border-b font-bold text-blue-500">⚙ Filtros</div>
         <div className="p-4 grid grid-cols-1 md:grid-cols-4 gap-4 text-xs font-bold">
-          <div><label className="block mb-1">Ubicación de la empresa:</label><select className="w-full border rounded p-2 bg-white"><option>{nombreEmpresa || 'Todas las localizaciones'}</option></select></div>
+          <div><label className="block mb-1">{t('companyLocation')}:</label><select className="w-full border rounded p-2 bg-white"><option>{nombreEmpresa || t('allLocations')}</option></select></div>
           <div><label className="block mb-1">Gasto por:</label><select className="w-full border rounded p-2 bg-white" value={filtroMetodo} onChange={(e) => setFiltroMetodo(e.target.value)}><option value="">Todos</option><option>Efectivo</option><option>Tarjeta</option><option>Transferencia</option><option>QR/PIX</option></select></div>
           <div><label className="block mb-1">Contacto:</label><select className="w-full border rounded p-2 bg-white" value={filtroContacto} onChange={(e) => setFiltroContacto(e.target.value)}><option value="">Ninguna</option>{contactos.map((contacto) => { const nombreContacto = contacto.nombre_empresa || contacto.nombre; return <option key={contacto.id} value={nombreContacto}>{nombreContacto}</option>; })}</select></div>
           <div><label className="block mb-1">Categoría de gastos:</label><select className="w-full border rounded p-2 bg-white" value={filtroCategoria} onChange={(e) => setFiltroCategoria(e.target.value)}><option value="">Todas</option>{categoriasDisponibles.map((categoria) => <option key={categoria}>{categoria}</option>)}</select></div>
           <div><label className="block mb-1">Subcategoría:</label><select className="w-full border rounded p-2 bg-white"><option>Todas</option></select></div>
-          <div><label className="block mb-1">Rango de fechas:</label><input type="text" readOnly className="w-full border rounded p-2 bg-gray-100" value={new Date().toLocaleDateString('es-PY')} /></div>
+          <div><label className="block mb-1">{t('dateRange')}:</label><input type="text" readOnly className="w-full border rounded p-2 bg-gray-100" value={new Date().toLocaleDateString(locale)} /></div>
           <div><label className="block mb-1">Estado de pago:</label><select className="w-full border rounded p-2 bg-white"><option>Todos</option><option>Contado</option><option>Crédito</option></select></div>
         </div>
       </div>
 
       <div className="bg-white rounded-lg shadow-sm border-t-2 border-[#004284]">
-        <div className="p-4 border-b flex justify-between items-center"><h2 className="font-bold text-gray-700">Todos los gastos</h2><button type="button" onClick={() => { limpiarForm(); setVista('agregar'); }} className="bg-orange-500 hover:bg-orange-600 text-white rounded px-4 py-2 font-bold">+ Añadir</button></div>
+        <div className="p-4 border-b flex justify-between items-center"><h2 className="font-bold text-gray-700">{t('allExpenses')}</h2><button type="button" onClick={() => { limpiarForm(); setVista('agregar'); }} className="bg-orange-500 hover:bg-orange-600 text-white rounded px-4 py-2 font-bold">+ {t('add')}</button></div>
         <div className="p-4">
           <div className="flex flex-wrap justify-between items-center gap-3 mb-4 text-xs"><div className="flex items-center gap-2"><span>Mostrar</span><select className="border rounded p-1.5 bg-white" value={porPagina} onChange={(e) => setPorPagina(Number(e.target.value))}><option value={10}>10</option><option value={25}>25</option><option value={50}>50</option></select><span>entradas</span><button onClick={exportarCSV} className="bg-gray-100 border rounded px-2.5 py-1.5 font-semibold">📄 Exportar a CSV</button><button onClick={() => window.print()} className="bg-gray-100 border rounded px-2.5 py-1.5 font-semibold">🖨️ Imprimir</button></div><input className="border rounded p-2 w-64" placeholder="Buscar ..." value={busqueda} onChange={(e) => setBusqueda(e.target.value)} /></div>
           <div className="overflow-x-auto border rounded"><table className="w-full min-w-[1250px] text-left text-[11px] border-collapse"><thead><tr className="bg-gray-50 text-[#004284] font-black uppercase border-b-2"><th className="p-3">Acción</th><th className="p-3">Fecha</th><th className="p-3">Número de referencia</th><th className="p-3">Detalles recurrentes</th><th className="p-3">Categoría de gastos</th><th className="p-3">Subcategoría</th><th className="p-3">Ubicación</th><th className="p-3">Estado de pago</th><th className="p-3">IVA</th><th className="p-3 text-right">Cantidad total</th><th className="p-3 text-right">Saldo pendiente de pago</th><th className="p-3">Gasto por</th><th className="p-3">Contacto</th><th className="p-3">Nota de gastos</th><th className="p-3">Añadido por</th></tr></thead><tbody>{cargando ? <tr><td colSpan="15" className="p-8 text-center text-gray-400">Cargando gastos...</td></tr> : gastosPagina.length === 0 ? <tr><td colSpan="15" className="p-8 text-center text-gray-400">No hay datos disponibles en la tabla</td></tr> : gastosPagina.map((gasto) => { const pagado = Number(gasto.monto || 0); return <tr key={gasto.id} className="border-b hover:bg-gray-50"><td className="p-2 relative"><button type="button" onClick={() => setMenuAbierto(menuAbierto === gasto.id ? null : gasto.id)} className="bg-cyan-500 text-white px-2 py-1 rounded font-bold">Acciones⌄</button>{menuAbierto === gasto.id && <div className="absolute z-30 mt-1 bg-white border rounded shadow-xl w-40 py-1"><button type="button" onClick={() => { notificar.info(`${gasto.descripcion}\nMonto: ${formatGs(gasto.monto)}\nCuenta: ${gasto.cuenta_pago || '—'}`); setMenuAbierto(null); }} className="block w-full text-left px-3 py-2 hover:bg-gray-50">👁️ Ver</button><button type="button" onClick={() => { setMenuAbierto(null); borrarGasto(gasto); }} className="block w-full text-left px-3 py-2 text-red-600 hover:bg-red-50">🗑️ Borrar</button></div>}</td><td className="p-3">{gasto.fecha ? new Date(gasto.fecha).toLocaleDateString('es-PY') : '—'}</td><td className="p-3 font-mono">{gasto.nro_referencia || '—'}</td><td className="p-3">{gasto.es_recurrente ? 'Sí' : '—'}</td><td className="p-3">{gasto.categoria || '—'}</td><td className="p-3">{gasto.subcategoria || '—'}</td><td className="p-3">{nombreEmpresa || '—'}</td><td className="p-3"><span className="bg-green-100 text-green-700 px-2 py-0.5 rounded font-bold">Contado</span></td><td className="p-3">{gasto.iva || '—'}</td><td className="p-3 text-right font-bold">{formatGs(pagado)}</td><td className="p-3 text-right">0 Gs</td><td className="p-3">{gasto.metodo_pago || '—'}</td><td className="p-3">{gasto.proveedor || '—'}</td><td className="p-3">{gasto.nota || '—'}</td><td className="p-3">{nombreEmpresa || '—'}</td></tr>; })}</tbody><tfoot><tr className="bg-gray-200 font-bold"><td colSpan="9" className="p-3 text-right">Total:</td><td className="p-3 text-right">{formatGs(total)}</td><td className="p-3 text-right">0 Gs</td><td colSpan="4"></td></tr></tfoot></table></div>

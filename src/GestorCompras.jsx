@@ -4,8 +4,11 @@ import { useNotificacion } from './NotificacionContext';
 import { sonidoExito } from './utils/sonido';
 import { useEmpresaInfo, useNombreEmpresa } from './utils/useEmpresa';
 import { useUbicacionUsuario } from './utils/useUbicacion';
+import { cantidadInterna, cantidadVisible } from './utils/cantidadProducto';
+import { useLanguage } from './LanguageContext';
 
 export default function GestorCompras({ vistaInicial = 'lista' }) {
+  const { t, locale } = useLanguage();
   const nombreEmpresa = useNombreEmpresa();
   const { id: empresaId } = useEmpresaInfo();
   const { notificar, confirmar } = useNotificacion();
@@ -223,6 +226,7 @@ export default function GestorCompras({ vistaInicial = 'lista' }) {
       id: producto.id, 
       nombre: producto.nombre, 
       codigo: producto.codigo || 'S/N', 
+      unidad: producto.unidad || 'UNID',
       cantidad: 1, 
       iva: 'IVA 10%', 
       costo: producto.precio_compra || 0, 
@@ -266,7 +270,7 @@ export default function GestorCompras({ vistaInicial = 'lista' }) {
         producto_id: item.id,
         nombre_producto: item.nombre,
         codigo_sku: item.codigo,
-        cantidad: item.cantidad,
+        cantidad: cantidadInterna(item.cantidad, item.unidad),
         costo_unitario: item.costo,
       }));
 
@@ -440,6 +444,7 @@ export default function GestorCompras({ vistaInicial = 'lista' }) {
         nombre: productoGuardado.nombre,
         codigo: productoGuardado.codigo || 'S/N',
         cantidad: 1,
+        unidad: productoGuardado.unidad || 'UNID',
         iva: `IVA ${ivaPctProdNuevo}%`,
         costo: Number(precioCompraConIvaProdNuevo) || 0,
         subtotal: Number(precioCompraConIvaProdNuevo) || 0,
@@ -486,6 +491,7 @@ export default function GestorCompras({ vistaInicial = 'lista' }) {
         nombre: d.nombre_producto,
         codigo: d.codigo_sku || 'S/N',
         cantidad: d.cantidad,
+        unidad: productos.find((p) => p.id === d.producto_id)?.unidad || 'UNID',
         iva: 'IVA 10%',
         costo: d.costo_unitario,
         subtotal: d.subtotal,
@@ -817,7 +823,7 @@ export default function GestorCompras({ vistaInicial = 'lista' }) {
                       <tr key={item.id} className="border-b hover:bg-gray-50 font-medium">
                         <td className="p-3 text-center text-gray-400">{idx + 1}</td>
                         <td className="p-3 font-bold text-gray-800">{item.nombre}</td>
-                        <td className="p-3"><input type="number" min="1" className="w-full border rounded p-1 text-center" value={item.cantidad} onChange={(e) => actualizarCeldaItem(idx, 'cantidad', e.target.value)} /></td>
+                        <td className="p-3"><input type="number" min="0.01" step="0.01" className="w-full border rounded p-1 text-center" value={cantidadVisible(item.cantidad, item.unidad)} onChange={(e) => actualizarCeldaItem(idx, 'cantidad', cantidadInterna(e.target.value, item.unidad))} /></td>
                         <td className="p-3 text-gray-500">{item.iva}</td>
                         <td className="p-3"><input type="number" className="w-full border rounded p-1 text-right" value={item.costo} onChange={(e) => actualizarCeldaItem(idx, 'costo', e.target.value)} /></td>
                         <td className="p-3 font-bold text-gray-800 text-right">{item.subtotal.toLocaleString('es-PY')}</td>
@@ -948,35 +954,35 @@ export default function GestorCompras({ vistaInicial = 'lista' }) {
         <div>
           <div className="bg-white p-4 rounded-lg shadow-sm border-t-2 border-[#004284] mb-4">
             <div className="grid grid-cols-1 md:grid-cols-5 gap-4 text-xs font-bold text-gray-700">
-              <div><label className="block mb-1">Ubicación de la empresa:</label><select className="w-full border rounded p-2 bg-white outline-none"><option>Todos</option></select></div>
-              <div><label className="block mb-1">Proveedor:</label><select className="w-full border rounded p-2 bg-white outline-none"><option>Todos</option></select></div>
-              <div><label className="block mb-1">Estado de compra:</label><select className="w-full border rounded p-2 bg-white outline-none"><option>Todos</option></select></div>
-              <div><label className="block mb-1">Estado de pago:</label><select className="w-full border rounded p-2 bg-white outline-none"><option>Todos</option></select></div>
-              <div><label className="block mb-1">Rango de fechas:</label><input type="text" className="w-full border rounded p-2 bg-gray-100 outline-none text-gray-500" value="01/01/2026 - 31/12/2026" readOnly /></div>
+              <div><label className="block mb-1">{t('companyLocation')}:</label><select className="w-full border rounded p-2 bg-white outline-none"><option>{t('all')}</option></select></div>
+              <div><label className="block mb-1">{t('suppliers')}:</label><select className="w-full border rounded p-2 bg-white outline-none"><option>{t('all')}</option></select></div>
+              <div><label className="block mb-1">{t('purchaseStatus')}:</label><select className="w-full border rounded p-2 bg-white outline-none"><option>{t('all')}</option></select></div>
+              <div><label className="block mb-1">{t('paymentStatus')}:</label><select className="w-full border rounded p-2 bg-white outline-none"><option>{t('all')}</option></select></div>
+              <div><label className="block mb-1">{t('dateRange')}:</label><input type="text" className="w-full border rounded p-2 bg-gray-100 outline-none text-gray-500" value="01/01/2026 - 31/12/2026" readOnly /></div>
             </div>
           </div>
 
           <div className="bg-white rounded-lg shadow-sm border-t-2 border-[#004284]">
             <div className="p-4 border-b flex justify-between items-center">
-              <h3 className="text-base font-bold text-gray-700">Todas las compras</h3>
-              <button onClick={() => { setModoEdicion(false); setCompraEditandoId(null); setItemsCompra([]); setProveedor(''); setNroFactura(''); setPagoRealizado(0); setPagoRealizadoOriginal(0); setCuentaPago('-- Seleccione cuenta --'); setMostrarFormulario(true); }} className="bg-[#fd7e14] text-white px-4 py-1.5 rounded text-sm font-bold hover:bg-[#e86e04] shadow-sm flex items-center gap-1">+ Añadir</button>
+              <h3 className="text-base font-bold text-gray-700">{t('allPurchases')}</h3>
+              <button onClick={() => { setModoEdicion(false); setCompraEditandoId(null); setItemsCompra([]); setProveedor(''); setNroFactura(''); setPagoRealizado(0); setPagoRealizadoOriginal(0); setCuentaPago('-- Seleccione cuenta --'); setMostrarFormulario(true); }} className="bg-[#fd7e14] text-white px-4 py-1.5 rounded text-sm font-bold hover:bg-[#e86e04] shadow-sm flex items-center gap-1">+ {t('add')}</button>
             </div>
 
             <div className="p-4">
               <div className="flex flex-wrap justify-between items-center gap-4 mb-4 text-xs">
                 <div className="flex items-center gap-2 text-gray-600 font-medium">
-                  <span>Mostrar</span>
+                  <span>{t('show')}</span>
                   <select className="border rounded p-1 outline-none" value={porPagina} onChange={(e) => { setPorPagina(Number(e.target.value)); setPaginaActual(1); }}>
                     <option value={10}>10</option>
                     <option value={25}>25</option>
                     <option value={50}>50</option>
                   </select>
-                  <span>entradas</span>
+                  <span>{t('entries')}</span>
                   <button onClick={exportarComprasCSV} className="bg-gray-100 border text-gray-600 px-2.5 py-1 rounded text-xs font-semibold hover:bg-gray-200 ml-2">📄 Exportar a CSV</button>
                   <button onClick={() => window.print()} className="bg-gray-100 border text-gray-600 px-2.5 py-1 rounded text-xs font-semibold hover:bg-gray-200">🖨️ Imprimir</button>
                 </div>
                 <div className="flex items-center gap-2">
-                  <input type="text" className="border rounded p-1.5 w-64 outline-none focus:border-blue-500" placeholder="Buscar ..." value={busquedaLista} onChange={(e) => { setBusquedaLista(e.target.value); setPaginaActual(1); }} />
+                  <input type="text" className="border rounded p-1.5 w-64 outline-none focus:border-blue-500" placeholder={`${t('search')} ...`} value={busquedaLista} onChange={(e) => { setBusquedaLista(e.target.value); setPaginaActual(1); }} />
                 </div>
               </div>
 
@@ -998,7 +1004,7 @@ export default function GestorCompras({ vistaInicial = 'lista' }) {
                   </thead>
                   <tbody>
                     {comprasPagina.length === 0 ? (
-                      <tr><td colSpan="10" className="text-center py-10 text-gray-400">No hay datos disponibles en la tabla</td></tr>
+                      <tr><td colSpan="10" className="text-center py-10 text-gray-400">{t('noData')}</td></tr>
                     ) : (
                       comprasPagina.map((compra) => {
                         const estadoPago = getEstadoPago(compra);
@@ -1028,7 +1034,7 @@ export default function GestorCompras({ vistaInicial = 'lista' }) {
                                 </div>
                               )}
                             </td>
-                            <td className="p-3">{new Date(compra.fecha).toLocaleDateString('es-PY')}</td>
+                            <td className="p-3">{new Date(compra.fecha).toLocaleDateString(locale)}</td>
                             <td className="p-3 font-mono">{compra.nro_factura || `PO-${compra.id}`}</td>
                             <td className="p-3">{compra.ubicacion || nombreEmpresa}</td>
                             <td className="p-3 font-bold">{compra.proveedor_nombre}</td>

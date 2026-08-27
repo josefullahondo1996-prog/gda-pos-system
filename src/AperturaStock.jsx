@@ -4,6 +4,7 @@ import { sonidoExito } from './utils/sonido';
 import { useEmpresaInfo } from './utils/useEmpresa';
 import { useUbicacionUsuario } from './utils/useUbicacion';
 import { ajustarStockUbicacion } from './utils/stockUbicacion';
+import { cantidadInterna, cantidadVisible } from './utils/cantidadProducto';
 
 const formatGs = (v) => Number(v || 0).toLocaleString('es-PY');
 
@@ -139,8 +140,8 @@ const AperturaStock = ({ producto, onGuardado, onCancelar }) => {
                                                 type="number"
                                                 min="0"
                                                 className="w-16 border border-gray-300 rounded p-1.5"
-                                                value={f.cantidad}
-                                                onChange={(e) => actualizarFila(f.id, 'cantidad', e.target.value)}
+                                                value={cantidadVisible(f.cantidad, f.unidad)}
+                                                onChange={(e) => actualizarFila(f.id, 'cantidad', cantidadInterna(e.target.value, f.unidad))}
                                             />
                                             <span className="bg-gray-50 border border-gray-200 rounded px-2 py-1.5 text-[10px] font-bold text-gray-500">
                                                 {f.unidad}

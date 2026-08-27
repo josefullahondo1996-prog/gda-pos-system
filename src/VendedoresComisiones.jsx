@@ -3,6 +3,7 @@ import { FileSpreadsheet, FileText, Filter, Printer, RefreshCw, Settings } from 
 import { supabase } from './supabaseClient';
 import { useEmpresaInfo } from './utils/useEmpresa';
 import { useUbicacionUsuario } from './utils/useUbicacion';
+import { useLanguage } from './LanguageContext';
 
 const SIN_VENDEDOR = 'Sin vendedor';
 const formatGs = (valor) => `${Math.round(Number(valor) || 0).toLocaleString('es-PY')} Gs`;
@@ -10,6 +11,7 @@ const formatFecha = (fecha) => fecha ? `${new Date(fecha).toLocaleDateString('es
 const estadoNormalizado = (estado) => String(estado || '').toLowerCase();
 
 export default function VendedoresComisiones() {
+  const { t } = useLanguage();
   const { id: empresaId } = useEmpresaInfo();
   const { id: ubicacionUsuarioId, ve_todas: usuarioVeTodas } = useUbicacionUsuario();
   const [ventas, setVentas] = useState([]);
@@ -129,13 +131,13 @@ export default function VendedoresComisiones() {
     const enlace = document.createElement('a'); enlace.href = url; enlace.download = `vendedores-${pestana}-${new Date().toISOString().slice(0, 10)}.${extension}`; enlace.click(); URL.revokeObjectURL(url);
   };
 
-  if (cargando) return <div className="p-10 text-center text-orange-500 font-bold">Cargando vendedores y comisiones...</div>;
+  if (cargando) return <div className="p-10 text-center text-orange-500 font-bold">{t('loadingSellers')}</div>;
   return (
     <div className="mx-auto max-w-[1240px] text-[12px] text-slate-700">
-      <h2 className="mb-5 text-[24px] font-bold tracking-tight text-slate-900">Vendedores / Comisiones</h2>
+      <h2 className="mb-5 text-[24px] font-bold tracking-tight text-slate-900">{t('sellersCommissions')}</h2>
 
       <section className="mb-6 overflow-hidden rounded-[10px] border border-slate-200 bg-white shadow-sm">
-        <div className="flex items-center gap-1 border-b border-slate-200 bg-slate-50 px-5 py-3 font-bold text-sky-600"><Filter size={15} fill="currentColor" /> Filtros</div>
+        <div className="flex items-center gap-1 border-b border-slate-200 bg-slate-50 px-5 py-3 font-bold text-sky-600"><Filter size={15} fill="currentColor" /> {t('filters')}</div>
         <div className="grid grid-cols-1 gap-5 px-5 py-5 md:grid-cols-3">
           <label className="font-bold text-slate-800">Usuario:
             <select value={vendedorFiltro === 'Todos' ? 'Todos los usuarios' : vendedorFiltro} onChange={(e) => setVendedorFiltro(e.target.value === 'Todos los usuarios' ? 'Todos' : e.target.value)} className="mt-2 h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-[14px] font-normal text-slate-600 outline-none focus:border-sky-400 focus:ring-2 focus:ring-sky-100"><option>Todos los usuarios</option>{vendedores.map((vendedor) => <option key={vendedor}>{vendedor}</option>)}</select>

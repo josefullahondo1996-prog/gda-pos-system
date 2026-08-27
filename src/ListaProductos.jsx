@@ -10,8 +10,11 @@ import { useUbicacionUsuario } from './utils/useUbicacion';
 import { useSucursalActiva } from './utils/SucursalContext';
 import { cargarMapaStockPorUbicacion } from './utils/stockUbicacion';
 import { useNotificacion } from './NotificacionContext';
+import { cantidadVisible } from './utils/cantidadProducto';
+import { useLanguage } from './LanguageContext';
 
 export default function ListaProductos() {
+  const { t } = useLanguage();
   const { id: empresaId, nombre: nombreEmpresa } = useEmpresaInfo();
   const { confirmar } = useNotificacion();
   const { nombre: nombreUbicacionUsuario, ve_todas: usuarioVeTodas } = useUbicacionUsuario();
@@ -107,6 +110,8 @@ export default function ListaProductos() {
     const stockSucursal = sucursalActiva ? mapaStockUbicacion[producto.id]?.[sucursalActiva] : undefined;
     return stockSucursal !== undefined ? Number(stockSucursal) : Number(producto.stock_actual) || 0;
   };
+
+  const stockFormateado = (producto, cantidad) => cantidadVisible(cantidad, producto.unidad);
 
   useEffect(() => {
     if (!empresaId) return;
@@ -323,21 +328,21 @@ export default function ListaProductos() {
 
       {/* 1. SECCIÓN DE FILTROS AVANZADOS (clonado de CDEpos, con datos reales donde existen) */}
       <div className="bg-white p-4 rounded-lg shadow-sm border-t-2 border-[#004284] mb-4">
-        <h3 className="text-xs font-bold text-gray-500 mb-3 uppercase tracking-wider">🔻 Filtros</h3>
+        <h3 className="text-xs font-bold text-gray-500 mb-3 uppercase tracking-wider">🔻 {t('filters')}</h3>
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
           <div title="Tu sistema todavía no distingue tipos de producto (individual/combo/servicio)">
-            <label className="block text-xs font-bold text-gray-400 mb-1">Tipo de producto:</label>
+            <label className="block text-xs font-bold text-gray-400 mb-1">{t('productType')}:</label>
             <select disabled className="w-full border rounded p-1.5 bg-gray-50 text-gray-400 cursor-not-allowed"><option>Todos</option></select>
           </div>
           <div>
-            <label className="block text-xs font-bold text-gray-500 mb-1">Categoría:</label>
+            <label className="block text-xs font-bold text-gray-500 mb-1">{t('categories')}:</label>
             <select className="w-full border rounded p-1.5 bg-white" value={filtroCategoria} onChange={(e) => setFiltroCategoria(e.target.value)}>
               <option value="Todos">(Todos)</option>
               {categoriasDisponibles.map((c) => <option key={c.id} value={c.nombre}>{c.nombre}</option>)}
             </select>
           </div>
           <div>
-            <label className="block text-xs font-bold text-gray-500 mb-1">Unidad:</label>
+            <label className="block text-xs font-bold text-gray-500 mb-1">{t('units')}:</label>
             <select className="w-full border rounded p-1.5 bg-white" value={filtroUnidad} onChange={(e) => setFiltroUnidad(e.target.value)}>
               <option value="Todos">(Todos)</option>
               {unidadesDisponibles.map((u) => <option key={u.id} value={u.id}>{u.nombre}</option>)}
@@ -352,14 +357,14 @@ export default function ListaProductos() {
           </div>
 
           <div>
-            <label className="block text-xs font-bold text-gray-500 mb-1">Marca:</label>
+            <label className="block text-xs font-bold text-gray-500 mb-1">{t('brands')}:</label>
             <select className="w-full border rounded p-1.5 bg-white" value={filtroMarca} onChange={(e) => setFiltroMarca(e.target.value)}>
               <option value="Todos">(Todos)</option>
               {marcasDisponibles.map((m) => <option key={m.id} value={m.nombre}>{m.nombre}</option>)}
             </select>
           </div>
           <div>
-            <label className="block text-xs font-bold text-gray-500 mb-1">Ubicación de la empresa:</label>
+            <label className="block text-xs font-bold text-gray-500 mb-1">{t('companyLocation')}:</label>
             <select className="w-full border rounded p-1.5 bg-white" value={filtroUbicacionLista} onChange={(e) => setFiltroUbicacionLista(e.target.value)}>
               <option value="Todos">(Todos)</option>
               {ubicacionesDisponibles.map((u) => <option key={u.id} value={u.id}>{u.nombre}</option>)}
@@ -370,35 +375,35 @@ export default function ListaProductos() {
             <select disabled className="w-full border rounded p-1.5 bg-gray-50 text-gray-400 cursor-not-allowed"><option>Todas</option></select>
           </div>
           <div>
-            <label className="block text-xs font-bold text-gray-500 mb-1">Estado del stock:</label>
+            <label className="block text-xs font-bold text-gray-500 mb-1">{t('stockStatus')}:</label>
             <select className="w-full border rounded p-1.5 bg-white" value={filtroEstadoStock} onChange={(e) => setFiltroEstadoStock(e.target.value)}>
               <option value="Todos">— Todos los productos</option>
-              <option value="con_stock">Con stock</option>
-              <option value="sin_stock">Sin stock</option>
-              <option value="stock_bajo">Stock bajo (bajo umbral de alerta)</option>
+              <option value="con_stock">{t('withStock')}</option>
+              <option value="sin_stock">{t('withoutStock')}</option>
+              <option value="stock_bajo">{t('lowStockThreshold')}</option>
             </select>
           </div>
 
           <div className="flex items-center gap-2 pt-5">
             <input type="checkbox" checked={filtroNoParaVender} onChange={(e) => setFiltroNoParaVender(e.target.checked)} />
-            <label className="text-xs font-bold text-gray-600">No para vender</label>
+            <label className="text-xs font-bold text-gray-600">{t('notForSale')}</label>
           </div>
           <div className="flex items-center gap-2 pt-5">
             <input type="checkbox" checked={filtroSoloAlerta} onChange={(e) => setFiltroSoloAlerta(e.target.checked)} />
-            <label className="text-xs font-bold text-gray-600">Solo bajo umbral de alerta</label>
+            <label className="text-xs font-bold text-gray-600">{t('onlyBelowAlert')}</label>
           </div>
           <div>
             <label className="block text-xs font-bold text-gray-500 mb-1">Rango de stock (qty):</label>
             <div className="flex items-center gap-1">
-              <input type="number" placeholder="min" value={stockMin} onChange={(e) => setStockMin(e.target.value)} className="w-full border rounded p-1.5 text-xs" />
+              <input type="number" placeholder={t('min')} value={stockMin} onChange={(e) => setStockMin(e.target.value)} className="w-full border rounded p-1.5 text-xs" />
               <span className="text-gray-400 text-xs">a</span>
-              <input type="number" placeholder="max" value={stockMax} onChange={(e) => setStockMax(e.target.value)} className="w-full border rounded p-1.5 text-xs" />
+              <input type="number" placeholder={t('max')} value={stockMax} onChange={(e) => setStockMax(e.target.value)} className="w-full border rounded p-1.5 text-xs" />
             </div>
             <p className="text-[10px] text-gray-400 mt-0.5">Ej: 1 a 10 para reposición</p>
           </div>
           <div className="flex items-center gap-2 pt-5" title="Tu sistema todavía no tiene sincronización con WooCommerce conectada">
             <input type="checkbox" disabled className="cursor-not-allowed" />
-            <label className="text-xs font-bold text-gray-400 cursor-not-allowed">Woocommerce enabled</label>
+            <label className="text-xs font-bold text-gray-400 cursor-not-allowed">{t('woocommerceEnabled')}</label>
           </div>
           <div title="Requiere cruzar el historial de ventas por producto y fecha — todavía no está armado">
             <label className="block text-xs font-bold text-gray-400 mb-1">Vendido en últimos:</label>
@@ -450,13 +455,13 @@ export default function ListaProductos() {
           {/* Barra de Acciones Superiores */}
           <div className="flex flex-wrap justify-between items-center gap-3 mb-4">
             <div className="flex gap-1 flex-wrap items-center">
-              <button onClick={exportarCSV} className="bg-gray-100 border text-gray-600 px-2.5 py-1 rounded text-xs font-semibold hover:bg-gray-200">📄 Exportar a CSV</button>
-              <button onClick={() => window.print()} className="bg-gray-100 border text-gray-600 px-2.5 py-1 rounded text-xs font-semibold hover:bg-gray-200">🖨️ Imprimir</button>
+              <button onClick={exportarCSV} className="bg-gray-100 border text-gray-600 px-2.5 py-1 rounded text-xs font-semibold hover:bg-gray-200">📄 {t('exportCsv')}</button>
+              <button onClick={() => window.print()} className="bg-gray-100 border text-gray-600 px-2.5 py-1 rounded text-xs font-semibold hover:bg-gray-200">🖨️ {t('print')}</button>
               <select value={porPagina} onChange={(e) => setPorPagina(Number(e.target.value))} className="border rounded p-1.5 text-xs font-semibold bg-white ml-2">
-                <option value={10}>Mostrar 10</option>
-                <option value={25}>Mostrar 25</option>
-                <option value={50}>Mostrar 50</option>
-                <option value={100}>Mostrar 100</option>
+                <option value={10}>{t('show')} 10</option>
+                <option value={25}>{t('show')} 25</option>
+                <option value={50}>{t('show')} 50</option>
+                <option value={100}>{t('show')} 100</option>
               </select>
             </div>
 
@@ -464,7 +469,7 @@ export default function ListaProductos() {
               <input
                 type="text"
                 className="border rounded p-1.5 w-64 outline-none focus:border-blue-500"
-                placeholder="Buscar por nombre o SKU..."
+                placeholder={`${t('search')} ${t('name').toLowerCase()} o SKU...`}
                 value={busqueda}
                 onChange={(e) => setBusqueda(e.target.value)}
               />
@@ -472,7 +477,7 @@ export default function ListaProductos() {
                 onClick={() => setMostrarFormularioNuevo(true)}
                 className="bg-orange-500 hover:bg-orange-600 text-white font-bold px-3 py-1.5 rounded text-xs whitespace-nowrap"
               >
-                + Añadir
+                + {t('add')}
               </button>
             </div>
           </div>
@@ -485,15 +490,15 @@ export default function ListaProductos() {
                   <th className="p-3 w-8">
                     <input type="checkbox" checked={todosSeleccionadosEnPagina} onChange={toggleSeleccionarTodos} />
                   </th>
-                  <th className="p-3 w-14">Imagen</th>
-                  <th className="p-3 w-24">Acción</th>
-                  <th className="p-3">Producto</th>
-                  <th className="p-3">Ubicación de la Empresa</th>
-                  <th className="p-3 text-right">Precio Compra Unitario</th>
-                  <th className="p-3 text-right">Precio de Venta</th>
-                  <th className="p-3 text-center">Stock Actual</th>
-                  <th className="p-3">Categoría</th>
-                  <th className="p-3">Marca</th>
+                  <th className="p-3 w-14">{t('image')}</th>
+                  <th className="p-3 w-24">{t('action')}</th>
+                  <th className="p-3">{t('product')}</th>
+                  <th className="p-3">{t('companyLocation')}</th>
+                  <th className="p-3 text-right">{t('unitPurchasePrice')}</th>
+                  <th className="p-3 text-right">{t('salePrice')}</th>
+                  <th className="p-3 text-center">{t('currentStock')}</th>
+                  <th className="p-3">{t('categories')}</th>
+                  <th className="p-3">{t('brands')}</th>
                   <th className="p-3">IVA</th>
                   <th className="p-3">SKU / Código Barra</th>
                 </tr>
@@ -502,7 +507,7 @@ export default function ListaProductos() {
                 {productosPagina.length === 0 ? (
                   <tr>
                     <td colSpan="11" className="text-center py-8 text-gray-400 font-medium">
-                      Ningún producto coincide con los criterios de búsqueda.
+                      {t('noMatchingProducts')}
                     </td>
                   </tr>
                 ) : (
@@ -554,7 +559,7 @@ export default function ListaProductos() {
                       <td className="p-3 font-bold text-gray-900">
                         {prod.nombre}
                         {prod.activo === false && (
-                          <span className="block w-fit mt-1 bg-gray-200 text-gray-600 text-[10px] font-bold px-1.5 py-0.5 rounded">No para vender</span>
+                          <span className="block w-fit mt-1 bg-gray-200 text-gray-600 text-[10px] font-bold px-1.5 py-0.5 rounded">{t('notForSale')}</span>
                         )}
                       </td>
                       <td className="p-3 text-gray-500">{!usuarioVeTodas && nombreUbicacionUsuario ? nombreUbicacionUsuario : nombreEmpresa}</td>
@@ -566,11 +571,11 @@ export default function ListaProductos() {
                       </td>
                       <td className="p-3 text-center">
                         <span className={`px-2 py-0.5 rounded-sm font-bold text-[11px] ${stockVisible(prod) <= Number(prod.alerta_stock_bajo || 5) ? 'bg-red-100 text-red-700' : 'bg-gray-100 text-gray-700'}`}>
-                          {stockVisible(prod)} {prod.unidad || 'UNID'}
+                          {stockFormateado(prod, stockVisible(prod))} {prod.unidad || 'UNID'}
                         </span>
                         {sucursalActiva && (
                           <div className="text-[10px] text-gray-400 mt-1">
-                            En {nombreSucursalActiva}: <span className="font-bold text-gray-600">{mapaStockUbicacion[prod.id]?.[sucursalActiva] ?? 0} {prod.unidad || 'UNID'}</span>
+                            En {nombreSucursalActiva}: <span className="font-bold text-gray-600">{stockFormateado(prod, mapaStockUbicacion[prod.id]?.[sucursalActiva] ?? 0)} {prod.unidad || 'UNID'}</span>
                           </div>
                         )}
                       </td>
@@ -665,20 +670,20 @@ export default function ListaProductos() {
               if (!prod) return null;
               return (
                 <>
-                  <button onClick={() => imprimirEtiqueta(prod)} className="w-full text-left px-4 py-2 hover:bg-gray-50 flex items-center gap-2">🏷️ Etiquetas</button>
-                  <button onClick={() => { setProductoDetalle(prod); setAccionAbierta(null); }} className="w-full text-left px-4 py-2 hover:bg-gray-50 flex items-center gap-2">👁️ Ver</button>
-                  <button onClick={() => { setProductoEditando(prod); setMostrarFormularioNuevo(true); setAccionAbierta(null); }} className="w-full text-left px-4 py-2 hover:bg-gray-50 flex items-center gap-2">✏️ Editar</button>
-                  <button onClick={() => eliminarProducto(prod.id)} className="w-full text-left px-4 py-2 hover:bg-red-50 text-red-600 flex items-center gap-2">🗑️ Borrar</button>
+                  <button onClick={() => imprimirEtiqueta(prod)} className="w-full text-left px-4 py-2 hover:bg-gray-50 flex items-center gap-2">🏷️ {t('labels')}</button>
+                  <button onClick={() => { setProductoDetalle(prod); setAccionAbierta(null); }} className="w-full text-left px-4 py-2 hover:bg-gray-50 flex items-center gap-2">👁️ {t('view')}</button>
+                  <button onClick={() => { setProductoEditando(prod); setMostrarFormularioNuevo(true); setAccionAbierta(null); }} className="w-full text-left px-4 py-2 hover:bg-gray-50 flex items-center gap-2">✏️ {t('edit')}</button>
+                  <button onClick={() => eliminarProducto(prod.id)} className="w-full text-left px-4 py-2 hover:bg-red-50 text-red-600 flex items-center gap-2">🗑️ {t('delete')}</button>
                   <div className="border-t border-gray-100 my-1" />
-                  <button onClick={() => { setProductoStockInicial(prod); setAccionAbierta(null); }} className="w-full text-left px-4 py-2 hover:bg-gray-50 flex items-center gap-2">📦 Agregar o editar stock inicial</button>
-                  <button onClick={() => abrirHistorialExistencias(prod)} className="w-full text-left px-4 py-2 hover:bg-gray-50 flex items-center gap-2">🕘 Historial de existencias</button>
+                  <button onClick={() => { setProductoStockInicial(prod); setAccionAbierta(null); }} className="w-full text-left px-4 py-2 hover:bg-gray-50 flex items-center gap-2">📦 {t('initialStock')}</button>
+                  <button onClick={() => abrirHistorialExistencias(prod)} className="w-full text-left px-4 py-2 hover:bg-gray-50 flex items-center gap-2">🕘 {t('stockHistory')}</button>
                   <button
                     onClick={() => { setAccionAbierta(null); alert('Tu sistema todavía no tiene "grupos de precios" (precios distintos por tipo de cliente/canal) armados. Si te sirve, lo construimos.'); }}
                     className="w-full text-left px-4 py-2 hover:bg-gray-50 flex items-center gap-2"
                   >
-                    💰 Precios de grupo
+                    💰 {t('groupPrices')}
                   </button>
-                  <button onClick={() => duplicarProducto(prod)} className="w-full text-left px-4 py-2 hover:bg-gray-50 flex items-center gap-2">📄 Producto duplicado</button>
+                  <button onClick={() => duplicarProducto(prod)} className="w-full text-left px-4 py-2 hover:bg-gray-50 flex items-center gap-2">📄 {t('duplicateProduct')}</button>
                 </>
               );
             })()}
@@ -692,8 +697,8 @@ export default function ListaProductos() {
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[9999] p-4" onClick={() => setProductoStockInicial(null)}>
           <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl overflow-hidden max-h-[90vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
             <div className="bg-[#004284] px-5 py-4 flex justify-between items-center">
-              <h3 className="text-white font-bold text-lg">Stock inicial — {productoStockInicial.nombre}</h3>
-              <button onClick={() => setProductoStockInicial(null)} className="text-white/80 hover:text-white text-xl leading-none">✕</button>
+              <h3 className="text-white font-bold text-lg">{t('initialStock')} — {productoStockInicial.nombre}</h3>
+                  <button onClick={() => setProductoStockInicial(null)} className="text-white/80 hover:text-white text-xl leading-none">✕</button>
             </div>
             <div className="overflow-y-auto p-4">
               <AperturaStock
@@ -711,14 +716,14 @@ export default function ListaProductos() {
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[9999] p-4" onClick={() => setProductoHistorial(null)}>
           <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg overflow-hidden max-h-[90vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
             <div className="bg-[#004284] px-5 py-4 flex justify-between items-center">
-              <h3 className="text-white font-bold text-lg">Historial — {productoHistorial.nombre}</h3>
+              <h3 className="text-white font-bold text-lg">{t('stockHistory')} — {productoHistorial.nombre}</h3>
               <button onClick={() => setProductoHistorial(null)} className="text-white/80 hover:text-white text-xl leading-none">✕</button>
             </div>
             <div className="p-5 overflow-y-auto text-sm">
               {cargandoHistorial ? (
                 <p className="text-gray-400 text-center py-6">Cargando...</p>
               ) : historialMovimientos.length === 0 ? (
-                <p className="text-gray-400 text-center py-6">Este producto todavía no tiene ventas ni compras registradas.</p>
+                <p className="text-gray-400 text-center py-6">{t('noProductMovements')}</p>
               ) : (
                 <table className="w-full text-xs border-collapse">
                   <thead>

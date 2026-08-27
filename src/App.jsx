@@ -4,8 +4,10 @@ import Login from './Login';
 import CrearNegocio from './CrearNegocio';
 import Dashboard from './Dashboard';
 import ChatBotFlotante from './ChatBotFlotante';
+import { useLanguage } from './LanguageContext';
 
 function App() {
+  const { t } = useLanguage();
   const [session, setSession] = useState(null);
   const [perfilUsuario, setPerfilUsuario] = useState(null);
   const [cargando, setCargando] = useState(true);
@@ -93,7 +95,7 @@ function App() {
   if (cargando) {
     return (
       <div className="min-h-screen flex items-center justify-center text-gray-500">
-        Cargando...
+        {t('loading')}
       </div>
     );
   }

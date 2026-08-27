@@ -16,8 +16,10 @@ const FORM_VACIO = {
   estado: 'Activo',
 };
 import { useNotificacion } from './NotificacionContext';
+import { useLanguage } from './LanguageContext';
 
 const Proveedores = () => {
+  const { t } = useLanguage();
   const { id: empresaId } = useEmpresaInfo();
   const { confirmar } = useNotificacion();
   const [proveedores, setProveedores] = useState([]);
@@ -178,7 +180,7 @@ const Proveedores = () => {
 
       {/* Encabezado */}
       <div className="mb-6">
-        <h1 className="text-2xl font-bold text-gray-800">Proveedores <span className="text-sm font-normal text-gray-500 ml-2">Administra tus Proveedores</span></h1>
+        <h1 className="text-2xl font-bold text-gray-800">{t('suppliers')} <span className="text-sm font-normal text-gray-500 ml-2">{t('manageSuppliers')}</span></h1>
       </div>
 
       {/* SECCIÓN DE FILTROS (Clonada de la imagen) */}
@@ -187,20 +189,20 @@ const Proveedores = () => {
           <i className="fa-solid fa-filter"></i> Filtros
         </div>
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
-          <label className="flex items-center gap-2 cursor-pointer"><input type="checkbox" className="rounded text-orange-500" /> Compra adeudada</label>
-          <label className="flex items-center gap-2 cursor-pointer"><input type="checkbox" className="rounded text-orange-500" /> Devolución de compra</label>
-          <label className="flex items-center gap-2 cursor-pointer"><input type="checkbox" className="rounded text-orange-500" /> Pago Realizado</label>
-          <label className="flex items-center gap-2 cursor-pointer"><input type="checkbox" className="rounded text-orange-500" /> Crédito a favor</label>
+          <label className="flex items-center gap-2 cursor-pointer"><input type="checkbox" className="rounded text-orange-500" /> {t('purchaseDebt')}</label>
+          <label className="flex items-center gap-2 cursor-pointer"><input type="checkbox" className="rounded text-orange-500" /> {t('purchaseReturn')}</label>
+          <label className="flex items-center gap-2 cursor-pointer"><input type="checkbox" className="rounded text-orange-500" /> {t('paymentCompleted')}</label>
+          <label className="flex items-center gap-2 cursor-pointer"><input type="checkbox" className="rounded text-orange-500" /> {t('creditBalance')}</label>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <div>
-            <label className="block text-sm font-bold mb-1">Vendedor:</label>
+            <label className="block text-sm font-bold mb-1">{t('seller')}:</label>
             <select className="w-full border border-gray-300 rounded-md p-2 bg-gray-50 outline-none">
               <option>Ninguna</option>
             </select>
           </div>
           <div>
-            <label className="block text-sm font-bold mb-1">Estado:</label>
+            <label className="block text-sm font-bold mb-1">{t('status')}:</label>
             <select className="w-full border border-gray-300 rounded-md p-2 bg-gray-50 outline-none">
               <option>Ninguna</option>
               <option>Activo</option>
@@ -215,7 +217,7 @@ const Proveedores = () => {
 
         {/* Barra de herramientas superior */}
         <div className="p-4 border-b border-gray-100 flex flex-col md:flex-row justify-between items-center gap-4">
-          <h3 className="font-bold text-gray-700">Todos sus Proveedores</h3>
+          <h3 className="font-bold text-gray-700">{t('allSuppliers')}</h3>
           <button
             onClick={abrirAñadir}
             className="bg-orange-500 hover:bg-orange-600 text-white font-bold py-2 px-6 rounded-lg flex items-center gap-2 transition-all shadow-md"
@@ -227,20 +229,20 @@ const Proveedores = () => {
         {/* Botones de Exportación */}
         <div className="p-4 flex flex-wrap items-center gap-2 bg-gray-50/50">
           <div className="flex items-center gap-2 mr-4">
-            <span className="text-sm">Mostrar</span>
+            <span className="text-sm">{t('show')}</span>
             <select className="border border-gray-300 rounded p-1 text-sm"><option>25</option></select>
-            <span className="text-sm">entradas</span>
+            <span className="text-sm">{t('entries')}</span>
           </div>
-          <button className="bg-gray-200 hover:bg-gray-300 text-gray-700 px-3 py-1.5 rounded text-xs font-bold flex items-center gap-1">📄 Exportar a CSV</button>
+          <button className="bg-gray-200 hover:bg-gray-300 text-gray-700 px-3 py-1.5 rounded text-xs font-bold flex items-center gap-1">📄 {t('exportCsv')}</button>
           <button className="bg-gray-200 hover:bg-gray-300 text-gray-700 px-3 py-1.5 rounded text-xs font-bold flex items-center gap-1">📊 Exportar a Excel</button>
-          <button className="bg-gray-200 hover:bg-gray-300 text-gray-700 px-3 py-1.5 rounded text-xs font-bold flex items-center gap-1">🖨️ Imprimir</button>
+          <button className="bg-gray-200 hover:bg-gray-300 text-gray-700 px-3 py-1.5 rounded text-xs font-bold flex items-center gap-1">🖨️ {t('print')}</button>
           <button className="bg-gray-200 hover:bg-gray-300 text-gray-700 px-3 py-1.5 rounded text-xs font-bold flex items-center gap-1">📋 Visibilidad de columnas</button>
           <button className="bg-gray-200 hover:bg-gray-300 text-gray-700 px-3 py-1.5 rounded text-xs font-bold flex items-center gap-1">📕 Exportar a PDF</button>
 
           <div className="ml-auto relative">
             <input
               type="text"
-              placeholder="Buscar..."
+              placeholder={`${t('search')}...`}
               value={busqueda}
               onChange={(e) => setBusqueda(e.target.value)}
               className="border border-gray-300 rounded-md py-1.5 px-4 text-sm focus:ring-1 focus:ring-orange-500 outline-none w-64"
@@ -265,9 +267,9 @@ const Proveedores = () => {
             </thead>
             <tbody className="text-sm">
               {loading ? (
-                <tr><td colSpan="8" className="p-10 text-center">Cargando proveedores...</td></tr>
+                <tr><td colSpan="8" className="p-10 text-center">{t('loadingSuppliers')}</td></tr>
               ) : proveedoresFiltrados.length === 0 ? (
-                <tr><td colSpan="8" className="p-10 text-center">No se encontraron proveedores.</td></tr>
+                <tr><td colSpan="8" className="p-10 text-center">{t('noSuppliers')}</td></tr>
               ) : (
                 proveedoresFiltrados.map((item) => (
                   <tr key={item.id} className="border-b border-gray-100 hover:bg-gray-50 transition-colors">
@@ -276,7 +278,7 @@ const Proveedores = () => {
                         onClick={(e) => abrirMenuAcciones(e, item.id)}
                         className="bg-cyan-400 hover:bg-cyan-500 text-white text-xs font-bold py-1.5 px-3 rounded flex items-center gap-1"
                       >
-                        Acciones <i className="fa-solid fa-caret-down"></i>
+                        {t('actions')} <i className="fa-solid fa-caret-down"></i>
                       </button>
                       {menuAccionesAbierto === item.id && createPortal(
                         <>
@@ -290,19 +292,19 @@ const Proveedores = () => {
                               onClick={() => { setMenuAccionesAbierto(null); setProveedorVer(item); }}
                               className="w-full text-left px-3 py-2 hover:bg-gray-100 text-gray-700 flex items-center gap-2"
                             >
-                              👁️ Ver
+                              👁️ {t('view')}
                             </button>
                             <button
                               onClick={() => abrirEditar(item)}
                               className="w-full text-left px-3 py-2 hover:bg-gray-100 text-gray-700 flex items-center gap-2"
                             >
-                              ✏️ Editar
+                              ✏️ {t('edit')}
                             </button>
                             <button
                               onClick={() => borrarProveedor(item)}
                               className="w-full text-left px-3 py-2 hover:bg-gray-100 text-red-600 flex items-center gap-2"
                             >
-                              🗑️ Borrar
+                              🗑️ {t('delete')}
                             </button>
                           </div>
                         </>,
@@ -327,9 +329,9 @@ const Proveedores = () => {
         <div className="p-4 bg-gray-50 flex justify-between items-center text-sm text-gray-500">
           <span>Mostrando {proveedoresFiltrados.length} de {proveedores.length} entradas</span>
           <div className="flex gap-1">
-            <button className="px-3 py-1 border rounded bg-white hover:bg-gray-100">Anterior</button>
+            <button className="px-3 py-1 border rounded bg-white hover:bg-gray-100">{t('previous')}</button>
             <button className="px-3 py-1 border rounded bg-orange-500 text-white">1</button>
-            <button className="px-3 py-1 border rounded bg-white hover:bg-gray-100">Siguiente</button>
+            <button className="px-3 py-1 border rounded bg-white hover:bg-gray-100">{t('next')}</button>
           </div>
         </div>
       </div>
@@ -339,21 +341,21 @@ const Proveedores = () => {
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[9999] p-4" onClick={() => setMostrarFormulario(false)}>
           <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg overflow-hidden max-h-[90vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
             <div className="bg-orange-500 px-5 py-4 flex justify-between items-center flex-shrink-0">
-              <h3 className="text-white font-bold text-lg">{proveedorEditando ? 'Editar proveedor' : 'Añadir proveedor'}</h3>
+              <h3 className="text-white font-bold text-lg">{proveedorEditando ? t('editSupplier') : t('addSupplier')}</h3>
               <button onClick={() => setMostrarFormulario(false)} className="text-white/80 hover:text-white text-xl leading-none">✕</button>
             </div>
             <form onSubmit={guardarProveedor} className="p-5 overflow-y-auto flex flex-col gap-4 text-sm">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="md:col-span-2">
-                  <label className="block font-bold mb-1">Tipo de contacto:*</label>
+                  <label className="block font-bold mb-1">{t('contactType')}:*</label>
                   <select required value={form.tipo_contacto} onChange={(e) => setForm({ ...form, tipo_contacto: e.target.value })} className="w-full border rounded-md p-2 bg-white outline-none focus:ring-1 focus:ring-orange-500">
-                    <option value="Proveedores">Proveedores</option>
-                    <option value="Ambos">Ambos (Proveedor y Cliente)</option>
-                    <option value="Clientes">Clientes</option>
+                    <option value="Proveedores">{t('suppliers')}</option>
+                    <option value="Ambos">{t('bothContacts')}</option>
+                    <option value="Clientes">{t('customers')}</option>
                   </select>
                 </div>
                 <div>
-                  <label className="block font-bold mb-1">Nombre de la empresa</label>
+                  <label className="block font-bold mb-1">{t('companyName')}</label>
                   <input
                     type="text"
                     value={form.nombre_empresa}
@@ -363,7 +365,7 @@ const Proveedores = () => {
                   />
                 </div>
                 <div>
-                  <label className="block font-bold mb-1">Nombre del representante</label>
+                  <label className="block font-bold mb-1">{t('representativeName')}</label>
                   <input
                     type="text"
                     value={form.representante_legal}
@@ -373,7 +375,7 @@ const Proveedores = () => {
                   />
                 </div>
                 <div>
-                  <label className="block font-bold mb-1">Documento N°</label>
+                  <label className="block font-bold mb-1">{t('documentNumber')}</label>
                   <input
                     type="text"
                     value={form.documento_nro}
@@ -391,7 +393,7 @@ const Proveedores = () => {
                   />
                 </div>
                 <div>
-                  <label className="block font-bold mb-1">Celular</label>
+                  <label className="block font-bold mb-1">{t('mobilePhone')}</label>
                   <input
                     type="text"
                     value={form.celular}
@@ -400,7 +402,7 @@ const Proveedores = () => {
                   />
                 </div>
                 <div>
-                  <label className="block font-bold mb-1">Término de pago (días)</label>
+                  <label className="block font-bold mb-1">{t('paymentTermDays')}</label>
                   <input
                     type="text"
                     value={form.termino_pago}
@@ -410,7 +412,7 @@ const Proveedores = () => {
                   />
                 </div>
                 <div>
-                  <label className="block font-bold mb-1">Saldo de apertura</label>
+                  <label className="block font-bold mb-1">{t('openingBalance')}</label>
                   <input
                     type="number"
                     value={form.saldo_apertura}
@@ -419,18 +421,18 @@ const Proveedores = () => {
                   />
                 </div>
                 <div>
-                  <label className="block font-bold mb-1">Estado</label>
+                  <label className="block font-bold mb-1">{t('status')}</label>
                   <select
                     value={form.estado}
                     onChange={(e) => setForm({ ...form, estado: e.target.value })}
                     className="w-full border rounded-md p-2 outline-none focus:ring-1 focus:ring-orange-500"
                   >
-                    <option value="Activo">Activo</option>
-                    <option value="Inactivo">Inactivo</option>
+                    <option value="Activo">{t('active')}</option>
+                    <option value="Inactivo">{t('inactive')}</option>
                   </select>
                 </div>
                 <div className="md:col-span-2">
-                  <label className="block font-bold mb-1">Dirección</label>
+                  <label className="block font-bold mb-1">{t('address')}</label>
                   <input
                     type="text"
                     value={form.direccion}
@@ -446,14 +448,14 @@ const Proveedores = () => {
                   onClick={() => setMostrarFormulario(false)}
                   className="px-4 py-2 rounded-md border border-gray-300 text-gray-600 hover:bg-gray-50 font-bold"
                 >
-                  Cancelar
+                  {t('cancel')}
                 </button>
                 <button
                   type="submit"
                   disabled={guardando}
                   className="px-4 py-2 rounded-md bg-orange-500 hover:bg-orange-600 text-white font-bold disabled:opacity-60"
                 >
-                  {guardando ? 'Guardando...' : proveedorEditando ? 'Guardar cambios' : 'Añadir proveedor'}
+                  {guardando ? t('saving') : proveedorEditando ? t('saveChanges') : t('addSupplier')}
                 </button>
               </div>
             </form>
@@ -466,20 +468,20 @@ const Proveedores = () => {
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[9999] p-4" onClick={() => setProveedorVer(null)}>
           <div className="bg-white rounded-xl shadow-2xl w-full max-w-md overflow-hidden" onClick={(e) => e.stopPropagation()}>
             <div className="bg-orange-500 px-5 py-4 flex justify-between items-center">
-              <h3 className="text-white font-bold text-lg">Detalle del proveedor</h3>
+              <h3 className="text-white font-bold text-lg">{t('supplierDetails')}</h3>
               <button onClick={() => setProveedorVer(null)} className="text-white/80 hover:text-white text-xl leading-none">✕</button>
             </div>
             <div className="p-5 text-sm flex flex-col gap-2">
-              <p><span className="font-bold text-gray-600">Código:</span> {proveedorVer.codigo_cliente || 'S/N'}</p>
-              <p><span className="font-bold text-gray-600">Empresa:</span> {proveedorVer.nombre_empresa || '-'}</p>
-              <p><span className="font-bold text-gray-600">Representante:</span> {proveedorVer.representante_legal || proveedorVer.nombre || '-'}</p>
-              <p><span className="font-bold text-gray-600">Documento N°:</span> {proveedorVer.documento_nro || '-'}</p>
+              <p><span className="font-bold text-gray-600">{t('code')}:</span> {proveedorVer.codigo_cliente || 'S/N'}</p>
+              <p><span className="font-bold text-gray-600">{t('company')}:</span> {proveedorVer.nombre_empresa || '-'}</p>
+              <p><span className="font-bold text-gray-600">{t('representative')}:</span> {proveedorVer.representante_legal || proveedorVer.nombre || '-'}</p>
+              <p><span className="font-bold text-gray-600">{t('documentNumber')}:</span> {proveedorVer.documento_nro || '-'}</p>
               <p><span className="font-bold text-gray-600">Email:</span> {proveedorVer.email || '-'}</p>
               <p><span className="font-bold text-gray-600">Celular:</span> {proveedorVer.celular || '-'}</p>
-              <p><span className="font-bold text-gray-600">Dirección:</span> {proveedorVer.direccion || '-'}</p>
-              <p><span className="font-bold text-gray-600">Término de pago:</span> {proveedorVer.termino_pago || '0'} días</p>
-              <p><span className="font-bold text-gray-600">Saldo de apertura:</span> Gs {proveedorVer.saldo_apertura?.toLocaleString('es-PY') || '0'}</p>
-              <p><span className="font-bold text-gray-600">Estado:</span> {proveedorVer.estado || 'Activo'}</p>
+              <p><span className="font-bold text-gray-600">{t('address')}:</span> {proveedorVer.direccion || '-'}</p>
+              <p><span className="font-bold text-gray-600">{t('paymentTerm')}:</span> {proveedorVer.termino_pago || '0'} {t('days')}</p>
+              <p><span className="font-bold text-gray-600">{t('openingBalance')}:</span> Gs {proveedorVer.saldo_apertura?.toLocaleString('es-PY') || '0'}</p>
+              <p><span className="font-bold text-gray-600">{t('status')}:</span> {proveedorVer.estado ? t(proveedorVer.estado === 'Activo' ? 'active' : 'inactive') : t('active')}</p>
             </div>
           </div>
         </div>

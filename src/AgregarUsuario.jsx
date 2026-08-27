@@ -2,8 +2,10 @@ import React, { useState, useEffect } from 'react';
 import { supabase } from './supabaseClient';
 import { sonidoExito } from './utils/sonido';
 import { useEmpresaInfo, useNombreEmpresa } from './utils/useEmpresa';
+import { useLanguage } from './LanguageContext';
 
 const AgregarUsuario = ({ usuarioEditar, onGuardado, onCancelar }) => {
+    const { t } = useLanguage();
     const { id: empresaId } = useEmpresaInfo();
     const nombreEmpresa = useNombreEmpresa();
     const [prefijo, setPrefijo] = useState('');
@@ -247,8 +249,8 @@ const AgregarUsuario = ({ usuarioEditar, onGuardado, onCancelar }) => {
     return (
         <div className="bg-transparent text-sm text-gray-700">
             <div className="flex items-center justify-between mb-4">
-                <h2 className="text-2xl font-bold text-gray-800">{usuarioEditar ? 'Editar usuario' : 'Agregar usuario'}</h2>
-                <button onClick={onCancelar} className="text-xs font-bold text-gray-500 hover:text-gray-800">← Volver a la lista</button>
+                <h2 className="text-2xl font-bold text-gray-800">{usuarioEditar ? t('editUser') : t('addUser')}</h2>
+                <button onClick={onCancelar} className="text-xs font-bold text-gray-500 hover:text-gray-800">← {t('backToList')}</button>
             </div>
 
             <form onSubmit={guardarUsuario} className="flex flex-col gap-4">
@@ -257,16 +259,16 @@ const AgregarUsuario = ({ usuarioEditar, onGuardado, onCancelar }) => {
                 <div className="bg-white p-5 rounded-lg shadow-sm border-t-2 border-[#004284]">
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
                         <div>
-                            <label className="block text-xs font-bold text-gray-500 mb-1">Prefijo:</label>
-                            <input className="w-full border border-gray-300 rounded p-2 text-sm" placeholder="Señor, señora" value={prefijo} onChange={(e) => setPrefijo(e.target.value)} />
+                            <label className="block text-xs font-bold text-gray-500 mb-1">{t('prefix')}:</label>
+                            <input className="w-full border border-gray-300 rounded p-2 text-sm" placeholder={t('titleExample')} value={prefijo} onChange={(e) => setPrefijo(e.target.value)} />
                         </div>
                         <div>
-                            <label className="block text-xs font-bold text-gray-500 mb-1">Nombre:*</label>
-                            <input className="w-full border border-gray-300 rounded p-2 text-sm" placeholder="Nombre" value={nombre} onChange={(e) => setNombre(e.target.value)} />
+                            <label className="block text-xs font-bold text-gray-500 mb-1">{t('name')}:*</label>
+                            <input className="w-full border border-gray-300 rounded p-2 text-sm" placeholder={t('name')} value={nombre} onChange={(e) => setNombre(e.target.value)} />
                         </div>
                         <div>
-                            <label className="block text-xs font-bold text-gray-500 mb-1">Apellido:</label>
-                            <input className="w-full border border-gray-300 rounded p-2 text-sm" placeholder="Apellido" value={apellido} onChange={(e) => setApellido(e.target.value)} />
+                            <label className="block text-xs font-bold text-gray-500 mb-1">{t('lastName')}:</label>
+                            <input className="w-full border border-gray-300 rounded p-2 text-sm" placeholder={t('lastName')} value={apellido} onChange={(e) => setApellido(e.target.value)} />
                         </div>
                     </div>
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-center">
@@ -275,38 +277,38 @@ const AgregarUsuario = ({ usuarioEditar, onGuardado, onCancelar }) => {
                             <input type="email" className="w-full border border-gray-300 rounded p-2 text-sm" placeholder="Email" value={email} onChange={(e) => setEmail(e.target.value)} />
                         </div>
                         <label className="flex items-center gap-2 text-sm font-bold text-gray-700 mt-5">
-                            <input type="checkbox" checked={activo} onChange={(e) => setActivo(e.target.checked)} /> ¿Está activo?
+                            <input type="checkbox" checked={activo} onChange={(e) => setActivo(e.target.checked)} /> {t('isActive')}
                         </label>
                     </div>
                 </div>
 
                 {/* Roles y permisos */}
                 <div className="bg-white p-5 rounded-lg shadow-sm border-t-2 border-[#004284]">
-                    <h3 className="font-bold text-gray-800 mb-4">Roles y permisos</h3>
+                    <h3 className="font-bold text-gray-800 mb-4">{t('rolesPermissions')}</h3>
                     <label className="flex items-center gap-2 font-bold text-gray-700 mb-4">
-                        <input type="checkbox" checked={permitirAcceso} onChange={(e) => setPermitirAcceso(e.target.checked)} /> Permitir acceso
+                        <input type="checkbox" checked={permitirAcceso} onChange={(e) => setPermitirAcceso(e.target.checked)} /> {t('allowAccess')}
                     </label>
 
                     {permitirAcceso && (
                         <>
                             <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-1">
                                 <div>
-                                    <label className="block text-xs font-bold text-gray-500 mb-1">Nombre de usuario:</label>
-                                    <input className="w-full border border-gray-300 rounded p-2 text-sm" placeholder="Nombre de usuario" value={nombreUsuario} onChange={(e) => setNombreUsuario(e.target.value)} />
+                                    <label className="block text-xs font-bold text-gray-500 mb-1">{t('username')}:</label>
+                                    <input className="w-full border border-gray-300 rounded p-2 text-sm" placeholder={t('username')} value={nombreUsuario} onChange={(e) => setNombreUsuario(e.target.value)} />
                                 </div>
                                 <div>
-                                    <label className="block text-xs font-bold text-gray-500 mb-1">Contraseña:{!usuarioEditar && '*'}</label>
-                                    <input type="password" className="w-full border border-gray-300 rounded p-2 text-sm" placeholder="Contraseña" value={contrasena} onChange={(e) => setContrasena(e.target.value)} />
+                                    <label className="block text-xs font-bold text-gray-500 mb-1">{t('password')}:{!usuarioEditar && '*'}</label>
+                                    <input type="password" className="w-full border border-gray-300 rounded p-2 text-sm" placeholder={t('password')} value={contrasena} onChange={(e) => setContrasena(e.target.value)} />
                                 </div>
                                 <div>
-                                    <label className="block text-xs font-bold text-gray-500 mb-1">Confirmar contraseña:{!usuarioEditar && '*'}</label>
-                                    <input type="password" className="w-full border border-gray-300 rounded p-2 text-sm" placeholder="Confirmar contraseña" value={confirmarContrasena} onChange={(e) => setConfirmarContrasena(e.target.value)} />
+                                    <label className="block text-xs font-bold text-gray-500 mb-1">{t('confirmPassword')}:{!usuarioEditar && '*'}</label>
+                                    <input type="password" className="w-full border border-gray-300 rounded p-2 text-sm" placeholder={t('confirmPassword')} value={confirmarContrasena} onChange={(e) => setConfirmarContrasena(e.target.value)} />
                                 </div>
                             </div>
-                            <p className="text-[11px] text-gray-400 mb-4">Dejar en blanco para generar automáticamente el nombre de usuario</p>
+                            <p className="text-[11px] text-gray-400 mb-4">{t('usernameAuto')}</p>
 
                             <div className="mb-4">
-                                <label className="block text-xs font-bold text-gray-500 mb-1">Rol:*</label>
+                                <label className="block text-xs font-bold text-gray-500 mb-1">{t('role')}:*</label>
                                 <select className="w-full md:w-1/2 border border-gray-300 rounded p-2 text-sm bg-white" value={rolId} onChange={(e) => setRolId(e.target.value)}>
                                     <option value="">Seleccione</option>
                                     {rolesDisponibles.map((r) => <option key={r.id} value={r.id}>{r.nombre}</option>)}
@@ -314,26 +316,26 @@ const AgregarUsuario = ({ usuarioEditar, onGuardado, onCancelar }) => {
                             </div>
 
                             <div>
-                                <label className="block text-xs font-bold text-gray-500 mb-2">Lugares de acceso:</label>
+                                <label className="block text-xs font-bold text-gray-500 mb-2">{t('accessLocations')}:</label>
                                 <label className="flex items-center gap-2 text-sm text-gray-700 mb-1">
-                                    <input type="checkbox" checked={todasLocalizaciones} onChange={(e) => setTodasLocalizaciones(e.target.checked)} /> Todas las localizaciones
+                                    <input type="checkbox" checked={todasLocalizaciones} onChange={(e) => setTodasLocalizaciones(e.target.checked)} /> {t('allLocations')}
                                 </label>
                                 {!todasLocalizaciones && (
                                     <div className="pl-6 mt-2">
-                                        <label className="block text-xs font-bold text-gray-500 mb-1">Sucursal fija:*</label>
+                                        <label className="block text-xs font-bold text-gray-500 mb-1">{t('fixedBranch')}:*</label>
                                         <select
                                             className="w-full md:w-1/2 border border-gray-300 rounded p-2 text-sm bg-white"
                                             value={ubicacionId}
                                             onChange={(e) => setUbicacionId(e.target.value)}
                                         >
-                                            <option value="">Seleccione una sucursal</option>
+                                            <option value="">{t('selectBranch')}</option>
                                             {ubicacionesDisponibles.map((u) => (
                                                 <option key={u.id} value={u.id}>
                                                     {u.nombre} {u.codigo_ubicacion ? `(${u.codigo_ubicacion})` : ''}
                                                 </option>
                                             ))}
                                         </select>
-                                        <p className="text-[11px] text-gray-400 mt-1">Este usuario solo va a ver el stock, ventas y caja de esta sucursal.</p>
+                                        <p className="text-[11px] text-gray-400 mt-1">{t('branchAccessHelp')}</p>
                                     </div>
                                 )}
                             </div>
@@ -343,33 +345,33 @@ const AgregarUsuario = ({ usuarioEditar, onGuardado, onCancelar }) => {
 
                 {/* Ventas */}
                 <div className="bg-white p-5 rounded-lg shadow-sm border-t-2 border-[#004284]">
-                    <h3 className="font-bold text-gray-800 mb-4">Ventas</h3>
+                    <h3 className="font-bold text-gray-800 mb-4">{t('sales')}</h3>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
                         <div>
-                            <label className="block text-xs font-bold text-gray-500 mb-1">Porcentaje de la Comisión de Ventas (%):</label>
+                            <label className="block text-xs font-bold text-gray-500 mb-1">{t('salesCommissionPercentage')}:</label>
                             <input type="number" className="w-full border border-gray-300 rounded p-2 text-sm" value={comisionVentas} onChange={(e) => setComisionVentas(e.target.value)} />
                         </div>
                         <div>
-                            <label className="block text-xs font-bold text-gray-500 mb-1">Porcentaje máximo de descuento de ventas:</label>
+                            <label className="block text-xs font-bold text-gray-500 mb-1">{t('maxSalesDiscountPercentage')}:</label>
                             <input type="number" className="w-full border border-gray-300 rounded p-2 text-sm" value={descuentoMaxVentas} onChange={(e) => setDescuentoMaxVentas(e.target.value)} />
                         </div>
                     </div>
                     <label className="flex items-center gap-2 text-sm text-gray-700">
-                        <input type="checkbox" checked={permitirContactos} onChange={(e) => setPermitirContactos(e.target.checked)} /> Permitir contactos seleccionados
+                        <input type="checkbox" checked={permitirContactos} onChange={(e) => setPermitirContactos(e.target.checked)} /> {t('allowSelectedContacts')}
                     </label>
                 </div>
 
                 {/* Datos Financieros */}
                 <div className="bg-white p-5 rounded-lg shadow-sm border-t-2 border-[#004284]">
-                    <h3 className="font-bold text-gray-800 mb-4">Datos Financieros</h3>
+                    <h3 className="font-bold text-gray-800 mb-4">{t('financialData')}</h3>
                     <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
-                        <div><label className="block text-xs font-bold text-gray-500 mb-1">Fecha de nacimiento:</label><input type="date" className="w-full border border-gray-300 rounded p-2 text-sm" value={fechaNacimiento} onChange={(e) => setFechaNacimiento(e.target.value)} /></div>
-                        <div><label className="block text-xs font-bold text-gray-500 mb-1">Género:</label><select className="w-full border border-gray-300 rounded p-2 text-sm bg-white" value={genero} onChange={(e) => setGenero(e.target.value)}><option value="">Seleccione</option><option>Masculino</option><option>Femenino</option><option>Otro</option></select></div>
-                        <div><label className="block text-xs font-bold text-gray-500 mb-1">Estado civil:</label><input className="w-full border border-gray-300 rounded p-2 text-sm" value={estadoCivil} onChange={(e) => setEstadoCivil(e.target.value)} /></div>
-                        <div><label className="block text-xs font-bold text-gray-500 mb-1">Grupo sanguíneo:</label><input className="w-full border border-gray-300 rounded p-2 text-sm" value={grupoSanguineo} onChange={(e) => setGrupoSanguineo(e.target.value)} /></div>
+                        <div><label className="block text-xs font-bold text-gray-500 mb-1">{t('birthDate')}:</label><input type="date" className="w-full border border-gray-300 rounded p-2 text-sm" value={fechaNacimiento} onChange={(e) => setFechaNacimiento(e.target.value)} /></div>
+                        <div><label className="block text-xs font-bold text-gray-500 mb-1">{t('gender')}:</label><select className="w-full border border-gray-300 rounded p-2 text-sm bg-white" value={genero} onChange={(e) => setGenero(e.target.value)}><option value="">{t('select')}</option><option>Masculino</option><option>Femenino</option><option>Otro</option></select></div>
+                        <div><label className="block text-xs font-bold text-gray-500 mb-1">{t('maritalStatus')}:</label><input className="w-full border border-gray-300 rounded p-2 text-sm" value={estadoCivil} onChange={(e) => setEstadoCivil(e.target.value)} /></div>
+                        <div><label className="block text-xs font-bold text-gray-500 mb-1">{t('bloodType')}:</label><input className="w-full border border-gray-300 rounded p-2 text-sm" value={grupoSanguineo} onChange={(e) => setGrupoSanguineo(e.target.value)} /></div>
                     </div>
                     <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
-                        <div><label className="block text-xs font-bold text-gray-500 mb-1">Número de teléfono móvil:</label><input className="w-full border border-gray-300 rounded p-2 text-sm" value={telefonoMovil} onChange={(e) => setTelefonoMovil(e.target.value)} /></div>
+                        <div><label className="block text-xs font-bold text-gray-500 mb-1">{t('mobilePhone')}:</label><input className="w-full border border-gray-300 rounded p-2 text-sm" value={telefonoMovil} onChange={(e) => setTelefonoMovil(e.target.value)} /></div>
                         <div><label className="block text-xs font-bold text-gray-500 mb-1">Número de contacto alternativo:</label><input className="w-full border border-gray-300 rounded p-2 text-sm" value={telefonoAlternativo} onChange={(e) => setTelefonoAlternativo(e.target.value)} /></div>
                         <div><label className="block text-xs font-bold text-gray-500 mb-1">Número de contacto familiar:</label><input className="w-full border border-gray-300 rounded p-2 text-sm" value={contactoFamiliar} onChange={(e) => setContactoFamiliar(e.target.value)} /></div>
                         <div><label className="block text-xs font-bold text-gray-500 mb-1">Enlace de Facebook:</label><input className="w-full border border-gray-300 rounded p-2 text-sm" value={facebook} onChange={(e) => setFacebook(e.target.value)} /></div>
@@ -396,7 +398,7 @@ const AgregarUsuario = ({ usuarioEditar, onGuardado, onCancelar }) => {
                     </div>
 
                     <hr className="my-4 border-gray-100" />
-                    <p className="font-bold text-gray-700 mb-3">Detalles del banco:</p>
+                    <p className="font-bold text-gray-700 mb-3">{t('bankDetails')}:</p>
                     <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
                         <div><label className="block text-xs font-bold text-gray-500 mb-1">Nombre del titular de la cuenta:</label><input className="w-full border border-gray-300 rounded p-2 text-sm" value={bancoTitular} onChange={(e) => setBancoTitular(e.target.value)} /></div>
                         <div><label className="block text-xs font-bold text-gray-500 mb-1">Número de cuenta:</label><input className="w-full border border-gray-300 rounded p-2 text-sm" value={bancoNumeroCuenta} onChange={(e) => setBancoNumeroCuenta(e.target.value)} /></div>
@@ -411,7 +413,7 @@ const AgregarUsuario = ({ usuarioEditar, onGuardado, onCancelar }) => {
 
                 {/* RRHH */}
                 <div className="bg-white p-5 rounded-lg shadow-sm border-t-2 border-[#004284]">
-                    <h3 className="font-bold text-gray-800 mb-4">Detalles de gestión de recursos humanos</h3>
+                    <h3 className="font-bold text-gray-800 mb-4">{t('hrDetails')}</h3>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div>
                             <label className="block text-xs font-bold text-gray-500 mb-1">Departamento:</label>
@@ -432,7 +434,7 @@ const AgregarUsuario = ({ usuarioEditar, onGuardado, onCancelar }) => {
 
                 <div className="flex justify-center">
                     <button type="submit" disabled={guardando} className="bg-orange-500 hover:bg-orange-600 text-white font-bold px-8 py-2.5 rounded disabled:opacity-60">
-                        {guardando ? 'Guardando...' : 'Guardar'}
+                        {guardando ? t('saving') : t('save')}
                     </button>
                 </div>
             </form>

@@ -13,11 +13,13 @@ import { useEmpresaInfo } from './utils/useEmpresa';
 import { useUbicacionUsuario } from './utils/useUbicacion';
 import { cargarMapaStockPorUbicacion } from './utils/stockUbicacion';
 import { useNotificacion } from './NotificacionContext';
-import { cantidadInicial, pasoCantidad, cantidadValida } from './utils/cantidadProducto';
+import { cantidadInicial, pasoCantidad, cantidadValida, cantidadVisible, cantidadInterna, pasoVisible, etiquetaCantidad } from './utils/cantidadProducto';
+import { useLanguage } from './LanguageContext';
 
 const formatGs = (valor) => `Gs ${Number(valor || 0).toLocaleString('es-PY')}`;
 
 const PuntoDeVenta = ({ cajaInfo, session, perfilUsuario, onVolver, onSolicitarCierre, onNuevoGasto }) => {
+  const { t } = useLanguage();
   const { id: empresaId, nombre: nombreEmpresa, direccion: direccionEmpresa, telefono: telefonoEmpresa, ruc: rucEmpresa } = useEmpresaInfo();
   const { notificar } = useNotificacion();
   const [formatoTicket, setFormatoTicket] = useState(() => localStorage.getItem('gda_formato_ticket') || '80mm');
@@ -531,8 +533,8 @@ const PuntoDeVenta = ({ cajaInfo, session, perfilUsuario, onVolver, onSolicitarC
                 onChange={(e) => setCliente(e.target.value)}
                 onFocus={(e) => e.target.select()}
                 className="border border-gray-300 rounded-lg px-3 py-2 text-sm font-medium bg-white w-56"
-                placeholder="Buscar cliente..."
-                aria-label="Buscar cliente"
+                placeholder={`${t('search')} ${t('customers').toLowerCase()}...`}
+                aria-label={`${t('search')} ${t('customers').toLowerCase()}`}
               />
               <datalist id="clientes-pos">
                 <option value="Cliente Ocasional" />
@@ -546,13 +548,13 @@ const PuntoDeVenta = ({ cajaInfo, session, perfilUsuario, onVolver, onSolicitarC
               type="button"
               onClick={() => setMostrarNuevoCliente(true)}
               className="bg-blue-500 hover:bg-blue-600 text-white rounded-lg w-9 h-9 flex items-center justify-center text-lg font-bold shadow-sm"
-              title="Nuevo cliente"
+              title={t('newCustomer')}
             >
               +
             </button>
             <input
               type="text"
-              placeholder="Introduzca el nombre del producto / SKU / código de barras"
+              placeholder={t('searchProductSku')}
               value={busqueda}
               onChange={(e) => setBusqueda(e.target.value)}
               onKeyDown={buscarYAgregarPorCodigo}
@@ -564,23 +566,23 @@ const PuntoDeVenta = ({ cajaInfo, session, perfilUsuario, onVolver, onSolicitarC
             onClick={() => setMostrarOpciones(!mostrarOpciones)}
             className="text-left px-3 py-2 text-xs font-bold text-gray-500 hover:text-orange-600"
           >
-            ☰ Opciones Avanzadas (Nota de venta, descuento, embalaje) {mostrarOpciones ? '▲' : '▼'}
+            ☰ {t('advancedOptions')} {mostrarOpciones ? '▲' : '▼'}
           </button>
 
           {mostrarOpciones && (
             <div className="mx-3 mb-3 rounded-lg border border-gray-200 bg-gray-50 p-2 grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-2 text-[11px]">
               <div className="min-w-0">
-                <label className="font-bold text-gray-500 block mb-1 truncate">Descuento (Gs)</label>
+                <label className="font-bold text-gray-500 block mb-1 truncate">{t('discount')} (Gs)</label>
                 <input type="number" min="0" max={subtotal} step="1" value={descuento} onChange={(e) => setDescuento(e.target.value)} onBlur={() => setDescuento(String(descuentoAplicado || ''))} className="w-full h-8 border border-gray-300 rounded px-2 bg-white" />
               </div>
               <div className="min-w-0">
-                <label className="font-bold text-gray-500 block mb-1 truncate">Cargo de embalaje (Gs)</label>
+                <label className="font-bold text-gray-500 block mb-1 truncate">{t('packagingCharge')} (Gs)</label>
                 <input type="number" min="0" step="1" value={cargoEmbalaje} onChange={(e) => setCargoEmbalaje(e.target.value)} onBlur={() => setCargoEmbalaje(String(cargoEmbalajeAplicado || ''))} className="w-full h-8 border border-gray-300 rounded px-2 bg-white" />
               </div>
               <div className="min-w-0">
-                <label className="font-bold text-gray-500 block mb-1 truncate">Personal de servicio / vendedor</label>
+                <label className="font-bold text-gray-500 block mb-1 truncate">{t('serviceSeller')}</label>
                 <select value={personalServicio} onChange={(e) => setPersonalServicio(e.target.value)} className="w-full h-8 border border-gray-300 rounded px-2 bg-white truncate">
-                  <option value="">Seleccionar personal de servicio</option>
+                  <option value="">{t('selectServiceSeller')}</option>
                   {usuariosServicio.map((usuario) => {
                     const nombre = [usuario.nombre, usuario.apellido].filter(Boolean).join(' ').trim();
                     return <option key={usuario.id} value={nombre}>{nombre}</option>;
@@ -588,7 +590,7 @@ const PuntoDeVenta = ({ cajaInfo, session, perfilUsuario, onVolver, onSolicitarC
                 </select>
               </div>
               <div className="min-w-0">
-                <label className="font-bold text-gray-500 block mb-1 truncate">Nota de venta</label>
+                <label className="font-bold text-gray-500 block mb-1 truncate">{t('saleNote')}</label>
                 <input type="text" value={notaVenta} onChange={(e) => setNotaVenta(e.target.value)} className="w-full h-8 border border-gray-300 rounded px-2 bg-white" />
               </div>
             </div>
@@ -598,17 +600,17 @@ const PuntoDeVenta = ({ cajaInfo, session, perfilUsuario, onVolver, onSolicitarC
             <table className="w-full min-w-[560px] text-sm border-separate border-spacing-0">
               <thead className="sticky top-0 z-10 bg-white text-gray-500 text-[10px] uppercase shadow-sm">
                 <tr>
-                  <th className="text-left py-2">Producto</th>
-                  <th className="text-center py-2">Cant.</th>
-                  <th className="text-right py-2">P. Unit.</th>
-                  <th className="text-right py-2">Subtotal</th>
+                  <th className="text-left py-2">{t('product')}</th>
+                  <th className="text-center py-2">{t('quantityShort')}</th>
+                  <th className="text-right py-2">{t('unitPriceShort')}</th>
+                  <th className="text-right py-2">{t('subtotal')}</th>
                   <th className="w-6"></th>
                 </tr>
               </thead>
               <tbody>
                 {carrito.length === 0 ? (
                   <tr>
-                    <td colSpan={5} className="text-center text-gray-400 py-16">🛒 El carrito está vacío</td>
+                    <td colSpan={5} className="text-center text-gray-400 py-16">🛒 {t('emptyCart')}</td>
                   </tr>
                 ) : (
                   carrito.map((item) => {
@@ -632,13 +634,14 @@ const PuntoDeVenta = ({ cajaInfo, session, perfilUsuario, onVolver, onSolicitarC
                             <button onClick={() => cambiarCantidad(item.id, item.cantidad - pasoCantidad(item.unidad))} className="bg-gray-100 w-6 h-6 rounded text-gray-600 font-bold hover:bg-gray-200">-</button>
                             <input
                               type="number"
-                              min={pasoCantidad(item.unidad)}
-                              step={pasoCantidad(item.unidad)}
-                              value={item.cantidad}
-                              onChange={(e) => cambiarCantidad(item.id, e.target.value)}
+                              min={pasoVisible(item.unidad)}
+                              step={pasoVisible(item.unidad)}
+                              value={cantidadVisible(item.cantidad, item.unidad)}
+                              onChange={(e) => cambiarCantidad(item.id, cantidadInterna(e.target.value, item.unidad))}
                               className="w-16 text-center border border-gray-200 rounded px-1 py-0.5"
-                              aria-label={`Cantidad de ${item.nombre} en ${item.unidad || 'unidad'}`}
+                              aria-label={`Cantidad de ${item.nombre} en ${etiquetaCantidad(item.unidad)}`}
                             />
+                            <span className="text-[10px] text-gray-400">{etiquetaCantidad(item.unidad)}</span>
                             <button onClick={() => cambiarCantidad(item.id, item.cantidad + pasoCantidad(item.unidad))} className="bg-gray-100 w-6 h-6 rounded text-gray-600 font-bold hover:bg-gray-200">+</button>
                           </div>
                         </td>
@@ -670,22 +673,22 @@ const PuntoDeVenta = ({ cajaInfo, session, perfilUsuario, onVolver, onSolicitarC
           </div>
 
           <div className="border-t border-gray-200 p-3 flex justify-between text-sm font-bold text-gray-600">
-            <span>Artículos: {totalArticulos}</span>
-            <span>Total: {formatGs(totalConAjustes)}</span>
+            <span>{t('items')}: {totalArticulos}</span>
+            <span>{t('total')}: {formatGs(totalConAjustes)}</span>
           </div>
 
           <div className="shrink-0 border-t-2 border-gray-300 bg-white p-2 shadow-[0_-3px_10px_rgba(0,0,0,0.05)]">
             <div className="flex flex-wrap items-end gap-2">
               <div className="w-36 shrink-0">
-                <label className="text-[10px] font-bold text-gray-500 block mb-1">Paga con (Gs)</label>
+                <label className="text-[10px] font-bold text-gray-500 block mb-1">{t('paidWith')} (Gs)</label>
                 <input type="number" placeholder="Ej: 100000" value={montoPagado} onChange={(e) => setMontoPagado(e.target.value)} className="w-full h-8 border border-gray-300 rounded px-2 font-bold text-sm" />
               </div>
               <div className="w-40 shrink-0">
-                <label className="text-[10px] font-bold text-gray-500 block mb-1">Método de pago</label>
+                <label className="text-[10px] font-bold text-gray-500 block mb-1">{t('paymentMethod')}</label>
                 <select value={metodoPago} onChange={(e) => setMetodoPago(e.target.value)} className="w-full h-8 border border-gray-300 rounded px-2 text-xs font-bold bg-white">
-                  <option value="Efectivo">💵 Efectivo</option>
-                  <option value="Tarjeta">💳 Tarjeta</option>
-                  <option value="Transferencia">🏦 Transf.</option>
+                  <option value="Efectivo">💵 {t('cash')}</option>
+                  <option value="Tarjeta">💳 {t('card')}</option>
+                  <option value="Transferencia">🏦 {t('transferShort')}</option>
                 </select>
               </div>
               <button
@@ -693,30 +696,30 @@ const PuntoDeVenta = ({ cajaInfo, session, perfilUsuario, onVolver, onSolicitarC
                 disabled={carrito.length === 0}
                 className={`h-8 flex-1 min-w-[150px] rounded-lg font-black text-sm text-white transition-all ${carrito.length === 0 ? 'bg-gray-300 cursor-not-allowed' : 'bg-orange-500 hover:bg-orange-600'}`}
               >
-                COBRAR {formatGs(totalConAjustes)}
+                {t('charge')} {formatGs(totalConAjustes)}
               </button>
             </div>
 
           {vuelto > 0 && (
             <div className="mt-2 bg-green-50 text-green-800 p-1.5 rounded flex justify-between font-bold border border-green-200 text-xs">
-              <span>Vuelto:</span><span>{formatGs(vuelto)}</span>
+              <span>{t('change')}:</span><span>{formatGs(vuelto)}</span>
             </div>
           )}
           {saldoPendiente > 0 && (
             <div className="mt-2 bg-red-50 text-red-800 p-1.5 rounded flex justify-between font-bold border border-red-200 text-xs">
-              <span>Queda debiendo:</span><span>{formatGs(saldoPendiente)}</span>
+              <span>{t('remainingDebt')}:</span><span>{formatGs(saldoPendiente)}</span>
             </div>
           )}
 
             <div className="mt-2 flex gap-1.5 overflow-x-auto text-[10px] font-bold pb-0.5">
-            <button onClick={() => procesarVenta('pendiente')} disabled={carrito.length === 0} className="shrink-0 whitespace-nowrap bg-gray-100 text-gray-700 px-3 py-2 rounded-lg hover:bg-gray-200 disabled:opacity-50">📝 Pedido Pendiente</button>
-            <button onClick={() => procesarVenta('cotizacion')} disabled={carrito.length === 0} className="shrink-0 whitespace-nowrap bg-gray-100 text-gray-700 px-3 py-2 rounded-lg hover:bg-gray-200 disabled:opacity-50">📄 Cotización</button>
+            <button onClick={() => procesarVenta('pendiente')} disabled={carrito.length === 0} className="shrink-0 whitespace-nowrap bg-gray-100 text-gray-700 px-3 py-2 rounded-lg hover:bg-gray-200 disabled:opacity-50">📝 {t('pendingOrder')}</button>
+            <button onClick={() => procesarVenta('cotizacion')} disabled={carrito.length === 0} className="shrink-0 whitespace-nowrap bg-gray-100 text-gray-700 px-3 py-2 rounded-lg hover:bg-gray-200 disabled:opacity-50">📄 {t('quote')}</button>
             <button onClick={procesarDelivery} disabled={carrito.length === 0} className="shrink-0 whitespace-nowrap bg-blue-50 text-blue-700 px-3 py-2 rounded-lg hover:bg-blue-100 disabled:opacity-50">🚚 Delivery</button>
-            <button onClick={() => procesarVenta('credito')} disabled={carrito.length === 0} className="shrink-0 whitespace-nowrap bg-indigo-50 text-indigo-700 px-3 py-2 rounded-lg hover:bg-indigo-100 disabled:opacity-50">💳 Venta a crédito</button>
-            <button onClick={() => cobrarConMetodo('Tarjeta')} disabled={carrito.length === 0} className="shrink-0 whitespace-nowrap bg-pink-50 text-pink-700 px-3 py-2 rounded-lg hover:bg-pink-100 disabled:opacity-50">💳 Tarjeta</button>
-            <button onClick={() => setMostrarPagoMultiple(true)} disabled={carrito.length === 0} className="shrink-0 whitespace-nowrap bg-sky-50 text-sky-700 px-3 py-2 rounded-lg hover:bg-sky-100 disabled:opacity-50">▣ Pago múltiple</button>
-            <button onClick={() => cobrarConMetodo('Efectivo')} disabled={carrito.length === 0} className="shrink-0 whitespace-nowrap bg-emerald-50 text-emerald-700 px-3 py-2 rounded-lg hover:bg-emerald-100 disabled:opacity-50">💵 Efectivo</button>
-            <button onClick={vaciarCarrito} className="shrink-0 whitespace-nowrap bg-red-50 text-red-600 px-3 py-2 rounded-lg hover:bg-red-100">✕ Cancelar</button>
+            <button onClick={() => procesarVenta('credito')} disabled={carrito.length === 0} className="shrink-0 whitespace-nowrap bg-indigo-50 text-indigo-700 px-3 py-2 rounded-lg hover:bg-indigo-100 disabled:opacity-50">💳 {t('creditSale')}</button>
+            <button onClick={() => cobrarConMetodo('Tarjeta')} disabled={carrito.length === 0} className="shrink-0 whitespace-nowrap bg-pink-50 text-pink-700 px-3 py-2 rounded-lg hover:bg-pink-100 disabled:opacity-50">💳 {t('card')}</button>
+            <button onClick={() => setMostrarPagoMultiple(true)} disabled={carrito.length === 0} className="shrink-0 whitespace-nowrap bg-sky-50 text-sky-700 px-3 py-2 rounded-lg hover:bg-sky-100 disabled:opacity-50">▣ {t('multiplePayment')}</button>
+            <button onClick={() => cobrarConMetodo('Efectivo')} disabled={carrito.length === 0} className="shrink-0 whitespace-nowrap bg-emerald-50 text-emerald-700 px-3 py-2 rounded-lg hover:bg-emerald-100 disabled:opacity-50">💵 {t('cash')}</button>
+            <button onClick={vaciarCarrito} className="shrink-0 whitespace-nowrap bg-red-50 text-red-600 px-3 py-2 rounded-lg hover:bg-red-100">✕ {t('cancel')}</button>
             </div>
           </div>
         </div>

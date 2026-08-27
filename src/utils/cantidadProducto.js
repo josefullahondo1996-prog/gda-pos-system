@@ -1,11 +1,27 @@
-const UNIDADES_DECIMALES = /kg|kilo|kilogram|litro|litros|lt|metro|metros|m\b/i;
+const unidadNormalizada = (unidad) => String(unidad || '').trim().toLowerCase();
+const unidadEsKilogramo = (unidad) => /^(kg|kilo|kilos|kilogramo|kilogramos)$/.test(unidadNormalizada(unidad));
+const unidadEsGramo = (unidad) => /^(g|gr|gramo|gramos)$/.test(unidadNormalizada(unidad));
+const unidadPermiteDecimal = (unidad) => unidadEsKilogramo(unidad) || unidadEsGramo(unidad) || /^(l|lt|litro|litros|m|metro|metros)$/.test(unidadNormalizada(unidad));
 
 export const cantidadInicial = (unidad, stockDisponible) => {
     const stock = Number(stockDisponible);
-    return Number.isFinite(stock) && stock > 0 ? Math.min(1, stock) : 1;
+    const inicial = unidadEsGramo(unidad) ? 1 : 1;
+    return Number.isFinite(stock) && stock > 0 ? Math.min(inicial, stock) : inicial;
 };
 
-export const pasoCantidad = (unidad) => (UNIDADES_DECIMALES.test(unidad || '') ? 0.01 : 1);
+export const pasoCantidad = (unidad) => (unidadEsGramo(unidad) ? 0.001 : unidadPermiteDecimal(unidad) ? 0.01 : 1);
+
+export const cantidadVisible = (cantidad, unidad) => (
+    unidadEsGramo(unidad) ? Number(cantidad || 0) * 1000 : Number(cantidad || 0)
+);
+
+export const cantidadInterna = (cantidad, unidad) => (
+    unidadEsGramo(unidad) ? Number(cantidad) / 1000 : Number(cantidad)
+);
+
+export const pasoVisible = (unidad) => (unidadEsGramo(unidad) ? 1 : pasoCantidad(unidad));
+
+export const etiquetaCantidad = (unidad) => (unidadEsGramo(unidad) ? 'gramos' : (unidad || 'unidades'));
 
 export const cantidadValida = (valor) => {
     const cantidad = Number(valor);

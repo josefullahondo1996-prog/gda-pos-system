@@ -1,8 +1,10 @@
 import React, { useState } from 'react';
 import { supabase } from './supabaseClient'; // Asegurate de que la ruta a tu cliente de Supabase sea la correcta
 import LogoPyPos from './LogoPyPos';
+import { LanguageSelector, useLanguage } from './LanguageContext';
 
 const Login = ({ setSession, onCrearNegocio, errorExterno }) => {
+  const { t } = useLanguage();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [rememberMe, setRememberMe] = useState(false);
@@ -36,13 +38,14 @@ const Login = ({ setSession, onCrearNegocio, errorExterno }) => {
 
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col justify-center items-center p-4">
+      <div className="w-full max-w-md flex justify-end mb-3"><LanguageSelector /></div>
       <div className="bg-white p-8 rounded-2xl shadow-lg w-full max-w-md text-center border border-gray-100">
         
         <div className="flex justify-center items-center mb-6">
           <LogoPyPos size={52} />
         </div>
 
-        <h2 className="text-2xl font-bold text-gray-800 mb-1">Iniciar sesión</h2>
+        <h2 className="text-2xl font-bold text-gray-800 mb-1">{t('login')}</h2>
         <p className="text-sm text-gray-400 mb-6">PYpos</p>
 
         {/* Muestra errores de inicio de sesión si los hay */}
@@ -69,7 +72,7 @@ const Login = ({ setSession, onCrearNegocio, errorExterno }) => {
             </span>
             <input
               type="email"
-              placeholder="Correo electrónico *"
+              placeholder={t('email')}
               required
               value={email}
               onChange={(e) => setEmail(e.target.value)}
@@ -85,7 +88,7 @@ const Login = ({ setSession, onCrearNegocio, errorExterno }) => {
             </span>
             <input
               type="password"
-              placeholder="Contraseña *"
+              placeholder={t('password')}
               required
               value={password}
               onChange={(e) => setPassword(e.target.value)}
@@ -101,10 +104,10 @@ const Login = ({ setSession, onCrearNegocio, errorExterno }) => {
                 onChange={(e) => setRememberMe(e.target.checked)}
                 className="rounded border-gray-300 text-orange-500 focus:ring-orange-500 w-4 h-4"
               />
-              Recuérdame
+              {t('remember')}
             </label>
             <a href="#recuperar" className="text-orange-500 hover:underline font-medium">
-              ¿Olvidaste tu contraseña?
+              {t('forgotPassword')}
             </a>
           </div>
 
@@ -115,13 +118,13 @@ const Login = ({ setSession, onCrearNegocio, errorExterno }) => {
               loading ? 'bg-gray-400 cursor-not-allowed' : 'bg-orange-500 hover:bg-orange-600'
             }`}
           >
-            {loading ? 'Validando...' : 'INICIAR SESIÓN'}
+            {loading ? t('validating') : t('loginButton')}
           </button>
         </form>
 
         {onCrearNegocio && (
           <button onClick={onCrearNegocio} className="text-xs text-orange-500 hover:underline mt-6 font-medium">
-            ¿Sos un negocio nuevo? Creá tu cuenta
+            {t('newBusiness')}
           </button>
         )}
 

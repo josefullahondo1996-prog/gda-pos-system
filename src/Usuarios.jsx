@@ -3,8 +3,10 @@ import { supabase } from './supabaseClient';
 import { useEmpresaInfo } from './utils/useEmpresa';
 import AgregarUsuario from './AgregarUsuario';
 import { useNotificacion } from './NotificacionContext';
+import { useLanguage } from './LanguageContext';
 
 const Usuarios = () => {
+  const { t } = useLanguage();
   const { id: empresaId } = useEmpresaInfo();
   const { confirmar } = useNotificacion();
   const [usuarios, setUsuarios] = useState([]);
@@ -59,13 +61,13 @@ const Usuarios = () => {
 
       if (error) throw error;
 
-      alert('Usuario agregado correctamente');
+      alert(t('userAdded'));
       setMostrarFormulario(false);
       setNuevoUsuario({ nombre_usuario: '', nombre: '', rol: 'Cajero', email: '' });
       cargarUsuarios();
     } catch (error) {
       console.error("Error al guardar usuario:", error.message);
-      alert('Hubo un error al guardar. Verificá la consola.');
+      alert(t('saveError'));
     }
   };
 
@@ -97,10 +99,10 @@ const Usuarios = () => {
       }
 
       setUsuarios((prev) => prev.filter((u) => u.id !== usuario.id));
-      alert('Usuario eliminado correctamente.');
+      alert(t('userDeleted'));
     } catch (error) {
       console.error('Error al eliminar usuario:', error.message);
-      alert('Hubo un error al eliminar el usuario: ' + error.message);
+      alert(t('deleteError') + ': ' + error.message);
     }
   };
 
@@ -126,8 +128,8 @@ const Usuarios = () => {
 
       {/* HEADER: Título y Subtítulo */}
       <div className="mb-4 flex items-baseline gap-2">
-        <h1 className="text-2xl font-bold text-gray-800">Usuarios</h1>
-        <span className="text-sm text-gray-500">Administrar usuarios</span>
+        <h1 className="text-2xl font-bold text-gray-800">{t('users')}</h1>
+        <span className="text-sm text-gray-500">{t('manageUsers')}</span>
       </div>
 
       {/* CONTENEDOR PRINCIPAL BLANCO */}
@@ -135,12 +137,12 @@ const Usuarios = () => {
 
         {/* TOP BAR: Título de tabla y Botón Añadir */}
         <div className="p-4 border-b border-gray-200 flex justify-between items-center">
-          <h3 className="text-md font-bold text-gray-700">Todos los usuarios</h3>
+          <h3 className="text-md font-bold text-gray-700">{t('allUsers')}</h3>
           <button
             onClick={() => setMostrarFormulario(!mostrarFormulario)}
             className="bg-[#fd7e14] hover:bg-[#e86e04] text-white text-sm font-semibold py-1.5 px-3 rounded flex items-center gap-1 transition-colors shadow-sm"
           >
-            {mostrarFormulario ? '✕ Cancelar' : '+ Añadir'}
+            {mostrarFormulario ? `✕ ${t('cancel')}` : `+ ${t('add')}`}
           </button>
         </div>
 
@@ -149,11 +151,11 @@ const Usuarios = () => {
           <div className="p-4 bg-gray-50 border-b border-gray-200 animate-fade-in">
             <form onSubmit={handleGuardarUsuario} className="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
               <div>
-                <label className="block text-xs font-bold text-gray-700 mb-1">Nombre de Usuario:*</label>
+                <label className="block text-xs font-bold text-gray-700 mb-1">{t('username')}:*</label>
                 <input type="text" required value={nuevoUsuario.nombre_usuario} onChange={(e) => setNuevoUsuario({ ...nuevoUsuario, nombre_usuario: e.target.value })} className="w-full border border-gray-300 rounded p-1.5 text-sm" />
               </div>
               <div>
-                <label className="block text-xs font-bold text-gray-700 mb-1">Nombre:*</label>
+                <label className="block text-xs font-bold text-gray-700 mb-1">{t('name')}:*</label>
                 <input type="text" required value={nuevoUsuario.nombre} onChange={(e) => setNuevoUsuario({ ...nuevoUsuario, nombre: e.target.value })} className="w-full border border-gray-300 rounded p-1.5 text-sm" />
               </div>
               <div>
@@ -161,7 +163,7 @@ const Usuarios = () => {
                 <input type="email" required value={nuevoUsuario.email} onChange={(e) => setNuevoUsuario({ ...nuevoUsuario, email: e.target.value })} className="w-full border border-gray-300 rounded p-1.5 text-sm" />
               </div>
               <div>
-                <label className="block text-xs font-bold text-gray-700 mb-1">Rol:*</label>
+                <label className="block text-xs font-bold text-gray-700 mb-1">{t('role')}:*</label>
                 <select value={nuevoUsuario.rol} onChange={(e) => setNuevoUsuario({ ...nuevoUsuario, rol: e.target.value })} className="w-full border border-gray-300 rounded p-1.5 text-sm bg-white">
                   <option value="Admin">Admin</option>
                   <option value="Gerente">Gerente</option>
@@ -169,7 +171,7 @@ const Usuarios = () => {
                 </select>
               </div>
               <div className="md:col-span-4 flex justify-end">
-                <button type="submit" className="bg-[#fd7e14] text-white text-sm font-bold py-1.5 px-4 rounded shadow-sm hover:bg-[#e86e04]">Guardar Usuario</button>
+                <button type="submit" className="bg-[#fd7e14] text-white text-sm font-bold py-1.5 px-4 rounded shadow-sm hover:bg-[#e86e04]">{t('saveUser')}</button>
               </div>
             </form>
           </div>
@@ -179,25 +181,25 @@ const Usuarios = () => {
         <div className="p-4 flex flex-col lg:flex-row justify-between items-center gap-4">
 
           <div className="flex items-center text-sm text-gray-600">
-            <span>Mostrar</span>
+              <span>{t('show')}</span>
             <select className="mx-2 border border-gray-300 rounded p-1 bg-white focus:outline-none focus:border-blue-500">
               <option>25</option>
               <option>50</option>
               <option>100</option>
             </select>
-            <span>entradas</span>
+              <span>{t('entries')}</span>
           </div>
 
           <div className="flex flex-wrap justify-center gap-1">
-            <button className="bg-gray-100 hover:bg-gray-200 border border-gray-300 text-gray-700 text-sm py-1 px-3 rounded flex items-center gap-1"><span className="text-gray-500">📄</span> Exportar a CSV</button>
-            <button className="bg-gray-100 hover:bg-gray-200 border border-gray-300 text-gray-700 text-sm py-1 px-3 rounded flex items-center gap-1"><span className="text-gray-500">📊</span> Exportar a Excel</button>
-            <button className="bg-gray-100 hover:bg-gray-200 border border-gray-300 text-gray-700 text-sm py-1 px-3 rounded flex items-center gap-1"><span className="text-gray-500">🖨️</span> Imprimir</button>
-            <button className="bg-gray-100 hover:bg-gray-200 border border-gray-300 text-gray-700 text-sm py-1 px-3 rounded flex items-center gap-1"><span className="text-gray-500">👁️</span> Visibilidad de columnas</button>
-            <button className="bg-gray-100 hover:bg-gray-200 border border-gray-300 text-gray-700 text-sm py-1 px-3 rounded flex items-center gap-1"><span className="text-gray-500">📕</span> Exportar a PDF</button>
+            <button className="bg-gray-100 hover:bg-gray-200 border border-gray-300 text-gray-700 text-sm py-1 px-3 rounded flex items-center gap-1"><span className="text-gray-500">📄</span> {t('exportCsv')}</button>
+            <button className="bg-gray-100 hover:bg-gray-200 border border-gray-300 text-gray-700 text-sm py-1 px-3 rounded flex items-center gap-1"><span className="text-gray-500">📊</span> {t('exportExcel')}</button>
+            <button className="bg-gray-100 hover:bg-gray-200 border border-gray-300 text-gray-700 text-sm py-1 px-3 rounded flex items-center gap-1"><span className="text-gray-500">🖨️</span> {t('print')}</button>
+            <button className="bg-gray-100 hover:bg-gray-200 border border-gray-300 text-gray-700 text-sm py-1 px-3 rounded flex items-center gap-1"><span className="text-gray-500">👁️</span> {t('columnVisibility')}</button>
+            <button className="bg-gray-100 hover:bg-gray-200 border border-gray-300 text-gray-700 text-sm py-1 px-3 rounded flex items-center gap-1"><span className="text-gray-500">📕</span> {t('exportPdf')}</button>
           </div>
 
           <div className="flex items-center">
-            <label className="text-sm text-gray-600 mr-2">Buscar:</label>
+            <label className="text-sm text-gray-600 mr-2">{t('search')}:</label>
             <input
               type="text"
               value={busqueda}
@@ -213,21 +215,21 @@ const Usuarios = () => {
           <table className="w-full text-sm text-left border-t border-gray-200">
             <thead className="text-xs text-gray-600 font-bold uppercase bg-white border-b-2 border-gray-200">
               <tr>
-                <th className="p-3 border-r border-gray-200 w-1/5 cursor-pointer hover:bg-gray-50">Nombre de Usuario ⇅</th>
-                <th className="p-3 border-r border-gray-200 w-1/5 cursor-pointer hover:bg-gray-50">Nombre ⇅</th>
-                <th className="p-3 border-r border-gray-200 w-1/5 cursor-pointer hover:bg-gray-50">Rol ⇅</th>
+                <th className="p-3 border-r border-gray-200 w-1/5 cursor-pointer hover:bg-gray-50">{t('username')} ⇅</th>
+                <th className="p-3 border-r border-gray-200 w-1/5 cursor-pointer hover:bg-gray-50">{t('name')} ⇅</th>
+                <th className="p-3 border-r border-gray-200 w-1/5 cursor-pointer hover:bg-gray-50">{t('role')} ⇅</th>
                 <th className="p-3 border-r border-gray-200 w-1/5 cursor-pointer hover:bg-gray-50">Email ⇅</th>
-                <th className="p-3 text-center">Acción</th>
+                <th className="p-3 text-center">{t('action')}</th>
               </tr>
             </thead>
             <tbody>
               {cargando ? (
                 <tr>
-                  <td colSpan="5" className="p-8 text-center text-gray-500">Cargando usuarios...</td>
+                  <td colSpan="5" className="p-8 text-center text-gray-500">{t('loadingUsers')}</td>
                 </tr>
               ) : usuariosFiltrados.length === 0 ? (
                 <tr>
-                  <td colSpan="5" className="p-8 text-center text-gray-500 border-b border-gray-200">Ningún dato disponible en esta tabla</td>
+                  <td colSpan="5" className="p-8 text-center text-gray-500 border-b border-gray-200">{t('noData')}</td>
                 </tr>
               ) : (
                 usuariosFiltrados.map((usuario, index) => (
@@ -241,16 +243,16 @@ const Usuarios = () => {
                         onClick={() => { setUsuarioEditando(usuario); setMostrarFormulario(true); }}
                         className="bg-[#fd7e14] hover:bg-[#e86e04] text-white text-xs px-2 py-1 rounded flex items-center gap-1 shadow-sm"
                       >
-                        <span className="text-[10px]">📝</span> Editar
+                        <span className="text-[10px]">📝</span> {t('edit')}
                       </button>
                       <button className="bg-[#17a2b8] hover:bg-[#138496] text-white text-xs px-2 py-1 rounded flex items-center gap-1 shadow-sm">
-                        <span className="text-[10px]">👁️</span> Ver
+                        <span className="text-[10px]">👁️</span> {t('view')}
                       </button>
                       <button
                         onClick={() => handleEliminarUsuario(usuario)}
                         className="bg-[#dc3545] hover:bg-[#c82333] text-white text-xs px-2 py-1 rounded flex items-center gap-1 shadow-sm"
                       >
-                        <span className="text-[10px]">🗑️</span> Borrar
+                        <span className="text-[10px]">🗑️</span> {t('delete')}
                       </button>
                     </td>
                   </tr>
@@ -263,12 +265,12 @@ const Usuarios = () => {
         {/* FOOTER: Paginación */}
         <div className="p-4 flex justify-between items-center text-sm text-gray-600 bg-white rounded-b-lg">
           <div>
-            Mostrando 1 a {usuariosFiltrados.length} de {usuariosFiltrados.length} entradas
+            {t('showing')} 1 {t('to')} {usuariosFiltrados.length} {t('of')} {usuariosFiltrados.length} {t('entries')}
           </div>
           <div className="flex rounded border border-gray-300 overflow-hidden">
-            <button className="px-3 py-1.5 bg-white hover:bg-gray-100 border-r border-gray-300 text-gray-500 cursor-not-allowed">Anterior</button>
+            <button className="px-3 py-1.5 bg-white hover:bg-gray-100 border-r border-gray-300 text-gray-500 cursor-not-allowed">{t('previous')}</button>
             <button className="px-3 py-1.5 bg-[#007bff] text-white font-bold">1</button>
-            <button className="px-3 py-1.5 bg-white hover:bg-gray-100 border-l border-gray-300 text-blue-600">Siguiente</button>
+            <button className="px-3 py-1.5 bg-white hover:bg-gray-100 border-l border-gray-300 text-blue-600">{t('next')}</button>
           </div>
         </div>
 

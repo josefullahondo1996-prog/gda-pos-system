@@ -7,8 +7,10 @@ import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { generateReceipt } from './utils/generateReceipt';
 import { useNotificacion } from './NotificacionContext';
+import { useLanguage } from './LanguageContext';
 
 export default function Clientes() {
+  const { t } = useLanguage();
   const { id: empresaId, nombre: nombreDelNegocio, direccion: direccionEmpresa, telefono: telefonoEmpresa } = useEmpresaInfo();
   const { notificar, confirmar } = useNotificacion();
   const [clientes, setClientes] = useState([]);
@@ -958,34 +960,41 @@ export default function Clientes() {
 
       <h2 className="text-2xl font-bold mb-4 text-gray-800">
         Clientes <span className="text-sm font-normal text-gray-500">Administra tus Clientes</span>
+        {t('customers')} <span className="text-sm font-normal text-gray-500">{t('manageCustomers')}</span>
       </h2>
 
       {/* FILTROS SUPERIORES */}
       <div className="bg-white p-4 rounded-lg shadow-sm border-t-2 border-[#004284] mb-4">
         <h3 className="text-xs font-bold text-gray-500 mb-4 flex items-center gap-1 uppercase">
           Filtros
+                  {t('filters')}
         </h3>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
           <label className="flex items-center gap-2 text-xs font-bold text-gray-700 cursor-pointer">
             <input type="checkbox" checked={filtroCreditosOtorgados} onChange={(e) => { setFiltroCreditosOtorgados(e.target.checked); setPaginaActual(1); }} />
             Creditos otorgados
+                      {t('creditGranted')}
           </label>
           <label className="flex items-center gap-2 text-xs font-bold text-gray-400 cursor-not-allowed" title="Necesita el modulo de Devoluciones (todavia no existe en tu sistema)">
             <input type="checkbox" disabled />
             Devolucion de Venta
+                      {t('salesReturn')}
           </label>
           <label className="flex items-center gap-2 text-xs font-bold text-gray-700 cursor-pointer">
             <input type="checkbox" checked={filtroPagoRealizado} onChange={(e) => { setFiltroPagoRealizado(e.target.checked); setPaginaActual(1); }} />
             Pago Realizado
+                      {t('paymentCompleted')}
           </label>
           <label className="flex items-center gap-2 text-xs font-bold text-gray-700 cursor-pointer">
             <input type="checkbox" checked={filtroCreditoAFavor} onChange={(e) => { setFiltroCreditoAFavor(e.target.checked); setPaginaActual(1); }} />
             Credito a favor
+                      {t('creditBalance')}
           </label>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
           <div>
             <label className="block text-xs font-bold text-gray-700 mb-1">Grupo de clientes:</label>
+                        <label className="block text-xs font-bold text-gray-700 mb-1">{t('customerGroup')}:</label>
             <select className="w-full border rounded p-2 bg-white outline-none" value={filtroGrupo} onChange={(e) => { setFiltroGrupo(e.target.value); setPaginaActual(1); }}>
               <option>Ninguna</option>
               {gruposDisponibles.map((g) => <option key={g}>{g}</option>)}
@@ -993,6 +1002,7 @@ export default function Clientes() {
           </div>
           <div>
             <label className="block text-xs font-bold text-gray-700 mb-1">Estado:</label>
+                        <label className="block text-xs font-bold text-gray-700 mb-1">{t('status')}:</label>
             <select className="w-full border rounded p-2 bg-white outline-none" value={filtroEstado} onChange={(e) => { setFiltroEstado(e.target.value); setPaginaActual(1); }}>
               <option>Ninguna</option>
               {estadosDisponibles.map((es) => <option key={es}>{es}</option>)}
@@ -1005,8 +1015,10 @@ export default function Clientes() {
       <div className="bg-white rounded-lg shadow-sm border-t-2 border-[#004284]">
         <div className="p-4 border-b flex justify-between items-center">
           <h3 className="text-base font-bold text-gray-700">Todos sus Clientes</h3>
+                    <h3 className="text-base font-bold text-gray-700">{t('allCustomers')}</h3>
           <button onClick={() => { setClienteEditando(null); resetearFormulario(); setMostrarModalAñadir(true); }} className="bg-[#fd7e14] text-white px-4 py-2 rounded text-sm font-bold hover:bg-[#e86e04] transition shadow-sm">
             + Añadir
+                      + {t('add')}
           </button>
         </div>
 
@@ -1014,6 +1026,7 @@ export default function Clientes() {
           <div className="flex flex-wrap justify-between items-center gap-3 mb-4">
             <div className="flex items-center gap-2 text-gray-600 font-medium">
               <span>Mostrar</span>
+                            <span>{t('show')}</span>
               <select
                 className="border rounded p-1"
                 value={entradasPorPagina}
@@ -1025,12 +1038,13 @@ export default function Clientes() {
                 <option value={100}>100</option>
               </select>
               <span>entradas</span>
+                          <span>{t('entries')}</span>
             </div>
 
             <div className="flex flex-wrap gap-2">
               <button onClick={exportarCSV} className="border rounded px-3 py-1.5 text-xs font-bold text-gray-600 hover:bg-gray-50">Exportar a CSV</button>
-              <button onClick={exportarExcel} className="border rounded px-3 py-1.5 text-xs font-bold text-gray-600 hover:bg-gray-50">Exportar a Excel</button>
-              <button onClick={() => window.print()} className="border rounded px-3 py-1.5 text-xs font-bold text-gray-600 hover:bg-gray-50">Imprimir</button>
+              <button onClick={exportarExcel} className="border rounded px-3 py-1.5 text-xs font-bold text-gray-600 hover:bg-gray-50">{t('exportExcel')}</button>
+              <button onClick={() => window.print()} className="border rounded px-3 py-1.5 text-xs font-bold text-gray-600 hover:bg-gray-50">{t('print')}</button>
               <div className="relative">
                 <button onClick={() => setMostrarMenuColumnas(!mostrarMenuColumnas)} className="border rounded px-3 py-1.5 text-xs font-bold text-gray-600 hover:bg-gray-50">Visibilidad de columnas</button>
                 {mostrarMenuColumnas && (
@@ -1057,9 +1071,11 @@ export default function Clientes() {
                 )}
               </div>
               <button onClick={exportarPDF} className="border rounded px-3 py-1.5 text-xs font-bold text-gray-600 hover:bg-gray-50">Exportar a PDF</button>
+                          <button onClick={exportarPDF} className="border rounded px-3 py-1.5 text-xs font-bold text-gray-600 hover:bg-gray-50">{t('exportPdf')}</button>
             </div>
 
             <input type="text" className="border rounded p-1.5 w-64 outline-none focus:border-blue-500 text-xs" placeholder="Buscar ..." value={busqueda} onChange={(e) => { setBusqueda(e.target.value); setPaginaActual(1); }} />
+                      <input type="text" className="border rounded p-1.5 w-64 outline-none focus:border-blue-500 text-xs" placeholder={`${t('search')} ...`} value={busqueda} onChange={(e) => { setBusqueda(e.target.value); setPaginaActual(1); }} />
           </div>
 
           <div className="overflow-x-auto border rounded">
@@ -1087,7 +1103,7 @@ export default function Clientes() {
               </thead>
               <tbody>
                 {clientesPagina.length === 0 ? (
-                  <tr><td colSpan="17" className="text-center py-10 text-gray-400 font-medium text-sm">No hay datos disponibles en la tabla</td></tr>
+                  <tr><td colSpan="17" className="text-center py-10 text-gray-400 font-medium text-sm">{t('noData')}</td></tr>
                 ) : (
                   clientesPagina.map((cliente) => (
                     <tr key={cliente.id} className="border-b hover:bg-gray-50 text-gray-700">
