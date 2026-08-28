@@ -8,6 +8,7 @@ import {
   AlertTriangle, Handshake, LineChart, PieChart as PieChartIcon,
   BarChart3, Trophy, Lightbulb, CalendarRange, Wallet, Boxes,
   Clock, Receipt,
+  Menu, Bell, Search, Store, RefreshCw,
 } from 'lucide-react';
 import {
   AreaChart, Area, BarChart, Bar, XAxis, Tooltip, ResponsiveContainer,
@@ -537,6 +538,89 @@ const Inicio = ({ perfilUsuario }) => {
 
   if (cargando) return <div className="p-10 text-center font-bold text-orange-500">{t('loadingData')}</div>;
   if (error) return <div className="p-10 text-center font-bold text-red-500">{error}</div>;
+
+  if (cajasAbiertasConDatos.length === 0) {
+    return (
+      <div className="min-h-screen bg-[#efefed] text-slate-900">
+        <div className="mx-auto min-h-screen max-w-[430px] bg-[#efefed] px-4 pb-0 pt-2">
+          <div className="flex items-center justify-between px-2 pb-2 pt-2 text-[1.9rem] font-medium tracking-[-0.06em] text-slate-900">
+            <span className="text-[1.75rem] font-medium">19:21</span>
+            <div className="flex items-center gap-2 text-[1.1rem]">
+              <span>◔</span>
+              <span>◍</span>
+              <span>▣</span>
+            </div>
+          </div>
+
+          <header className="flex items-center justify-between px-1 pb-4 pt-1">
+            <button className="flex h-10 w-10 items-center justify-center text-slate-800">
+              <Menu size={30} strokeWidth={2.5} />
+            </button>
+
+            <div className="text-[2.5rem] font-black tracking-[-0.07em] text-slate-900">Vender</div>
+
+            <div className="flex items-center gap-4">
+              <button className="flex h-10 w-10 items-center justify-center text-slate-800">
+                <Bell size={24} strokeWidth={2.2} />
+              </button>
+              <button className="flex h-10 w-10 items-center justify-center text-slate-800">
+                <RefreshCw size={24} strokeWidth={2.2} />
+              </button>
+            </div>
+          </header>
+
+          <main className="flex min-h-[calc(100vh-195px)] flex-col items-center justify-center px-2 pt-1 text-center">
+            <div className="mb-7 flex h-[9.25rem] w-[9.25rem] items-center justify-center rounded-full bg-[#f1e0c4] shadow-inner shadow-[#d7c8af]">
+              <div className="flex h-[6.75rem] w-[6.75rem] items-center justify-center rounded-full text-orange-500">
+                <Store size={72} strokeWidth={2.1} />
+              </div>
+            </div>
+
+            <h1 className="mb-5 max-w-[325px] text-[3.2rem] font-black leading-[0.96] tracking-[-0.06em] text-slate-900">
+              No hay caja abierta
+            </h1>
+
+            <p className="max-w-[360px] text-[1.25rem] leading-[1.45] font-medium text-slate-700">
+              Para vender, abrí la caja desde la app o desde el sistema web.
+              <span className="mt-2 block">Si acabás de abrirla, tocá “Buscar caja en servidor”.</span>
+            </p>
+
+            <div className="mt-9 w-full space-y-4">
+              <button className="flex w-full items-center justify-center gap-3 rounded-[1.15rem] bg-orange-500 px-5 py-5 text-[2.05rem] font-black text-white shadow-[0_8px_18px_rgba(249,115,22,0.28)] transition-transform hover:translate-y-[-1px] active:scale-[0.99]">
+                <Store size={30} strokeWidth={2.2} />
+                Abrir caja ahora
+              </button>
+
+              <button className="flex w-full items-center justify-center gap-3 rounded-[1.15rem] border-[3px] border-orange-500 bg-transparent px-5 py-5 text-[1.8rem] font-black text-orange-500 transition-colors hover:bg-orange-50 active:bg-orange-100">
+                <Search size={28} strokeWidth={2.2} />
+                Buscar caja en servidor
+              </button>
+            </div>
+          </main>
+
+          <nav className="border-t border-gray-200 bg-[#efefed] px-1 pb-5 pt-2">
+            <div className="grid grid-cols-5 gap-2 text-center">
+              {[
+                { label: 'Vender', active: true, icon: Store },
+                { label: 'Productos', active: false, icon: Package },
+                { label: 'Caja', active: false, icon: Wallet },
+                { label: 'Clientes', active: false, icon: Handshake },
+                { label: 'Reportes', active: false, icon: BarChart3 },
+              ].map(({ label, active, icon: Icon }) => (
+                <button
+                  key={label}
+                  className={`flex flex-col items-center justify-center gap-2 rounded-xl px-1 py-3 ${active ? 'bg-[#f0dfcd] text-slate-900 shadow-sm' : 'text-slate-700'}`}
+                >
+                  <Icon size={26} strokeWidth={2.2} />
+                  <span className="text-[0.8rem] font-medium leading-none">{label}</span>
+                </button>
+              ))}
+            </div>
+          </nav>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <>
