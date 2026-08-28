@@ -5,7 +5,7 @@ import {
   LayoutDashboard, Users, Contact, Package, Factory, Wrench,
   ArrowDownToLine, ArrowUpFromLine, BarChart3, ShoppingCart, LogOut, Settings,
   MapPin, FileText, Barcode, Printer, Percent, ClipboardList, CreditCard,
-  Menu, X, Bell, DollarSign, RotateCw
+  Menu, X, Bell, DollarSign, RotateCw, BookOpen, Truck, ShoppingBag, Clock3, Building2
 } from 'lucide-react';
 import ConfiguracionEmpresa from './ConfiguracionEmpresa';
 import ConfiguracionFacturaElectronica from './ConfiguracionFacturaElectronica';
@@ -509,6 +509,78 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
         />
       )}
 
+      {!posPantallaCompleta && menuMovilAbierto && (
+        <aside className="fixed inset-y-0 left-0 z-30 w-[79vw] max-w-[570px] bg-white shadow-2xl flex flex-col md:hidden overflow-hidden">
+          <div className="bg-[#fff0e9] px-8 pt-8 pb-7 flex items-center gap-5 shrink-0">
+            <div className="w-[74px] h-[74px] rounded-full bg-[#f46b21] text-white flex items-center justify-center text-3xl font-bold">
+              {(perfilUsuario?.empresas?.nombre || 'G').charAt(0).toUpperCase()}
+            </div>
+            <div className="min-w-0 flex-1">
+              <h2 className="text-[24px] leading-tight font-bold text-[#171717] truncate">
+                {perfilUsuario?.empresas?.nombre || 'GDA Repuesto'}
+              </h2>
+              <p className="text-[20px] text-[#777] mt-1 truncate">CDEpos</p>
+            </div>
+            <span className="bg-[#f46b21] text-white rounded-full px-4 py-2 text-base font-bold">
+              {perfilUsuario?.roles?.nombre || 'admin'}
+            </span>
+          </div>
+
+          <nav className="flex-1 overflow-y-auto py-3">
+            {[
+              ['Vender', '/pos', ShoppingCart],
+              ['Productos', '/catalogo', Package],
+              ['Histórico de ventas', '/todas_ventas', FileText],
+              ['Presupuestos', '/presupuestos', ClipboardList],
+              ['Pedidos pendientes', '/cobros', ClipboardList],
+              ['Clientes', '/clientes', Users],
+              ['Carta Online', '/carta-online', BookOpen],
+              ['Mis entregas', '/entregas', Truck],
+              ['Caja', '/caja_registradora', DollarSign],
+              ['Caja / Banco', '/cajas', Building2],
+              ['Flujo de fondos', '/flujo-fondos', BarChart3],
+              ['Informe de cajas', '/informe-caja-pago', FileText],
+              ['Gastos', '/gastos', FileText],
+              ['Compras', '/compras', ShoppingBag],
+              ['Stock', '/apertura-stock', Package],
+              ['Devoluciones', '/devoluciones_compra', RotateCw],
+              ['Asistencia', '/asistencia', Clock3],
+              ['CRM / Follow-ups', '/crm', Users],
+              ['Reportes', '/ganancias_perdidas', BarChart3],
+            ].map(([etiqueta, ruta, Icono]) => (
+              <button
+                key={ruta}
+                type="button"
+                onClick={() => irA(etiqueta === 'Vender' ? 'pos' : etiqueta === 'Productos' ? 'catalogo' : etiqueta === 'Clientes' ? 'clientes' : etiqueta === 'Caja' ? 'caja_registradora' : etiqueta === 'Caja / Banco' ? 'cajas' : etiqueta === 'Gastos' ? 'gastos' : etiqueta === 'Compras' ? 'compras' : etiqueta === 'Reportes' ? 'ganancias_perdidas' : etiqueta === 'Informe de cajas' ? 'informe_caja_pago' : etiqueta === 'Devoluciones' ? 'devoluciones_compra' : etiqueta === 'Pedidos pendientes' ? 'cobros' : etiqueta === 'Histórico de ventas' ? 'todas_ventas' : 'inicio', ruta)}
+                className="w-full min-h-[74px] px-8 flex items-center gap-6 text-left text-[21px] tracking-wide text-[#202020] hover:bg-[#fff5f0] active:bg-[#ffe9df]"
+              >
+                <Icono size={32} strokeWidth={2.1} className="shrink-0 text-[#161616]" />
+                <span>{etiqueta}</span>
+              </button>
+            ))}
+
+            <div className="border-t border-[#e5e5e5] mt-2 pt-2">
+              <button type="button" onClick={() => irA('config_empresa', '/configuracion')} className="w-full min-h-[74px] px-8 flex items-center gap-6 text-left text-[21px] tracking-wide text-[#202020] hover:bg-[#fff5f0]">
+                <Settings size={32} strokeWidth={2.1} className="shrink-0" />
+                <span>Configuración</span>
+              </button>
+              <button type="button" onClick={() => irA('inicio', '/soporte')} className="w-full min-h-[74px] px-8 flex items-center gap-6 text-left text-[21px] tracking-wide text-[#202020] hover:bg-[#fff5f0]">
+                <Bell size={32} strokeWidth={2.1} className="shrink-0" />
+                <span>Soporte</span>
+              </button>
+              <button type="button" onClick={cerrarSesion} className="w-full min-h-[74px] px-8 flex items-center gap-6 text-left text-[21px] tracking-wide text-[#e14c4c] hover:bg-red-50">
+                <LogOut size={32} strokeWidth={2.1} className="shrink-0" />
+                <span>Cerrar sesión</span>
+              </button>
+            </div>
+          </nav>
+
+          <div className="border-t border-[#e5e5e5] px-8 py-5 text-center text-[#999] text-base shrink-0">
+            ⓘ CDEpos v0.4.47 (build 78)
+          </div>
+        </aside>
+      )}
+
       {/* ========================================== */}
       {/* MENÚ LATERAL IZQUIERDO (SIDEBAR COMPLETO)  */}
       {/* ========================================== */}
@@ -517,7 +589,7 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
           ${sidebarColapsado ? 'w-[76px]' : 'w-[260px]'}
           transition-all duration-300 bg-[#1e1e2d] text-white flex flex-col h-full shadow-xl z-30
           fixed inset-y-0 left-0 transform ${menuMovilAbierto ? 'translate-x-0' : '-translate-x-full'}
-          md:relative md:translate-x-0 md:flex
+          hidden md:relative md:translate-x-0 md:flex
         `}>
           {/* Logo Superior con botón de cerrar para móvil */}
           <div className="h-16 flex items-center justify-between px-4 border-b border-gray-700 bg-white overflow-hidden">
