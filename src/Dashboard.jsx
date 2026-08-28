@@ -5,7 +5,7 @@ import {
   LayoutDashboard, Users, Contact, Package, Factory, Wrench,
   ArrowDownToLine, ArrowUpFromLine, BarChart3, ShoppingCart, LogOut, Settings,
   MapPin, FileText, Barcode, Printer, Percent, ClipboardList, CreditCard,
-  Menu, X, Bell
+  Menu, X, Bell, DollarSign, RotateCw
 } from 'lucide-react';
 import ConfiguracionEmpresa from './ConfiguracionEmpresa';
 import ConfiguracionFacturaElectronica from './ConfiguracionFacturaElectronica';
@@ -744,8 +744,8 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
 
         {/* Header Superior */}
         {!posPantallaCompleta && (
-          <header className="h-14 md:h-16 bg-white shadow-sm flex items-center justify-between px-4 md:px-6 z-10 border-b">
-            <div className="flex items-center gap-3">
+          <header className="h-14 md:h-16 bg-white shadow-sm flex items-center justify-between px-4 md:px-6 z-10 border-b border-gray-200">
+            <div className="flex items-center gap-3 flex-1">
               {/* BOTÓN HAMBURGUESA PARA MÓVIL */}
               <button
                 onClick={() => setMenuMovilAbierto(true)}
@@ -762,8 +762,10 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
               >
                 {sidebarColapsado ? '☰' : '◀'}
               </button>
+            </div>
 
-              <h2 className="text-gray-800 font-bold text-base md:text-lg truncate max-w-[150px] md:max-w-none">
+            {/* TÍTULO CENTRADO */}
+            <h2 className="text-gray-800 font-black text-base md:text-lg text-center flex-1 hidden md:block">
                 {vistaActiva === 'inicio' && t('home')}
                 {vistaActiva === 'pos' && t('pos')}
                 {vistaActiva === 'reporte_cierre' && 'Cierre'}
@@ -794,20 +796,19 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
                 {vistaActiva === 'cobro_de_ventas' && t('salesCollections')}
                 {vistaActiva === 'vendedores_comisiones' && t('sellersCommissions')}
               </h2>
-            </div>
+            <div className="flex-1"></div>
             <div className="flex items-center gap-2 md:gap-3">
               <LanguageSelector compact />
+              {/* BOTÓN ACTUALIZAR */}
               <button
-                onClick={() => irA('pos', '/pos')}
-                className="bg-orange-500 hover:bg-orange-600 text-white rounded-md px-3 py-2 text-xs font-bold flex items-center gap-2 shadow-sm whitespace-nowrap"
-                title={t('pos')}
+                onClick={() => setRefreshKey(k => k + 1)}
+                className="relative w-8 h-8 rounded-md text-gray-500 hover:bg-gray-100 hover:text-orange-500 flex items-center justify-center"
+                title="Actualizar"
               >
-                <ShoppingCart size={15} />
-                <span className="hidden sm:inline">{t('pos')}</span>
+                <RotateCw size={17} />
               </button>
-              <span className="hidden md:inline text-xs font-medium text-gray-600 whitespace-nowrap">
-                {fechaHora.toLocaleDateString(locale)}
-              </span>
+
+              {/* BOTÓN NOTIFICACIONES */}
               <div className="relative">
                 <button
                   type="button"
@@ -847,41 +848,75 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
 
         {/* BARRA DE NAVEGACIÓN INFERIOR PARA MÓVIL */}
         {!posPantallaCompleta && (
-          <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 h-16 flex items-center justify-around px-2 z-40">
-            <button
-              onClick={() => irA('inicio', '/')}
-              className={`flex flex-col items-center gap-1 flex-1 ${vistaActiva === 'inicio' ? 'text-orange-500' : 'text-gray-500'}`}
-            >
-              <LayoutDashboard size={20} />
-              <span className="text-[10px] font-medium">{t('home')}</span>
-            </button>
+          <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-gray-300 h-16 flex items-center justify-around px-1 z-40">
+            {/* VENDER */}
             <button
               onClick={() => irA('pos', '/pos')}
-              className={`flex flex-col items-center gap-1 flex-1 ${vistaActiva === 'pos' ? 'text-orange-500' : 'text-gray-500'}`}
+              className={`flex flex-col items-center justify-center gap-0.5 flex-1 py-2 px-2 rounded-2xl transition-all ${
+                vistaActiva === 'pos'
+                  ? 'bg-[#ffebe5] text-orange-600'
+                  : 'text-gray-500 hover:text-gray-700'
+              }`}
+              title="Vender"
             >
-              <ShoppingCart size={20} />
-              <span className="text-[10px] font-medium">POS</span>
+              <ShoppingCart size={22} />
+              <span className="text-[10px] font-bold">Vender</span>
             </button>
-            <button
-              onClick={() => irA('todas_ventas', '/todas_ventas')}
-              className={`flex flex-col items-center gap-1 flex-1 ${vistaActiva === 'todas_ventas' ? 'text-orange-500' : 'text-gray-500'}`}
-            >
-              <ArrowUpFromLine size={20} />
-              <span className="text-[10px] font-medium">{t('sales')}</span>
-            </button>
+
+            {/* PRODUCTOS */}
             <button
               onClick={() => irA('catalogo', '/catalogo')}
-              className={`flex flex-col items-center gap-1 flex-1 ${vistaActiva === 'catalogo' ? 'text-orange-500' : 'text-gray-500'}`}
+              className={`flex flex-col items-center justify-center gap-0.5 flex-1 py-2 px-2 rounded-2xl transition-all ${
+                vistaActiva === 'catalogo'
+                  ? 'bg-[#ffebe5] text-orange-600'
+                  : 'text-gray-500 hover:text-gray-700'
+              }`}
+              title="Productos"
             >
-              <Package size={20} />
-              <span className="text-[10px] font-medium">{t('products')}</span>
+              <Package size={22} />
+              <span className="text-[10px] font-bold">Productos</span>
             </button>
+
+            {/* CAJA */}
             <button
-              onClick={() => setMenuMovilAbierto(true)}
-              className="flex flex-col items-center gap-1 flex-1 text-gray-500"
+              onClick={() => irA('cajas', '/cajas')}
+              className={`flex flex-col items-center justify-center gap-0.5 flex-1 py-2 px-2 rounded-2xl transition-all ${
+                vistaActiva === 'cajas'
+                  ? 'bg-[#ffebe5] text-orange-600'
+                  : 'text-gray-500 hover:text-gray-700'
+              }`}
+              title="Caja"
             >
-              <Menu size={20} />
-              <span className="text-[10px] font-medium">{t('settings')}</span>
+              <DollarSign size={22} />
+              <span className="text-[10px] font-bold">Caja</span>
+            </button>
+
+            {/* CLIENTES */}
+            <button
+              onClick={() => irA('clientes', '/clientes')}
+              className={`flex flex-col items-center justify-center gap-0.5 flex-1 py-2 px-2 rounded-2xl transition-all ${
+                vistaActiva === 'clientes'
+                  ? 'bg-[#ffebe5] text-orange-600'
+                  : 'text-gray-500 hover:text-gray-700'
+              }`}
+              title="Clientes"
+            >
+              <Users size={22} />
+              <span className="text-[10px] font-bold">Clientes</span>
+            </button>
+
+            {/* REPORTES */}
+            <button
+              onClick={() => irA('ganancias_perdidas', '/ganancias_perdidas')}
+              className={`flex flex-col items-center justify-center gap-0.5 flex-1 py-2 px-2 rounded-2xl transition-all ${
+                vistaActiva === 'ganancias_perdidas'
+                  ? 'bg-[#ffebe5] text-orange-600'
+                  : 'text-gray-500 hover:text-gray-700'
+              }`}
+              title="Reportes"
+            >
+              <BarChart3 size={22} />
+              <span className="text-[10px] font-bold">Reportes</span>
             </button>
           </nav>
         )}
