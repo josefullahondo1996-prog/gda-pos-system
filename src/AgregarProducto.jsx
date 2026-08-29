@@ -4,6 +4,7 @@ import AperturaStock from './AperturaStock';
 import { sonidoExito } from './utils/sonido';
 import { useEmpresaInfo } from './utils/useEmpresa';
 import { useLanguage } from './LanguageContext';
+import { precioConIva, precioSinIva, precioVentaConIva as calcularPrecioVentaConIva, margenDesdeVentaConIva } from './utils/preciosIva';
 
 const GARANTIAS = ['Sin garantía', '30 días', '3 meses', '6 meses', '1 año'];
 
@@ -46,6 +47,12 @@ const AgregarProducto = ({ onGuardado, onCancelar, productoEditar }) => {
     const [tipoImpuestoPrecio, setTipoImpuestoPrecio] = useState('Incluido');
     const [tipoProducto, setTipoProducto] = useState('Individual');
 
+    // Estados para productos tipo Combo
+    const [catalogoProductos, setCatalogoProductos] = useState([]);
+    const [comboProductos, setComboProductos] = useState([]);
+    const [busquedaCombo, setBusquedaCombo] = useState('');
+    const [filtradosCombo, setFiltradosCombo] = useState([]);
+
     // Ahora los 4 valores de precio son editables de forma independiente
     const [precioCompraSinIva, setPrecioCompraSinIva] = useState('');
     const [precioCompraConIva, setPrecioCompraConIva] = useState('');
@@ -62,14 +69,16 @@ const AgregarProducto = ({ onGuardado, onCancelar, productoEditar }) => {
     useEffect(() => {
         const cargarListas = async () => {
             if (!empresaId) return;
-            const [resMarcas, resUnidades, resCategorias] = await Promise.all([
+            const [resMarcas, resUnidades, resCategorias, resProductos] = await Promise.all([
                 supabase.from('marcas').select('*').eq('empresa_id', empresaId).order('nombre', { ascending: true }),
                 supabase.from('unidades').select('*').eq('empresa_id', empresaId).order('nombre', { ascending: true }),
                 supabase.from('categorias_productos').select('*').eq('empresa_id', empresaId).order('nombre', { ascending: true }),
+                supabase.from('productos').select('*').eq('empresa_id', empresaId).order('nombre', { ascending: true }),
             ]);
             if (!resMarcas.error && resMarcas.data) setMarcasDisponibles(resMarcas.data);
             if (!resUnidades.error && resUnidades.data) setUnidadesDisponibles(resUnidades.data);
             if (!resCategorias.error && resCategorias.data) setCategoriasDisponibles(resCategorias.data);
+            if (!resProductos.error && resProductos.data) setCatalogoProductos(resProductos.data);
         };
         cargarListas();
     }, [empresaId]);
@@ -92,6 +101,7 @@ const AgregarProducto = ({ onGuardado, onCancelar, productoEditar }) => {
         setImagenPreview(productoEditar.imagen_url || null);
         setTipoImpuestoPrecio(productoEditar.tipo_impuesto || 'Incluido');
         setTipoProducto(productoEditar.tipo_producto || 'Individual');
+        setComboProductos(productoEditar.combo_productos || []);
 
         const ivaGuardado = productoEditar.iva ? parseInt(productoEditar.iva.replace(/\D/g, '')) || 0 : 10;
         setIvaPct(ivaGuardado);
@@ -99,12 +109,11 @@ const AgregarProducto = ({ onGuardado, onCancelar, productoEditar }) => {
         const compraSinIva = Number(productoEditar.precio_compra) || 0;
         const ventaConIva = Number(productoEditar.precio_venta) || 0;
         setPrecioCompraSinIva(compraSinIva || '');
-        setPrecioCompraConIva(compraSinIva ? (compraSinIva * (1 + ivaGuardado / 100)).toFixed(0) : '');
+        setPrecioCompraConIva(compraSinIva ? precioConIva(compraSinIva, ivaGuardado).toFixed(0) : '');
         setPrecioVentaConIva(ventaConIva || '');
 
         if (compraSinIva > 0 && ventaConIva > 0) {
-            const ventaSinIva = ventaConIva / (1 + ivaGuardado / 100);
-            const margenCalculado = ((ventaSinIva - compraSinIva) / compraSinIva) * 100;
+            const margenCalculado = margenDesdeVentaConIva(compraSinIva, ventaConIva, ivaGuardado);
             setMargenPct(margenCalculado.toFixed(1));
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -116,7 +125,7 @@ const AgregarProducto = ({ onGuardado, onCancelar, productoEditar }) => {
     const handlePrecioCompraSinIva = (valor) => {
         setPrecioCompraSinIva(valor);
         const base = Number(valor) || 0;
-        setPrecioCompraConIva(base ? (base * (1 + ivaPct / 100)).toFixed(0) : '');
+        setPrecioCompraConIva(base ? precioConIva(base, ivaPct).toFixed(0) : '');
         recalcularVentaDesdeCompra(base, margenPct);
     };
 
@@ -124,7 +133,7 @@ const AgregarProducto = ({ onGuardado, onCancelar, productoEditar }) => {
     const handlePrecioCompraConIva = (valor) => {
         setPrecioCompraConIva(valor);
         const conIva = Number(valor) || 0;
-        const sinIva = conIva ? conIva / (1 + ivaPct / 100) : 0;
+        const sinIva = conIva ? precioSinIva(conIva, ivaPct) : 0;
         setPrecioCompraSinIva(sinIva ? sinIva.toFixed(0) : '');
         recalcularVentaDesdeCompra(sinIva, margenPct);
     };
@@ -136,8 +145,7 @@ const AgregarProducto = ({ onGuardado, onCancelar, productoEditar }) => {
     };
 
     const recalcularVentaDesdeCompra = (compraSinIva, margen) => {
-        const ventaSinIva = compraSinIva * (1 + margen / 100);
-        const ventaConIva = ventaSinIva * (1 + ivaPct / 100);
+        const ventaConIva = calcularPrecioVentaConIva(compraSinIva, margen, ivaPct);
         setPrecioVentaConIva(ventaConIva ? ventaConIva.toFixed(0) : '');
     };
 
@@ -145,10 +153,9 @@ const AgregarProducto = ({ onGuardado, onCancelar, productoEditar }) => {
     const handlePrecioVentaConIva = (valor) => {
         setPrecioVentaConIva(valor);
         const ventaConIva = Number(valor) || 0;
-        const ventaSinIva = ventaConIva / (1 + ivaPct / 100);
         const compraSinIva = Number(precioCompraSinIva) || 0;
         if (compraSinIva > 0) {
-            const nuevoMargen = ((ventaSinIva - compraSinIva) / compraSinIva) * 100;
+            const nuevoMargen = margenDesdeVentaConIva(compraSinIva, ventaConIva, ivaPct);
             setMargenPct(nuevoMargen.toFixed(1));
         }
     };
@@ -157,17 +164,64 @@ const AgregarProducto = ({ onGuardado, onCancelar, productoEditar }) => {
     const handleIvaPct = (nuevoIva) => {
         setIvaPct(nuevoIva);
         const base = Number(precioCompraSinIva) || 0;
-        setPrecioCompraConIva(base ? (base * (1 + nuevoIva / 100)).toFixed(0) : '');
-        const ventaSinIva = base * (1 + margenPct / 100);
-        setPrecioVentaConIva(ventaSinIva ? (ventaSinIva * (1 + nuevoIva / 100)).toFixed(0) : '');
+        setPrecioCompraConIva(base ? precioConIva(base, nuevoIva).toFixed(0) : '');
+        const ventaConIva = calcularPrecioVentaConIva(base, margenPct, nuevoIva);
+        setPrecioVentaConIva(ventaConIva ? ventaConIva.toFixed(0) : '');
     };
+
+    // --- FUNCIONES Y EFECTO PARA PRODUCTOS COMBO ---
+    const manejarBusquedaCombo = (texto) => {
+        setBusquedaCombo(texto);
+        if (texto.trim() === '') {
+            setFiltradosCombo([]);
+            return;
+        }
+        const query = texto.toLowerCase();
+        setFiltradosCombo(
+            catalogoProductos.filter((p) => {
+                const esMismoProducto = productoEditar && p.id === productoEditar.id;
+                return !esMismoProducto && (p.nombre.toLowerCase().includes(query) || (p.codigo && p.codigo.toLowerCase().includes(query)));
+            }).slice(0, 5)
+        );
+    };
+
+    const agregarProductoAlCombo = (prod) => {
+        if (comboProductos.find((item) => item.id === prod.id)) {
+            alert('Este producto ya fue agregado al combo.');
+            return;
+        }
+        setComboProductos([
+            ...comboProductos,
+            {
+                id: prod.id,
+                nombre: prod.nombre,
+                cantidad: 1,
+                unidad: prod.unidad || 'UNID',
+                precio_compra: prod.precio_compra || 0,
+            },
+        ]);
+        setBusquedaCombo('');
+        setFiltradosCombo([]);
+    };
+
+    useEffect(() => {
+        if (tipoProducto === 'Combo') {
+            const totalSinIva = comboProductos.reduce((sum, item) => sum + (Number(item.precio_compra) || 0) * (Number(item.cantidad) || 0), 0);
+            setPrecioCompraSinIva(totalSinIva);
+            setPrecioCompraConIva(precioConIva(totalSinIva, ivaPct).toFixed(0));
+            
+            // Recalcular la venta usando el margen actual
+            const ventaConIva = calcularPrecioVentaConIva(totalSinIva, margenPct, ivaPct);
+            setPrecioVentaConIva(ventaConIva ? ventaConIva.toFixed(0) : '');
+        }
+    }, [comboProductos, tipoProducto, ivaPct, margenPct]);
 
     const actualizarMargenGrupo = (index, nuevoMargen) => {
         setGruposPrecio((prev) =>
             prev.map((g, i) => {
                 if (i !== index) return g;
                 const base = precioCompraSinIva ? Number(precioCompraSinIva) : 0;
-                const venta = base * (1 + Number(nuevoMargen) / 100) * (1 + ivaPct / 100);
+                const venta = calcularPrecioVentaConIva(base, Number(nuevoMargen), ivaPct);
                 return { ...g, margen: nuevoMargen, precioVenta: venta };
             })
         );
@@ -217,7 +271,10 @@ const AgregarProducto = ({ onGuardado, onCancelar, productoEditar }) => {
     const limpiarFormulario = () => {
         setNombre(''); setSku(''); setUnidad(''); setMarca(''); setCategoria(''); setSubcategoria(''); setGarantia('');
         setDescripcion(''); setAdministraStock(true); setCantidadAlerta(''); setExpiraCantidad('');
-        setImagenPreview(null); setPrecioCompraSinIva(''); setMargenPct(25);
+        setImagenPreview(null); setPrecioCompraSinIva(''); setPrecioCompraConIva(''); setPrecioVentaConIva(''); setMargenPct(25);
+        setComboProductos([]);
+        setBusquedaCombo('');
+        setFiltradosCombo([]);
     };
 
     const guardarProducto = async (opcion) => {
@@ -245,6 +302,7 @@ const AgregarProducto = ({ onGuardado, onCancelar, productoEditar }) => {
                 iva: `IVA ${ivaPct}%`,
                 tipo_impuesto: tipoImpuestoPrecio,
                 tipo_producto: tipoProducto,
+                combo_productos: tipoProducto === 'Combo' ? comboProductos : null,
             };
 
             let productoGuardado = null;
@@ -532,55 +590,205 @@ const AgregarProducto = ({ onGuardado, onCancelar, productoEditar }) => {
                                 </div>
                             </div>
 
-                            <div className="border border-gray-200 rounded-lg overflow-hidden">
-                                <div className="grid grid-cols-3 text-white text-xs font-bold">
-                                    <div className="bg-green-600 px-3 py-2">{t('defaultPurchasePrice')}</div>
-                                    <div className="bg-green-600 px-3 py-2 border-l border-green-500">x Margen (%) ℹ️</div>
-                                    <div className="bg-green-600 px-3 py-2 border-l border-green-500">{t('defaultSalePrice')}</div>
-                                </div>
-                                <div className="grid grid-cols-3 gap-4 p-4">
-                                    <div className="grid grid-cols-2 gap-2">
+                            {tipoProducto === 'Combo' ? (
+                                <div className="flex flex-col gap-4 mt-2">
+                                    {/* Buscador de sub-productos */}
+                                    <div className="relative">
+                                        <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                                            <span className="text-gray-400 text-sm">🔍</span>
+                                        </div>
+                                        <input
+                                            type="text"
+                                            className="w-full pl-9 border border-gray-300 rounded p-2 text-sm outline-none focus:border-blue-500"
+                                            placeholder="Introduzca el nombre del producto / SKU / código de barras de escaneo"
+                                            value={busquedaCombo}
+                                            onChange={(e) => manejarBusquedaCombo(e.target.value)}
+                                        />
+                                        {filtradosCombo.length > 0 && (
+                                            <div className="absolute z-50 left-0 right-0 mt-1 bg-white border border-gray-300 rounded shadow-lg max-h-60 overflow-y-auto">
+                                                {filtradosCombo.map((prod) => (
+                                                    <div
+                                                        key={prod.id}
+                                                        onClick={() => agregarProductoAlCombo(prod)}
+                                                        className="p-2 hover:bg-blue-50 cursor-pointer border-b last:border-0 flex justify-between items-center text-sm"
+                                                    >
+                                                        <div>
+                                                            <span className="font-semibold text-gray-700">{prod.nombre}</span>
+                                                            {prod.codigo && <span className="text-xs text-gray-400 ml-2">({prod.codigo})</span>}
+                                                        </div>
+                                                        <span className="font-bold text-blue-600">
+                                                            {Number(prod.precio_compra || 0).toLocaleString('es-PY')} Gs
+                                                        </span>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        )}
+                                    </div>
+
+                                    {/* Grilla de productos agregados */}
+                                    <div className="border border-gray-200 rounded-lg overflow-hidden">
+                                        <table className="w-full text-left text-xs border-collapse">
+                                            <thead>
+                                                <tr className="bg-gray-100 text-gray-500 font-bold border-b border-gray-200">
+                                                    <th className="p-3 uppercase">Nombre del Producto</th>
+                                                    <th className="p-3 uppercase w-28 text-center">Cantidad</th>
+                                                    <th className="p-3 uppercase text-right w-44">Precio de Compra (sin impuestos)</th>
+                                                    <th className="p-3 uppercase text-right w-44">Importe Total (impuesto exc.)</th>
+                                                    <th className="p-3 text-center w-12"></th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {comboProductos.length === 0 ? (
+                                                    <tr>
+                                                        <td colSpan="5" className="p-6 text-center text-gray-400 italic">
+                                                            Ningún producto agregado al combo. Utilice el buscador de arriba.
+                                                        </td>
+                                                    </tr>
+                                                ) : (
+                                                    comboProductos.map((item) => {
+                                                        const totalSinImpuesto = (Number(item.precio_compra) || 0) * (Number(item.cantidad) || 0);
+                                                        return (
+                                                            <tr key={item.id} className="border-b border-gray-100 hover:bg-gray-50">
+                                                                <td className="p-3 font-medium text-gray-850">{item.nombre}</td>
+                                                                <td className="p-3 text-center">
+                                                                    <div className="flex items-center justify-center gap-1">
+                                                                        <input
+                                                                            type="number"
+                                                                            min="1"
+                                                                            className="w-16 border border-gray-300 rounded p-1 text-xs text-center outline-none focus:border-blue-500"
+                                                                            value={item.cantidad}
+                                                                            onChange={(e) => {
+                                                                                const val = Number(e.target.value);
+                                                                                setComboProductos((prev) =>
+                                                                                    prev.map((p) => (p.id === item.id ? { ...p, cantidad: val > 0 ? val : 1 } : p))
+                                                                                );
+                                                                            }}
+                                                                        />
+                                                                        <select
+                                                                            className="border border-gray-300 rounded p-1 text-[10px] bg-white outline-none focus:border-blue-500"
+                                                                            value={item.unidad}
+                                                                            onChange={(e) => {
+                                                                                const val = e.target.value;
+                                                                                setComboProductos((prev) =>
+                                                                                    prev.map((p) => (p.id === item.id ? { ...p, unidad: val } : p))
+                                                                                );
+                                                                            }}
+                                                                        >
+                                                                            <option value="UNID">UNID</option>
+                                                                            {unidadesDisponibles.map((u) => (
+                                                                                <option key={u.id} value={u.nombre}>{u.nombre}</option>
+                                                                            ))}
+                                                                        </select>
+                                                                    </div>
+                                                                </td>
+                                                                <td className="p-3 text-right text-gray-600 font-semibold">
+                                                                    {Number(item.precio_compra || 0).toLocaleString('es-PY')} Gs
+                                                                </td>
+                                                                <td className="p-3 text-right text-gray-800 font-bold">
+                                                                    {totalSinImpuesto.toLocaleString('es-PY')} Gs
+                                                                </td>
+                                                                <td className="p-3 text-center">
+                                                                    <button
+                                                                        type="button"
+                                                                        onClick={() => setComboProductos((prev) => prev.filter((p) => p.id !== item.id))}
+                                                                        className="text-red-500 hover:text-red-700 text-base font-bold outline-none"
+                                                                    >
+                                                                        ✕
+                                                                    </button>
+                                                                </td>
+                                                            </tr>
+                                                        );
+                                                    })
+                                                )}
+                                            </tbody>
+                                            {comboProductos.length > 0 && (
+                                                <tfoot>
+                                                    <tr className="bg-gray-50 border-t font-bold text-gray-700">
+                                                        <td colSpan="3" className="p-3 text-right uppercase">Total a Pagar con IVA:</td>
+                                                        <td className="p-3 text-right text-blue-600 text-sm font-extrabold">
+                                                            {Number(precioCompraConIva || 0).toLocaleString('es-PY')} Gs
+                                                        </td>
+                                                        <td></td>
+                                                    </tr>
+                                                </tfoot>
+                                            )}
+                                        </table>
+                                    </div>
+
+                                    {/* Controles de margen y precio de venta */}
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-2">
                                         <div>
-                                            <label className="block text-[11px] font-bold text-gray-500 mb-1">{t('taxNotIncluded')}:*</label>
+                                            <label className="block text-xs font-bold text-gray-500 mb-1">x Margen (%):</label>
                                             <input
                                                 type="number"
-                                                className="w-full border border-gray-300 rounded p-2 text-sm"
-                                                placeholder={t('taxNotIncluded')}
-                                                value={precioCompraSinIva}
-                                                onChange={(e) => handlePrecioCompraSinIva(e.target.value)}
+                                                className="w-full border border-gray-300 rounded p-2 text-sm bg-white outline-none focus:border-blue-500"
+                                                value={margenPct}
+                                                onChange={(e) => handleMargenPct(e.target.value)}
                                             />
                                         </div>
                                         <div>
-                                            <label className="block text-[11px] font-bold text-gray-500 mb-1">{t('taxIncluded')}:*</label>
+                                            <label className="block text-xs font-bold text-gray-500 mb-1">Precio de venta predeterminado:</label>
                                             <input
                                                 type="number"
-                                                className="w-full border border-gray-300 rounded p-2 text-sm"
-                                                placeholder={t('taxIncluded')}
-                                                value={precioCompraConIva}
-                                                onChange={(e) => handlePrecioCompraConIva(e.target.value)}
+                                                className="w-full border border-gray-300 rounded p-2 text-sm font-bold text-green-700 bg-white outline-none focus:border-blue-500"
+                                                placeholder="Precio de venta"
+                                                value={precioVentaConIva}
+                                                onChange={(e) => handlePrecioVentaConIva(e.target.value)}
                                             />
                                         </div>
                                     </div>
-                                    <div>
-                                        <input
-                                            type="number"
-                                            className="w-full border border-gray-300 rounded p-2 text-sm"
-                                            value={margenPct}
-                                            onChange={(e) => handleMargenPct(e.target.value)}
-                                        />
+                                </div>
+                            ) : (
+                                <div className="border border-gray-200 rounded-lg overflow-hidden">
+                                    <div className="grid grid-cols-3 text-white text-xs font-bold">
+                                        <div className="bg-green-600 px-3 py-2">{t('defaultPurchasePrice')}</div>
+                                        <div className="bg-green-600 px-3 py-2 border-l border-green-500">x Margen (%) ℹ️</div>
+                                        <div className="bg-green-600 px-3 py-2 border-l border-green-500">{t('defaultSalePrice')}</div>
                                     </div>
-                                    <div>
-                                        <label className="block text-[11px] font-bold text-gray-500 mb-1">Incluyendo impuesto</label>
-                                        <input
-                                            type="number"
-                                            className="w-full border border-gray-300 rounded p-2 text-sm font-bold text-green-700"
-                                            placeholder="IVA incluido"
-                                            value={precioVentaConIva}
-                                            onChange={(e) => handlePrecioVentaConIva(e.target.value)}
-                                        />
+                                    <div className="grid grid-cols-3 gap-4 p-4">
+                                        <div className="grid grid-cols-2 gap-2">
+                                            <div>
+                                                <label className="block text-[11px] font-bold text-gray-500 mb-1">{t('taxNotIncluded')}:*</label>
+                                                <input
+                                                    type="number"
+                                                    className="w-full border border-gray-300 rounded p-2 text-sm"
+                                                    placeholder={t('taxNotIncluded')}
+                                                    value={precioCompraSinIva}
+                                                    onChange={(e) => handlePrecioCompraSinIva(e.target.value)}
+                                                />
+                                            </div>
+                                            <div>
+                                                <label className="block text-[11px] font-bold text-gray-500 mb-1">{t('taxIncluded')}:*</label>
+                                                <input
+                                                    type="number"
+                                                    className="w-full border border-gray-300 rounded p-2 text-sm"
+                                                    placeholder={t('taxIncluded')}
+                                                    value={precioCompraConIva}
+                                                    onChange={(e) => handlePrecioCompraConIva(e.target.value)}
+                                                />
+                                            </div>
+                                        </div>
+                                        <div>
+                                            <input
+                                                type="number"
+                                                className="w-full border border-gray-300 rounded p-2 text-sm"
+                                                value={margenPct}
+                                                onChange={(e) => handleMargenPct(e.target.value)}
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="block text-[11px] font-bold text-gray-500 mb-1">Incluyendo impuesto</label>
+                                            <input
+                                                type="number"
+                                                className="w-full border border-gray-300 rounded p-2 text-sm font-bold text-green-700"
+                                                placeholder="IVA incluido"
+                                                value={precioVentaConIva}
+                                                onChange={(e) => handlePrecioVentaConIva(e.target.value)}
+                                            />
+                                        </div>
                                     </div>
                                 </div>
-                            </div>
+                            )}
                         </div>
                     </div>
 

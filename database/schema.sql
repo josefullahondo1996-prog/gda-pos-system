@@ -97,6 +97,8 @@ CREATE TABLE productos (
     categoria text,
     marca_id uuid REFERENCES marcas(id),
     unidad_id uuid REFERENCES unidades(id),
+    tipo_producto text,
+    combo_productos jsonb,
     creado_en timestamptz NOT NULL DEFAULT now()
 );
 

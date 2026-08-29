@@ -602,9 +602,6 @@ export function LanguageProvider({ children }) {
           const key = databaseValueKeys[value];
           return key ? (translations[language][key] || translations.es[key] || value) : value;
         },
-      paid: 'Pagado', partial: 'Pago parcial', pending: 'Pendiente', toCollect: 'A cobrar', open: 'Abierta', closed: 'Cerrada', active: 'Activo', inactive: 'Inactivo', transfer: 'Transferencia', check: 'Cheque', cashSale: 'Contado', credit: 'Crédito', notIncluded: 'No incluido', included: 'Incluido',
-      paid: 'Pago', partial: 'Pagamento parcial', pending: 'Pendente', toCollect: 'A cobrar', open: 'Aberta', closed: 'Fechada', active: 'Ativo', inactive: 'Inativo', transfer: 'Transferência', check: 'Cheque', cashSale: 'À vista', credit: 'Crédito', notIncluded: 'Não incluído', included: 'Incluído',
-      paid: 'Paid', partial: 'Partially paid', pending: 'Pending', toCollect: 'To collect', open: 'Open', closed: 'Closed', active: 'Active', inactive: 'Inactive', transfer: 'Transfer', check: 'Check', cashSale: 'Cash', credit: 'Credit', notIncluded: 'Not included', included: 'Included',
     locale: translations[language].dateLocale,
   };
 

@@ -6,6 +6,7 @@ import { useEmpresaInfo, useNombreEmpresa } from './utils/useEmpresa';
 import { useUbicacionUsuario } from './utils/useUbicacion';
 import { cantidadInterna, cantidadVisible } from './utils/cantidadProducto';
 import { useLanguage } from './LanguageContext';
+import { precioConIva, precioSinIva, precioVentaConIva, margenDesdeVentaConIva, parseIvaPct } from './utils/preciosIva';
 
 export default function GestorCompras({ vistaInicial = 'lista' }) {
   const { t, locale } = useLanguage();
@@ -95,6 +96,12 @@ export default function GestorCompras({ vistaInicial = 'lista' }) {
   const [precioCompraConIvaProdNuevo, setPrecioCompraConIvaProdNuevo] = useState('');
   const [margenProdNuevo, setMargenProdNuevo] = useState(25);
   const [precioVentaConIvaProdNuevo, setPrecioVentaConIvaProdNuevo] = useState('');
+
+  // Estados para productos tipo Combo del modal rápido
+  const [tipoProductoProdNuevo, setTipoProductoProdNuevo] = useState('Individual');
+  const [comboProductosProdNuevo, setComboProductosProdNuevo] = useState([]);
+  const [busquedaComboProdNuevo, setBusquedaComboProdNuevo] = useState('');
+  const [filtradosComboProdNuevo, setFiltradosComboProdNuevo] = useState([]);
   const [marcasDisponibles, setMarcasDisponibles] = useState([]);
   const [unidadesDisponibles, setUnidadesDisponibles] = useState([]);
   const [guardandoProducto, setGuardandoProducto] = useState(false);
@@ -222,17 +229,17 @@ export default function GestorCompras({ vistaInicial = 'lista' }) {
 
   const seleccionarProducto = (producto) => {
     if (itemsCompra.find(item => item.id === producto.id)) { notificar.info('Producto ya agregado.'); return; }
+    const ivaPct = parseIvaPct(producto.iva);
+    const costoFactura = producto.precio_compra ? precioConIva(Number(producto.precio_compra), ivaPct) : 0;
     setItemsCompra([...itemsCompra, { 
       id: producto.id, 
       nombre: producto.nombre, 
       codigo: producto.codigo || 'S/N', 
       unidad: producto.unidad || 'UNID',
       cantidad: 1, 
-      iva: 'IVA 10%', 
-      costo: producto.precio_compra || 0, 
-      subtotal: producto.precio_compra || 0, 
-      margin: 25, 
-      precio_venta: producto.precio_venta || 0,
+      iva: producto.iva || 'IVA 10%', 
+      costo: costoFactura,
+      subtotal: costoFactura,
       fecha_caducidad: ''
     }]);
     setBusquedaProd(''); setFiltrados([]);
@@ -358,19 +365,23 @@ export default function GestorCompras({ vistaInicial = 'lista' }) {
     setImeiProdNuevo(false); setNoVenderProdNuevo(false);
     setCampoPersonalizado1(''); setCampoPersonalizado2(''); setCampoPersonalizado3(''); setCampoPersonalizado4('');
     setPrecioCompraSinIvaProdNuevo(''); setPrecioCompraConIvaProdNuevo(''); setMargenProdNuevo(25); setPrecioVentaConIvaProdNuevo('');
+    setTipoProductoProdNuevo('Individual');
+    setComboProductosProdNuevo([]);
+    setBusquedaComboProdNuevo('');
+    setFiltradosComboProdNuevo([]);
   };
 
   const handlePrecioCompraSinIvaProdNuevo = (valor) => {
     setPrecioCompraSinIvaProdNuevo(valor);
     const base = Number(valor) || 0;
-    setPrecioCompraConIvaProdNuevo(base ? (base * (1 + ivaPctProdNuevo / 100)).toFixed(0) : '');
+    setPrecioCompraConIvaProdNuevo(base ? precioConIva(base, ivaPctProdNuevo).toFixed(0) : '');
     recalcularVentaProdNuevo(base, margenProdNuevo);
   };
 
   const handlePrecioCompraConIvaProdNuevo = (valor) => {
     setPrecioCompraConIvaProdNuevo(valor);
     const conIva = Number(valor) || 0;
-    const sinIva = conIva ? conIva / (1 + ivaPctProdNuevo / 100) : 0;
+    const sinIva = conIva ? precioSinIva(conIva, ivaPctProdNuevo) : 0;
     setPrecioCompraSinIvaProdNuevo(sinIva ? sinIva.toFixed(0) : '');
     recalcularVentaProdNuevo(sinIva, margenProdNuevo);
   };
@@ -381,18 +392,16 @@ export default function GestorCompras({ vistaInicial = 'lista' }) {
   };
 
   const recalcularVentaProdNuevo = (compraSinIva, margen) => {
-    const ventaSinIva = compraSinIva * (1 + margen / 100);
-    const ventaConIva = ventaSinIva * (1 + ivaPctProdNuevo / 100);
+    const ventaConIva = precioVentaConIva(compraSinIva, margen, ivaPctProdNuevo);
     setPrecioVentaConIvaProdNuevo(ventaConIva ? ventaConIva.toFixed(0) : '');
   };
 
   const handlePrecioVentaConIvaProdNuevo = (valor) => {
     setPrecioVentaConIvaProdNuevo(valor);
     const ventaConIva = Number(valor) || 0;
-    const ventaSinIva = ventaConIva / (1 + ivaPctProdNuevo / 100);
     const compraSinIva = Number(precioCompraSinIvaProdNuevo) || 0;
     if (compraSinIva > 0) {
-      const nuevoMargen = ((ventaSinIva - compraSinIva) / compraSinIva) * 100;
+      const nuevoMargen = margenDesdeVentaConIva(compraSinIva, ventaConIva, ivaPctProdNuevo);
       setMargenProdNuevo(nuevoMargen.toFixed(1));
     }
   };
@@ -400,10 +409,55 @@ export default function GestorCompras({ vistaInicial = 'lista' }) {
   const handleIvaPctProdNuevo = (nuevoIva) => {
     setIvaPctProdNuevo(nuevoIva);
     const base = Number(precioCompraSinIvaProdNuevo) || 0;
-    setPrecioCompraConIvaProdNuevo(base ? (base * (1 + nuevoIva / 100)).toFixed(0) : '');
-    const ventaSinIva = base * (1 + margenProdNuevo / 100);
-    setPrecioVentaConIvaProdNuevo(ventaSinIva ? (ventaSinIva * (1 + nuevoIva / 100)).toFixed(0) : '');
+    setPrecioCompraConIvaProdNuevo(base ? precioConIva(base, nuevoIva).toFixed(0) : '');
+    const ventaConIva = precioVentaConIva(base, margenProdNuevo, nuevoIva);
+    setPrecioVentaConIvaProdNuevo(ventaConIva ? ventaConIva.toFixed(0) : '');
   };
+
+  // --- FUNCIONES Y EFECTO PARA PRODUCTOS COMBO DEL MODAL RÁPIDO ---
+  const manejarBusquedaComboProdNuevo = (texto) => {
+    setBusquedaComboProdNuevo(texto);
+    if (texto.trim() === '') {
+      setFiltradosComboProdNuevo([]);
+      return;
+    }
+    const query = texto.toLowerCase();
+    setFiltradosComboProdNuevo(
+      productos.filter((p) => {
+        return p.nombre.toLowerCase().includes(query) || (p.codigo && p.codigo.toLowerCase().includes(query));
+      }).slice(0, 5)
+    );
+  };
+
+  const agregarProductoAlComboProdNuevo = (prod) => {
+    if (comboProductosProdNuevo.find((item) => item.id === prod.id)) {
+      notificar.info('Este producto ya fue agregado al combo.');
+      return;
+    }
+    setComboProductosProdNuevo([
+      ...comboProductosProdNuevo,
+      {
+        id: prod.id,
+        nombre: prod.nombre,
+        cantidad: 1,
+        unidad: prod.unidad || 'UNID',
+        precio_compra: prod.precio_compra || 0,
+      },
+    ]);
+    setBusquedaComboProdNuevo('');
+    setFiltradosComboProdNuevo([]);
+  };
+
+  useEffect(() => {
+    if (tipoProductoProdNuevo === 'Combo') {
+      const totalSinIva = comboProductosProdNuevo.reduce((sum, item) => sum + (Number(item.precio_compra) || 0) * (Number(item.cantidad) || 0), 0);
+      setPrecioCompraSinIvaProdNuevo(totalSinIva);
+      setPrecioCompraConIvaProdNuevo(precioConIva(totalSinIva, ivaPctProdNuevo).toFixed(0));
+      
+      const ventaConIva = precioVentaConIva(totalSinIva, margenProdNuevo, ivaPctProdNuevo);
+      setPrecioVentaConIvaProdNuevo(ventaConIva ? ventaConIva.toFixed(0) : '');
+    }
+  }, [comboProductosProdNuevo, tipoProductoProdNuevo, ivaPctProdNuevo, margenProdNuevo]);
 
   const guardarProductoNuevo = async (e) => {
     e.preventDefault();
@@ -429,7 +483,8 @@ export default function GestorCompras({ vistaInicial = 'lista' }) {
         stock_actual: 0,
         iva: `IVA ${ivaPctProdNuevo}%`,
         tipo_impuesto: tipoImpuestoProdNuevo,
-        tipo_producto: 'Individual',
+        tipo_producto: tipoProductoProdNuevo,
+        combo_productos: tipoProductoProdNuevo === 'Combo' ? comboProductosProdNuevo : null,
       };
 
       const { data, error } = await supabase.from('productos').insert([{ ...nuevoProducto, empresa_id: empresaId }]).select();
@@ -439,6 +494,7 @@ export default function GestorCompras({ vistaInicial = 'lista' }) {
       setProductos((prev) => [...prev, productoGuardado]);
 
       // Lo agregamos automáticamente a la grilla de la compra actual
+      const costoFactura = Number(precioCompraConIvaProdNuevo) || 0;
       setItemsCompra((prev) => [...prev, {
         id: productoGuardado.id,
         nombre: productoGuardado.nombre,
@@ -446,8 +502,8 @@ export default function GestorCompras({ vistaInicial = 'lista' }) {
         cantidad: 1,
         unidad: productoGuardado.unidad || 'UNID',
         iva: `IVA ${ivaPctProdNuevo}%`,
-        costo: Number(precioCompraConIvaProdNuevo) || 0,
-        subtotal: Number(precioCompraConIvaProdNuevo) || 0,
+        costo: costoFactura,
+        subtotal: costoFactura,
         margin: Number(margenProdNuevo) || 25,
         precio_venta: Number(precioVentaConIvaProdNuevo) || 0,
         fecha_caducidad: '',
@@ -1195,15 +1251,25 @@ export default function GestorCompras({ vistaInicial = 'lista' }) {
                     <option>No incluido</option>
                   </select>
                 </div>
-                <div className="flex items-center gap-2 mb-2">
-                  <input type="checkbox" checked={imeiProdNuevo} onChange={(e) => setImeiProdNuevo(e.target.checked)} />
-                  <label className="font-bold text-gray-700">Habilitar IMEI o número de serie ℹ️</label>
+                <div>
+                  <label className="block font-bold text-gray-700 mb-1">Tipo de producto:*</label>
+                  <select className="w-full border rounded p-2 bg-white outline-none" value={tipoProductoProdNuevo} onChange={(e) => setTipoProductoProdNuevo(e.target.value)}>
+                    <option value="Individual">Individual</option>
+                    <option value="Combo">Combo</option>
+                    <option value="Servicio">Servicio</option>
+                  </select>
                 </div>
               </div>
 
-              <div className="flex items-center gap-2 mb-4">
-                <input type="checkbox" checked={noVenderProdNuevo} onChange={(e) => setNoVenderProdNuevo(e.target.checked)} />
-                <label className="font-bold text-gray-700">No para vender ℹ️</label>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4 items-center">
+                <div className="flex items-center gap-2">
+                  <input type="checkbox" checked={imeiProdNuevo} onChange={(e) => setImeiProdNuevo(e.target.checked)} />
+                  <label className="font-bold text-gray-700">Habilitar IMEI o número de serie ℹ️</label>
+                </div>
+                <div className="flex items-center gap-2">
+                  <input type="checkbox" checked={noVenderProdNuevo} onChange={(e) => setNoVenderProdNuevo(e.target.checked)} />
+                  <label className="font-bold text-gray-700">No para vender ℹ️</label>
+                </div>
               </div>
 
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
@@ -1225,32 +1291,181 @@ export default function GestorCompras({ vistaInicial = 'lista' }) {
                 </div>
               </div>
 
-              <div className="border rounded-lg overflow-hidden mb-2">
-                <div className="grid grid-cols-3 text-white font-bold">
-                  <div className="bg-green-600 px-3 py-2">Precio de compra predeterminado</div>
-                  <div className="bg-green-600 px-3 py-2 border-l border-green-500">x Margen (%) ℹ️</div>
-                  <div className="bg-green-600 px-3 py-2 border-l border-green-500">Precio de venta predeterminado</div>
-                </div>
-                <div className="grid grid-cols-3 gap-4 p-4 bg-white">
-                  <div className="grid grid-cols-2 gap-2">
+              {tipoProductoProdNuevo === 'Combo' ? (
+                <div className="flex flex-col gap-4 mb-4 border rounded-lg p-4 bg-gray-50/50">
+                  <h4 className="font-bold text-[#004284] text-xs uppercase tracking-wider">📦 Componentes del Combo</h4>
+                  {/* Buscador de sub-productos */}
+                  <div className="relative">
+                    <span className="absolute inset-y-0 left-0 pl-3 flex items-center text-gray-400">🔍</span>
+                    <input
+                      type="text"
+                      className="w-full pl-9 border rounded p-2 outline-none focus:border-blue-500 bg-white"
+                      placeholder="Introduzca el nombre del producto / SKU / código de barras de escaneo"
+                      value={busquedaComboProdNuevo}
+                      onChange={(e) => manejarBusquedaComboProdNuevo(e.target.value)}
+                    />
+                    {filtradosComboProdNuevo.length > 0 && (
+                      <div className="absolute z-50 left-0 right-0 mt-1 bg-white border border-gray-300 rounded shadow-lg max-h-60 overflow-y-auto">
+                        {filtradosComboProdNuevo.map((prod) => (
+                          <div
+                            key={prod.id}
+                            onClick={() => agregarProductoAlComboProdNuevo(prod)}
+                            className="p-2.5 hover:bg-blue-50 cursor-pointer border-b last:border-0 flex justify-between items-center text-xs"
+                          >
+                            <div>
+                              <span className="font-semibold text-gray-700">{prod.nombre}</span>
+                              {prod.codigo && <span className="text-xs text-gray-400 ml-2">({prod.codigo})</span>}
+                            </div>
+                            <span className="font-bold text-blue-600">
+                              {Number(prod.precio_compra || 0).toLocaleString('es-PY')} Gs
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Grilla de productos agregados */}
+                  <div className="border border-gray-200 rounded-lg overflow-hidden bg-white">
+                    <table className="w-full text-left text-xs border-collapse">
+                      <thead>
+                        <tr className="bg-gray-50 text-gray-500 font-bold border-b border-gray-200">
+                          <th className="p-3 uppercase">Nombre del Producto</th>
+                          <th className="p-3 uppercase w-28 text-center">Cantidad</th>
+                          <th className="p-3 uppercase text-right w-36">Precio de Compra</th>
+                          <th className="p-3 uppercase text-right w-36">Importe Total</th>
+                          <th className="p-3 text-center w-12"></th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {comboProductosProdNuevo.length === 0 ? (
+                          <tr>
+                            <td colSpan="5" className="p-6 text-center text-gray-400 italic">
+                              Ningún producto agregado al combo. Utilice el buscador de arriba.
+                            </td>
+                          </tr>
+                        ) : (
+                          comboProductosProdNuevo.map((item) => {
+                            const totalSinImpuesto = (Number(item.precio_compra) || 0) * (Number(item.cantidad) || 0);
+                            return (
+                              <tr key={item.id} className="border-b border-gray-100 hover:bg-gray-50">
+                                <td className="p-3 font-medium text-gray-800">{item.nombre}</td>
+                                <td className="p-3 text-center">
+                                  <div className="flex items-center justify-center gap-1">
+                                    <input
+                                      type="number"
+                                      min="1"
+                                      className="w-12 border rounded p-1 text-xs text-center outline-none focus:border-blue-500"
+                                      value={item.cantidad}
+                                      onChange={(e) => {
+                                        const val = Number(e.target.value);
+                                        setComboProductosProdNuevo((prev) =>
+                                          prev.map((p) => (p.id === item.id ? { ...p, cantidad: val > 0 ? val : 1 } : p))
+                                        );
+                                      }}
+                                    />
+                                    <select
+                                      className="border rounded p-1 text-[10px] bg-white outline-none focus:border-blue-500 font-medium"
+                                      value={item.unidad}
+                                      onChange={(e) => {
+                                        const val = e.target.value;
+                                        setComboProductosProdNuevo((prev) =>
+                                          prev.map((p) => (p.id === item.id ? { ...p, unidad: val } : p))
+                                        );
+                                      }}
+                                    >
+                                      <option value="UNID">UNID</option>
+                                      {unidadesDisponibles.map((u) => (
+                                        <option key={u.id} value={u.nombre}>{u.nombre}</option>
+                                      ))}
+                                    </select>
+                                  </div>
+                                </td>
+                                <td className="p-3 text-right text-gray-600 font-semibold">
+                                  {Number(item.precio_compra || 0).toLocaleString('es-PY')} Gs
+                                </td>
+                                <td className="p-3 text-right text-gray-800 font-bold">
+                                  {totalSinImpuesto.toLocaleString('es-PY')} Gs
+                                </td>
+                                <td className="p-3 text-center">
+                                  <button
+                                    type="button"
+                                    onClick={() => setComboProductosProdNuevo((prev) => prev.filter((p) => p.id !== item.id))}
+                                    className="text-red-500 hover:text-red-700 text-sm font-bold outline-none"
+                                  >
+                                    ✕
+                                  </button>
+                                </td>
+                              </tr>
+                            );
+                          })
+                        )}
+                      </tbody>
+                      {comboProductosProdNuevo.length > 0 && (
+                        <tfoot>
+                          <tr className="bg-gray-50 border-t font-bold text-gray-700">
+                            <td colSpan="3" className="p-3 text-right uppercase">Total a Pagar con IVA:</td>
+                            <td className="p-3 text-right text-blue-600 font-extrabold">
+                              {Number(precioCompraConIvaProdNuevo || 0).toLocaleString('es-PY')} Gs
+                            </td>
+                            <td></td>
+                          </tr>
+                        </tfoot>
+                      )}
+                    </table>
+                  </div>
+
+                  {/* Controles de margen y precio de venta */}
+                  <div className="grid grid-cols-2 gap-4">
                     <div>
-                      <label className="block text-[10px] font-bold text-gray-500 mb-1">IVA no incluido:*</label>
-                      <input type="number" className="w-full border rounded p-2 outline-none focus:border-blue-500" placeholder="IVA no incluido" value={precioCompraSinIvaProdNuevo} onChange={(e) => handlePrecioCompraSinIvaProdNuevo(e.target.value)} />
+                      <label className="block text-xs font-bold text-gray-500 mb-1">x Margen (%):</label>
+                      <input
+                        type="number"
+                        className="w-full border rounded p-2 outline-none focus:border-blue-500 bg-white"
+                        value={margenProdNuevo}
+                        onChange={(e) => handleMargenProdNuevo(e.target.value)}
+                      />
                     </div>
                     <div>
-                      <label className="block text-[10px] font-bold text-gray-500 mb-1">IVA incluido:*</label>
-                      <input type="number" className="w-full border rounded p-2 outline-none focus:border-blue-500" placeholder="IVA incluido" value={precioCompraConIvaProdNuevo} onChange={(e) => handlePrecioCompraConIvaProdNuevo(e.target.value)} />
+                      <label className="block text-xs font-bold text-gray-500 mb-1">Precio de venta predeterminado:</label>
+                      <input
+                        type="number"
+                        className="w-full border rounded p-2 font-bold text-green-700 bg-white outline-none focus:border-blue-500"
+                        placeholder="Precio de venta"
+                        value={precioVentaConIvaProdNuevo}
+                        onChange={(e) => handlePrecioVentaConIvaProdNuevo(e.target.value)}
+                      />
                     </div>
                   </div>
-                  <div>
-                    <input type="number" className="w-full border rounded p-2 outline-none focus:border-blue-500" value={margenProdNuevo} onChange={(e) => handleMargenProdNuevo(e.target.value)} />
+                </div>
+              ) : (
+                <div className="border rounded-lg overflow-hidden mb-2">
+                  <div className="grid grid-cols-3 text-white font-bold">
+                    <div className="bg-green-600 px-3 py-2">Precio de compra predeterminado</div>
+                    <div className="bg-green-600 px-3 py-2 border-l border-green-500">x Margen (%) ℹ️</div>
+                    <div className="bg-green-600 px-3 py-2 border-l border-green-500">Precio de venta predeterminado</div>
                   </div>
-                  <div>
-                    <label className="block text-[10px] font-bold text-gray-500 mb-1">IVA no incluido</label>
-                    <input type="number" className="w-full border rounded p-2 outline-none focus:border-blue-500 font-bold text-green-700" placeholder="Precio de venta" value={precioVentaConIvaProdNuevo} onChange={(e) => handlePrecioVentaConIvaProdNuevo(e.target.value)} />
+                  <div className="grid grid-cols-3 gap-4 p-4 bg-white">
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <label className="block text-[10px] font-bold text-gray-500 mb-1">IVA no incluido:*</label>
+                        <input type="number" className="w-full border rounded p-2 outline-none focus:border-blue-500" placeholder="IVA no incluido" value={precioCompraSinIvaProdNuevo} onChange={(e) => handlePrecioCompraSinIvaProdNuevo(e.target.value)} />
+                      </div>
+                      <div>
+                        <label className="block text-[10px] font-bold text-gray-500 mb-1">IVA incluido:*</label>
+                        <input type="number" className="w-full border rounded p-2 outline-none focus:border-blue-500" placeholder="IVA incluido" value={precioCompraConIvaProdNuevo} onChange={(e) => handlePrecioCompraConIvaProdNuevo(e.target.value)} />
+                      </div>
+                    </div>
+                    <div>
+                      <input type="number" className="w-full border rounded p-2 outline-none focus:border-blue-500" value={margenProdNuevo} onChange={(e) => handleMargenProdNuevo(e.target.value)} />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-bold text-gray-500 mb-1">IVA no incluido</label>
+                      <input type="number" className="w-full border rounded p-2 outline-none focus:border-blue-500 font-bold text-green-700" placeholder="Precio de venta" value={precioVentaConIvaProdNuevo} onChange={(e) => handlePrecioVentaConIvaProdNuevo(e.target.value)} />
+                    </div>
                   </div>
                 </div>
-              </div>
+              )}
             </form>
 
             <div className="px-6 py-4 border-t bg-gray-50 flex justify-end gap-3">

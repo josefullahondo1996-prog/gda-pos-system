@@ -59,6 +59,11 @@ const PuntoDeVenta = ({ cajaInfo, session, perfilUsuario, onVolver, onSolicitarC
   const [metodoPago, setMetodoPago] = useState('Efectivo');
   const [montoPagado, setMontoPagado] = useState('');
 
+  // Controla qué combos del carrito tienen su composición visible
+  const [combosExpandidos, setCombosExpandidos] = useState({});
+  const toggleComboExpandido = (id) =>
+    setCombosExpandidos((prev) => ({ ...prev, [id]: !prev[id] }));
+
   // === CAMPOS EXTRA (Descuento / Embalaje / Nota) ===
   const [mostrarOpciones, setMostrarOpciones] = useState(false);
   const [mostrarGastos, setMostrarGastos] = useState(false);
@@ -331,16 +336,65 @@ const PuntoDeVenta = ({ cajaInfo, session, perfilUsuario, onVolver, onSolicitarC
           .eq('stock_actual', stockAntes);
       }
 
+      // Para productos tipo Combo, descontamos también el stock de cada sub-componente
+      // según la cantidad de combos vendidos. Usamos el mismo patrón optimista
+      // (leemos stock actual, solo escribimos si no cambió) para evitar doble descuento.
+      const itemsCombo = carrito.filter(
+        (item) => item.tipo_producto === 'Combo' && Array.isArray(item.combo_productos) && item.combo_productos.length > 0
+      );
+      for (const itemCombo of itemsCombo) {
+        const cantidadCombosVendidos = Number(itemCombo.cantidad) || 1;
+        for (const comp of itemCombo.combo_productos) {
+          const subProductoId = comp.id || comp.producto_id;
+          const cantidadPorCombo = Number(comp.cantidad) || 1;
+          const cantidadTotalADescontar = cantidadPorCombo * cantidadCombosVendidos;
+
+          // Leemos el stock actual del sub-componente
+          const { data: subProductoActual } = await supabase
+            .from('productos')
+            .select('stock_actual')
+            .eq('id', subProductoId)
+            .eq('empresa_id', empresaId)
+            .single();
+
+          const stockSubAntes = Number(subProductoActual?.stock_actual);
+          if (!Number.isFinite(stockSubAntes)) continue;
+
+          // Descontamos con bloqueo optimista (solo si el stock no cambió entretanto)
+          await supabase
+            .from('productos')
+            .update({ stock_actual: Math.max(0, stockSubAntes - cantidadTotalADescontar) })
+            .eq('id', subProductoId)
+            .eq('empresa_id', empresaId)
+            .eq('stock_actual', stockSubAntes);
+        }
+      }
+
       window.dispatchEvent(new Event('stock-actualizado'));
 
       // Reflejamos el nuevo stock en la grilla al instante, sin esperar a recargar la página
-      setProductos((prev) =>
-        prev.map((p) => {
+      setProductos((prev) => {
+        let updated = prev.map((p) => {
           const vendido = carrito.find((item) => item.id === p.id);
           if (!vendido || p.stock_actual === null || p.stock_actual === undefined) return p;
           return { ...p, stock_actual: Math.max(0, p.stock_actual - vendido.cantidad) };
-        })
-      );
+        });
+
+        // También actualizar en la grilla el stock de los sub-componentes de combos
+        for (const itemCombo of itemsCombo) {
+          const cantidadCombosVendidos = Number(itemCombo.cantidad) || 1;
+          for (const comp of itemCombo.combo_productos) {
+            const subProductoId = comp.id || comp.producto_id;
+            const cantidadTotalADescontar = (Number(comp.cantidad) || 1) * cantidadCombosVendidos;
+            updated = updated.map((p) => {
+              if (p.id !== subProductoId || p.stock_actual === null || p.stock_actual === undefined) return p;
+              return { ...p, stock_actual: Math.max(0, p.stock_actual - cantidadTotalADescontar) };
+            });
+          }
+        }
+
+        return updated;
+      });
 
       sonidoExito();
       const clienteData = clientesDisponibles.find(
@@ -615,56 +669,91 @@ const PuntoDeVenta = ({ cajaInfo, session, perfilUsuario, onVolver, onSolicitarC
                 ) : (
                   carrito.map((item) => {
                     const precio = item.precio_venta || item.precio || 0;
+                    const esCombo = item.tipo_producto === 'Combo' && Array.isArray(item.combo_productos) && item.combo_productos.length > 0;
+                    const expandido = combosExpandidos[item.id];
                     return (
-                      <tr key={item.id} className="border-b border-gray-200 even:bg-white odd:bg-gray-50/70 hover:bg-orange-50">
-                        <td className="py-3 pr-2 font-medium text-gray-800 min-w-[190px]">
-                          <div className="flex items-center gap-2 min-w-0">
-                            <div className="w-9 h-9 rounded bg-white border border-gray-200 flex-shrink-0 flex items-center justify-center overflow-hidden shadow-sm">
-                              {item.imagen_url ? (
-                                <img src={item.imagen_url} alt={item.nombre} className="w-full h-full object-cover" />
-                              ) : (
-                                <span className="text-xs text-gray-300">📦</span>
-                              )}
+                      <React.Fragment key={item.id}>
+                        <tr className="border-b border-gray-200 even:bg-white odd:bg-gray-50/70 hover:bg-orange-50">
+                          <td className="py-3 pr-2 font-medium text-gray-800 min-w-[190px]">
+                            <div className="flex items-center gap-2 min-w-0">
+                              <div className="w-9 h-9 rounded bg-white border border-gray-200 flex-shrink-0 flex items-center justify-center overflow-hidden shadow-sm">
+                                {item.imagen_url ? (
+                                  <img src={item.imagen_url} alt={item.nombre} className="w-full h-full object-cover" />
+                                ) : (
+                                  <span className="text-xs text-gray-300">{esCombo ? '🎁' : '📦'}</span>
+                                )}
+                              </div>
+                              <div className="min-w-0">
+                                <span className="leading-tight line-clamp-2 break-words" title={item.nombre}>{item.nombre}</span>
+                                {esCombo && (
+                                  <button
+                                    onClick={() => toggleComboExpandido(item.id)}
+                                    className="mt-0.5 flex items-center gap-1 text-[10px] font-bold text-orange-500 hover:text-orange-700"
+                                  >
+                                    <span className="bg-orange-100 text-orange-600 px-1.5 py-0.5 rounded-full">COMBO</span>
+                                    <span>{expandido ? '▲ ocultar' : '▼ ver contenido'}</span>
+                                  </button>
+                                )}
+                              </div>
                             </div>
-                            <span className="leading-tight line-clamp-2 break-words" title={item.nombre}>{item.nombre}</span>
-                          </div>
-                        </td>
-                        <td className="py-3 px-1 text-center whitespace-nowrap">
-                          <div className="inline-flex items-center gap-1">
-                            <button onClick={() => cambiarCantidad(item.id, item.cantidad - pasoCantidad(item.unidad))} className="bg-gray-100 w-6 h-6 rounded text-gray-600 font-bold hover:bg-gray-200">-</button>
+                          </td>
+                          <td className="py-3 px-1 text-center whitespace-nowrap">
+                            <div className="inline-flex items-center gap-1">
+                              <button onClick={() => cambiarCantidad(item.id, item.cantidad - pasoCantidad(item.unidad))} className="bg-gray-100 w-6 h-6 rounded text-gray-600 font-bold hover:bg-gray-200">-</button>
+                              <input
+                                type="number"
+                                min={pasoVisible(item.unidad)}
+                                step={pasoVisible(item.unidad)}
+                                value={cantidadVisible(item.cantidad, item.unidad)}
+                                onChange={(e) => cambiarCantidad(item.id, cantidadInterna(e.target.value, item.unidad))}
+                                className="w-16 text-center border border-gray-200 rounded px-1 py-0.5"
+                                aria-label={`Cantidad de ${item.nombre} en ${etiquetaCantidad(item.unidad)}`}
+                              />
+                              <span className="text-[10px] text-gray-400">{etiquetaCantidad(item.unidad)}</span>
+                              <button onClick={() => cambiarCantidad(item.id, item.cantidad + pasoCantidad(item.unidad))} className="bg-gray-100 w-6 h-6 rounded text-gray-600 font-bold hover:bg-gray-200">+</button>
+                            </div>
+                          </td>
+                          <td className="py-3 px-1 text-right whitespace-nowrap">
                             <input
                               type="number"
-                              min={pasoVisible(item.unidad)}
-                              step={pasoVisible(item.unidad)}
-                              value={cantidadVisible(item.cantidad, item.unidad)}
-                              onChange={(e) => cambiarCantidad(item.id, cantidadInterna(e.target.value, item.unidad))}
-                              className="w-16 text-center border border-gray-200 rounded px-1 py-0.5"
-                              aria-label={`Cantidad de ${item.nombre} en ${etiquetaCantidad(item.unidad)}`}
+                              value={precio}
+                              onChange={(e) => cambiarPrecioUnitario(item.id, e.target.value)}
+                              className="w-24 text-right border border-gray-200 rounded px-1.5 py-1 text-gray-700 focus:outline-none focus:ring-1 focus:ring-orange-400"
                             />
-                            <span className="text-[10px] text-gray-400">{etiquetaCantidad(item.unidad)}</span>
-                            <button onClick={() => cambiarCantidad(item.id, item.cantidad + pasoCantidad(item.unidad))} className="bg-gray-100 w-6 h-6 rounded text-gray-600 font-bold hover:bg-gray-200">+</button>
-                          </div>
-                        </td>
-                        <td className="py-3 px-1 text-right whitespace-nowrap">
-                          <input
-                            type="number"
-                            value={precio}
-                            onChange={(e) => cambiarPrecioUnitario(item.id, e.target.value)}
-                            className="w-24 text-right border border-gray-200 rounded px-1.5 py-1 text-gray-700 focus:outline-none focus:ring-1 focus:ring-orange-400"
-                          />
-                        </td>
-                        <td className="py-3 px-1 text-right whitespace-nowrap">
-                          <input
-                            type="number"
-                            value={(precio * item.cantidad).toFixed(0)}
-                            onChange={(e) => cambiarSubtotalManual(item.id, e.target.value)}
-                            className="w-24 text-right border border-gray-200 rounded px-1.5 py-1 font-bold text-gray-800 focus:outline-none focus:ring-1 focus:ring-orange-400"
-                          />
-                        </td>
-                        <td className="py-3 pl-2 text-center whitespace-nowrap">
-                          <button onClick={() => eliminarDelCarrito(item.id)} className="text-red-400 hover:text-red-600 font-bold">✕</button>
-                        </td>
-                      </tr>
+                          </td>
+                          <td className="py-3 px-1 text-right whitespace-nowrap">
+                            <input
+                              type="number"
+                              value={(precio * item.cantidad).toFixed(0)}
+                              onChange={(e) => cambiarSubtotalManual(item.id, e.target.value)}
+                              className="w-24 text-right border border-gray-200 rounded px-1.5 py-1 font-bold text-gray-800 focus:outline-none focus:ring-1 focus:ring-orange-400"
+                            />
+                          </td>
+                          <td className="py-3 pl-2 text-center whitespace-nowrap">
+                            <button onClick={() => eliminarDelCarrito(item.id)} className="text-red-400 hover:text-red-600 font-bold">✕</button>
+                          </td>
+                        </tr>
+
+                        {/* Fila de detalle del Combo (visible solo cuando está expandido) */}
+                        {esCombo && expandido && (
+                          <tr className="bg-orange-50/60 border-b border-orange-100">
+                            <td colSpan={5} className="px-4 pb-3 pt-1">
+                              <p className="text-[10px] font-bold text-orange-600 mb-1.5 uppercase tracking-wide">📋 Contenido del combo:</p>
+                              <div className="flex flex-col gap-1">
+                                {item.combo_productos.map((comp, idx) => (
+                                  <div key={idx} className="flex items-center gap-2 text-xs text-gray-700">
+                                    <span className="w-5 h-5 bg-orange-200 text-orange-700 rounded-full flex items-center justify-center font-bold text-[10px] flex-shrink-0">
+                                      {Number(comp.cantidad) || 1}
+                                    </span>
+                                    <span className="font-medium">{comp.nombre}</span>
+                                    {comp.unidad && <span className="text-gray-400 text-[10px]">({comp.unidad})</span>}
+                                  </div>
+                                ))}
+                              </div>
+                            </td>
+                          </tr>
+                        )}
+                      </React.Fragment>
                     );
                   })
                 )}
