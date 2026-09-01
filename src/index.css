@@ -20,6 +20,28 @@ body {
   background: #f8fafc;
   overflow: hidden; /* Evita scrolls raros */
   overscroll-behavior-y: contain; /* Evita recarga por deslizamiento */
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* El texto no debe duplicarse ni aplicar sombras/outline artificiales globales. */
+body,
+button,
+input,
+select,
+textarea,
+span,
+p,
+h1,
+h2,
+h3,
+h4,
+h5,
+h6,
+div {
+  text-shadow: none !important;
+  -webkit-text-stroke: 0 !important;
 }
 
 /* ============================================================
