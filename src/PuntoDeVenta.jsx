@@ -3,6 +3,7 @@ import GastosDelTurno from './GastosDelTurno';
 import DetalleCaja from './DetalleCaja';
 import NuevoClientePOS from './NuevoClientePOS';
 import ModalPagoMultiple from './ModalPagoMultiple';
+import AgregarProducto from './AgregarProducto';
 import React, { useState, useEffect, useMemo } from 'react';
 import { supabase } from './supabaseClient';
 import jsPDF from 'jspdf';
@@ -44,6 +45,7 @@ const PuntoDeVenta = ({ cajaInfo, session, perfilUsuario, onVolver, onSolicitarC
   const [mostrarCierreCaja, setMostrarCierreCaja] = useState(false);
   const [mostrarNuevoCliente, setMostrarNuevoCliente] = useState(false);
   const [mostrarPagoMultiple, setMostrarPagoMultiple] = useState(false);
+  const [mostrarFormularioProducto, setMostrarFormularioProducto] = useState(false);
   const [cuentasCaja, setCuentasCaja] = useState([]);
   const [clientesDisponibles, setClientesDisponibles] = useState([]);
   const [personalServicio, setPersonalServicio] = useState('');
@@ -58,6 +60,53 @@ const PuntoDeVenta = ({ cajaInfo, session, perfilUsuario, onVolver, onSolicitarC
   const [cliente, setCliente] = useState('Cliente Ocasional');
   const [metodoPago, setMetodoPago] = useState('Efectivo');
   const [montoPagado, setMontoPagado] = useState('');
+  const [monedaVenta, setMonedaVenta] = useState(() => {
+    if (typeof window === 'undefined') return 'PYG';
+    return localStorage.getItem('gda_moneda_venta') || 'PYG';
+  });
+  const [tasaReferencia, setTasaReferencia] = useState(() => {
+    if (typeof window === 'undefined') return 1;
+    const tasaGuardada = Number(localStorage.getItem('gda_tasa_referencia'));
+    return Number.isFinite(tasaGuardada) && tasaGuardada > 0 ? tasaGuardada : 1;
+  });
+  const [tasaCambio, setTasaCambio] = useState(() => {
+    if (typeof window === 'undefined') return 1;
+    const tasaGuardada = Number(localStorage.getItem('gda_tasa_cambio'));
+    return Number.isFinite(tasaGuardada) && tasaGuardada > 0 ? tasaGuardada : 1;
+  });
+  const [margenNegocio, setMargenNegocio] = useState(() => {
+    if (typeof window === 'undefined') return 0;
+    const margenGuardado = Number(localStorage.getItem('gda_margen_negocio'));
+    return Number.isFinite(margenGuardado) ? margenGuardado : 0;
+  });
+  const [cargandoTasa, setCargandoTasa] = useState(false);
+  const [tasaFuente, setTasaFuente] = useState('velocity');
+  const tasasFallback = {
+    PYG: 1,
+    USD: 7850,
+    EUR: 8790,
+    BRL: 1380,
+  };
+
+  const calcularTasaNegocio = (base, margen) => {
+    const tasaBase = Number(base) || 0;
+    const margenAplicado = Number(margen) || 0;
+    if (tasaBase <= 0) return 0;
+    return tasaBase * (1 + margenAplicado / 100);
+  };
+
+  const obtenerTasaDesdeApiVelocity = (moneda, data) => {
+    if (!data || !data.success || !data.rates) return null;
+    const rates = data.rates;
+    const mapa = {
+      PYG: Number(rates.PYG) || 1,
+      USD: Number(rates.PYG) || null,
+      EUR: Number(rates.EUR_PYG) || null,
+      BRL: Number(rates.BRL_PYG) || null,
+    };
+
+    return mapa[moneda] ?? null;
+  };
 
   // Controla qué combos del carrito tienen su composición visible
   const [combosExpandidos, setCombosExpandidos] = useState({});
@@ -79,6 +128,68 @@ const PuntoDeVenta = ({ cajaInfo, session, perfilUsuario, onVolver, onSolicitarC
     const timer = setInterval(() => setFechaHora(new Date()), 1000 * 30);
     return () => clearInterval(timer);
   }, []);
+
+  useEffect(() => {
+    if (monedaVenta === 'PYG') {
+      setTasaReferencia(1);
+      setTasaCambio(1);
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('gda_tasa_referencia', '1');
+        localStorage.setItem('gda_tasa_cambio', '1');
+        localStorage.setItem('gda_moneda_venta', 'PYG');
+      }
+      return;
+    }
+
+    let cancelado = false;
+    const cargarTasaCambio = async () => {
+      setCargandoTasa(true);
+      let tasaBase = tasasFallback[monedaVenta] || 1;
+
+      try {
+        const response = await fetch('https://velocity.com.py/api');
+        if (!response.ok) throw new Error('No se pudo actualizar la tasa');
+        const data = await response.json();
+        const valor = obtenerTasaDesdeApiVelocity(monedaVenta, data);
+
+        if (Number.isFinite(valor) && valor > 0) {
+          tasaBase = valor;
+          setTasaFuente(data?.source || 'velocity');
+        }
+      } catch (error) {
+        console.warn('Sincronización de cotización fallida, usando fallback:', error);
+      }
+
+      if (!cancelado) {
+        const tasaFinal = calcularTasaNegocio(tasaBase, margenNegocio);
+        setTasaReferencia(tasaBase);
+        setTasaCambio(tasaFinal);
+        if (typeof window !== 'undefined') {
+          localStorage.setItem('gda_tasa_referencia', String(tasaBase));
+          localStorage.setItem('gda_tasa_cambio', String(tasaFinal));
+          localStorage.setItem('gda_moneda_venta', monedaVenta);
+        }
+      }
+
+      if (!cancelado) setCargandoTasa(false);
+    };
+
+    cargarTasaCambio();
+    return () => { cancelado = true; };
+  }, [monedaVenta, tasaFuente, margenNegocio]);
+
+  useEffect(() => {
+    if (monedaVenta === 'PYG') {
+      setTasaCambio(1);
+      localStorage.setItem('gda_tasa_cambio', '1');
+      return;
+    }
+
+    const tasaFinal = calcularTasaNegocio(tasaReferencia, margenNegocio);
+    setTasaCambio(tasaFinal);
+    localStorage.setItem('gda_tasa_cambio', String(tasaFinal));
+    localStorage.setItem('gda_margen_negocio', String(margenNegocio));
+  }, [margenNegocio, monedaVenta, tasaReferencia]);
 
   useEffect(() => {
     const cargarClientes = async () => {
@@ -120,23 +231,24 @@ const PuntoDeVenta = ({ cajaInfo, session, perfilUsuario, onVolver, onSolicitarC
     cargarCuentasCaja();
   }, [empresaId]);
 
-  useEffect(() => {
-    const cargarProductos = async () => {
-      if (!empresaId) return;
-      setCargando(true);
-      try {
-          const { data, error } = await supabase.from('productos').select('*').eq('empresa_id', empresaId).order('nombre', { ascending: true });
+  const cargarProductos = async () => {
+    if (!empresaId) return;
+    setCargando(true);
+    try {
+      const { data, error } = await supabase.from('productos').select('*').eq('empresa_id', empresaId).order('nombre', { ascending: true });
 
-          if (error && error.code !== '42P01') throw error;
-          if (data) setProductos(data);
-        } catch (error) {
-          console.error('Error al cargar productos:', error.message);
-        } finally {
-          setCargando(false);
-        }
-      };
-      cargarProductos();
-    }, [empresaId]);
+      if (error && error.code !== '42P01') throw error;
+      if (data) setProductos(data);
+    } catch (error) {
+      console.error('Error al cargar productos:', error.message);
+    } finally {
+      setCargando(false);
+    }
+  };
+
+  useEffect(() => {
+    cargarProductos();
+  }, [empresaId]);
 
     useEffect(() => {
       if (!empresaId) return;
@@ -219,10 +331,31 @@ const PuntoDeVenta = ({ cajaInfo, session, perfilUsuario, onVolver, onSolicitarC
   const descuentoAplicado = Math.min(Math.max(0, Number(descuento) || 0), subtotal);
   const cargoEmbalajeAplicado = Math.max(0, Number(cargoEmbalaje) || 0);
   const totalConAjustes = Math.max(0, subtotal - descuentoAplicado + cargoEmbalajeAplicado);
-  const vuelto = Number(montoPagado) > totalConAjustes ? Number(montoPagado) - totalConAjustes : 0;
-  const saldoPendiente = Number(montoPagado) < totalConAjustes && Number(montoPagado) > 0
-    ? totalConAjustes - Number(montoPagado)
+  const formatMoneda = (valor, moneda = monedaVenta) => {
+    const numero = Number(valor || 0);
+    const simbolos = { PYG: 'Gs', USD: 'USD', EUR: 'EUR', BRL: 'R$' };
+    const decimals = moneda === 'PYG' ? 0 : 2;
+    const simbolo = simbolos[moneda] || moneda;
+    return `${simbolo} ${numero.toLocaleString('es-PY', { minimumFractionDigits: decimals, maximumFractionDigits: decimals })}`;
+  };
+  const convertirDesdeGs = (valorEnGs, monedaDestino = monedaVenta) => {
+    const valor = Number(valorEnGs || 0);
+    if (monedaDestino === 'PYG' || !Number.isFinite(tasaCambio) || tasaCambio <= 0) return valor;
+    return valor / tasaCambio;
+  };
+  const convertirAGs = (valorEnMoneda, monedaOrigen = monedaVenta) => {
+    const valor = Number(valorEnMoneda || 0);
+    if (monedaOrigen === 'PYG' || !Number.isFinite(tasaCambio) || tasaCambio <= 0) return valor;
+    return valor * tasaCambio;
+  };
+  const totalEnMoneda = convertirDesdeGs(totalConAjustes);
+  const montoPagadoEnGs = convertirAGs(Number(montoPagado) || 0);
+  const vuelto = montoPagadoEnGs > totalConAjustes ? montoPagadoEnGs - totalConAjustes : 0;
+  const saldoPendiente = montoPagadoEnGs < totalConAjustes && Number(montoPagado) > 0
+    ? totalConAjustes - montoPagadoEnGs
     : 0;
+  const vueltoEnMoneda = monedaVenta === 'PYG' ? vuelto : convertirDesdeGs(vuelto);
+  const saldoPendienteEnMoneda = monedaVenta === 'PYG' ? saldoPendiente : convertirDesdeGs(saldoPendiente);
 
   const procesarVenta = async (tipoOperacion = 'venta', datosPagoMultiple = null, metodoForzado = null, notaForzada = null) => {
     if (carrito.length === 0) return alert('El carrito está vacío');
@@ -230,7 +363,7 @@ const PuntoDeVenta = ({ cajaInfo, session, perfilUsuario, onVolver, onSolicitarC
     // Si viene del modal de Pago Múltiple, usamos esos valores; si no,
     // seguimos leyendo los mismos estados de siempre (montoPagado, metodoPago,
     // notaVenta) para no cambiar en nada el comportamiento de los botones existentes.
-    let montoPagadoFinal = datosPagoMultiple ? datosPagoMultiple.montoPagado : Number(montoPagado);
+    let montoPagadoFinal = datosPagoMultiple ? datosPagoMultiple.montoPagado : convertirAGs(Number(montoPagado) || 0);
     
     // Si el usuario hace clic en "COBRAR" (tipoOperacion 'venta') sin escribir un monto, 
     // asumimos que pagó el total exacto.
@@ -284,6 +417,10 @@ const PuntoDeVenta = ({ cajaInfo, session, perfilUsuario, onVolver, onSolicitarC
       descuento: descuentoAplicado,
       cargo_embalaje: cargoEmbalajeAplicado,
       nota_venta: notaVentaFinal || null,
+      moneda_venta: monedaVenta,
+      tasa_referencia: tasaReferencia,
+      margen_porcentaje: margenNegocio,
+      tasa_negocio: tasaCambio,
       fecha: new Date().toISOString(),
       caja_id: cajaInfo?.id || null,
       ubicacion_id: ubicacionActivaId,
@@ -606,6 +743,14 @@ const PuntoDeVenta = ({ cajaInfo, session, perfilUsuario, onVolver, onSolicitarC
             >
               +
             </button>
+            <button
+              type="button"
+              onClick={() => setMostrarFormularioProducto(true)}
+              className="bg-emerald-500 hover:bg-emerald-600 text-white rounded-lg px-3 h-9 flex items-center justify-center text-xs font-bold shadow-sm whitespace-nowrap"
+              title="Registrar nuevo producto"
+            >
+              + Producto
+            </button>
             <input
               type="text"
               placeholder={t('searchProductSku')}
@@ -668,7 +813,9 @@ const PuntoDeVenta = ({ cajaInfo, session, perfilUsuario, onVolver, onSolicitarC
                   </tr>
                 ) : (
                   carrito.map((item) => {
-                    const precio = item.precio_venta || item.precio || 0;
+                    const precioGs = item.precio_venta || item.precio || 0;
+                    const precio = monedaVenta === 'PYG' ? precioGs : convertirDesdeGs(precioGs);
+                    const subtotalItem = monedaVenta === 'PYG' ? precioGs * item.cantidad : convertirDesdeGs(precioGs * item.cantidad);
                     const esCombo = item.tipo_producto === 'Combo' && Array.isArray(item.combo_productos) && item.combo_productos.length > 0;
                     const expandido = combosExpandidos[item.id];
                     return (
@@ -717,15 +864,15 @@ const PuntoDeVenta = ({ cajaInfo, session, perfilUsuario, onVolver, onSolicitarC
                             <input
                               type="number"
                               value={precio}
-                              onChange={(e) => cambiarPrecioUnitario(item.id, e.target.value)}
+                              onChange={(e) => cambiarPrecioUnitario(item.id, convertirAGs(Number(e.target.value) || 0))}
                               className="w-24 text-right border border-gray-200 rounded px-1.5 py-1 text-gray-700 focus:outline-none focus:ring-1 focus:ring-orange-400"
                             />
                           </td>
                           <td className="py-3 px-1 text-right whitespace-nowrap">
                             <input
                               type="number"
-                              value={(precio * item.cantidad).toFixed(0)}
-                              onChange={(e) => cambiarSubtotalManual(item.id, e.target.value)}
+                              value={subtotalItem}
+                              onChange={(e) => cambiarSubtotalManual(item.id, convertirAGs(Number(e.target.value) || 0))}
                               className="w-24 text-right border border-gray-200 rounded px-1.5 py-1 font-bold text-gray-800 focus:outline-none focus:ring-1 focus:ring-orange-400"
                             />
                           </td>
@@ -763,16 +910,48 @@ const PuntoDeVenta = ({ cajaInfo, session, perfilUsuario, onVolver, onSolicitarC
 
           <div className="border-t border-gray-200 p-3 flex justify-between text-sm font-bold text-gray-600">
             <span>{t('items')}: {totalArticulos}</span>
-            <span>{t('total')}: {formatGs(totalConAjustes)}</span>
+            <span>{t('total')}: {formatMoneda(totalEnMoneda, monedaVenta)}</span>
           </div>
 
           <div className="shrink-0 border-t-2 border-gray-300 bg-white p-2 shadow-[0_-3px_10px_rgba(0,0,0,0.05)]">
             <div className="flex flex-wrap items-end gap-2">
-              <div className="w-36 shrink-0">
-                <label className="text-[10px] font-bold text-gray-500 block mb-1">{t('paidWith')} (Gs)</label>
-                <input type="number" placeholder="Ej: 100000" value={montoPagado} onChange={(e) => setMontoPagado(e.target.value)} className="w-full h-8 border border-gray-300 rounded px-2 font-bold text-sm" />
+              <div className="w-32 shrink-0 rounded-lg border border-gray-200 bg-gray-50 p-1.5">
+                <label className="text-[10px] font-bold text-gray-500 block mb-1">Moneda</label>
+                <select value={monedaVenta} onChange={(e) => setMonedaVenta(e.target.value)} className="w-full h-8 border border-gray-300 rounded px-2 text-xs font-bold bg-white" disabled={cargandoTasa}>
+                  <option value="PYG">PYG</option>
+                  <option value="USD">USD</option>
+                  <option value="EUR">EUR</option>
+                  <option value="BRL">BRL</option>
+                </select>
               </div>
-              <div className="w-40 shrink-0">
+              <div className="w-28 shrink-0 rounded-lg border border-gray-200 bg-sky-50 p-1.5">
+                <label className="text-[10px] font-bold text-sky-700 block mb-1">Mercado</label>
+                <div className="h-8 rounded bg-white border border-sky-200 px-2 flex items-center justify-center text-[10px] font-black text-sky-800">
+                  {cargandoTasa ? '...' : Number(tasaReferencia || 0).toLocaleString('es-PY', { maximumFractionDigits: 0 })}
+                </div>
+              </div>
+              <div className="w-24 shrink-0 rounded-lg border border-gray-200 bg-amber-50 p-1.5">
+                <label className="text-[10px] font-bold text-amber-700 block mb-1">Margen %</label>
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={margenNegocio}
+                  onChange={(e) => setMargenNegocio(Number(e.target.value) || 0)}
+                  className="w-full h-8 border border-amber-200 rounded px-2 text-xs font-bold bg-white"
+                />
+              </div>
+              <div className="w-28 shrink-0 rounded-lg border border-gray-200 bg-amber-50 p-1.5">
+                <label className="text-[10px] font-bold text-amber-700 block mb-1">Tasa</label>
+                <div className="h-8 rounded bg-white border border-amber-200 px-2 flex items-center justify-center text-[10px] font-black text-amber-800">
+                  {cargandoTasa ? '...' : Number(tasaCambio || 0).toLocaleString('es-PY', { maximumFractionDigits: 0 })}
+                </div>
+              </div>
+              <div className="w-36 shrink-0 rounded-lg border border-gray-200 bg-gray-50 p-1.5">
+                <label className="text-[10px] font-bold text-gray-500 block mb-1">{t('paidWith')} ({monedaVenta})</label>
+                <input type="number" placeholder={monedaVenta === 'PYG' ? 'Ej: 100000' : 'Ej: 100'} value={montoPagado} onChange={(e) => setMontoPagado(e.target.value)} className="w-full h-8 border border-gray-300 rounded px-2 font-bold text-sm" />
+              </div>
+              <div className="w-40 shrink-0 rounded-lg border border-gray-200 bg-gray-50 p-1.5">
                 <label className="text-[10px] font-bold text-gray-500 block mb-1">{t('paymentMethod')}</label>
                 <select value={metodoPago} onChange={(e) => setMetodoPago(e.target.value)} className="w-full h-8 border border-gray-300 rounded px-2 text-xs font-bold bg-white">
                   <option value="Efectivo">💵 {t('cash')}</option>
@@ -783,20 +962,20 @@ const PuntoDeVenta = ({ cajaInfo, session, perfilUsuario, onVolver, onSolicitarC
               <button
                 onClick={() => procesarVenta('venta')}
                 disabled={carrito.length === 0}
-                className={`h-8 flex-1 min-w-[150px] rounded-lg font-black text-sm text-white transition-all ${carrito.length === 0 ? 'bg-gray-300 cursor-not-allowed' : 'bg-orange-500 hover:bg-orange-600'}`}
+                className={`h-11 flex-1 min-w-[170px] rounded-lg font-black text-sm text-white transition-all ${carrito.length === 0 ? 'bg-gray-300 cursor-not-allowed' : 'bg-orange-500 hover:bg-orange-600'}`}
               >
-                {t('charge')} {formatGs(totalConAjustes)}
+                {t('charge')} {formatMoneda(totalEnMoneda, monedaVenta)}
               </button>
             </div>
 
           {vuelto > 0 && (
             <div className="mt-2 bg-green-50 text-green-800 p-1.5 rounded flex justify-between font-bold border border-green-200 text-xs">
-              <span>{t('change')}:</span><span>{formatGs(vuelto)}</span>
+              <span>{t('change')}:</span><span>{formatMoneda(vueltoEnMoneda, monedaVenta)} · {formatGs(vuelto)}</span>
             </div>
           )}
           {saldoPendiente > 0 && (
             <div className="mt-2 bg-red-50 text-red-800 p-1.5 rounded flex justify-between font-bold border border-red-200 text-xs">
-              <span>{t('remainingDebt')}:</span><span>{formatGs(saldoPendiente)}</span>
+              <span>{t('remainingDebt')}:</span><span>{formatMoneda(saldoPendienteEnMoneda, monedaVenta)} · {formatGs(saldoPendiente)}</span>
             </div>
           )}
 
@@ -857,7 +1036,7 @@ const PuntoDeVenta = ({ cajaInfo, session, perfilUsuario, onVolver, onSolicitarC
                       <p className="font-bold text-gray-800 text-sm leading-tight line-clamp-2">{prod.nombre}</p>
                       <div className="mt-1">
                         <p className="text-[11px] text-gray-400 mb-1">{prod.codigo || '—'} · Stock: {stockEnSucursal(prod) ?? 0}</p>
-                        <p className="text-orange-600 font-black">{formatGs(prod.precio_venta || prod.precio)}</p>
+                        <p className="text-orange-600 font-black">{formatMoneda(convertirDesdeGs(prod.precio_venta || prod.precio), monedaVenta)}</p>
                       </div>
                     </div>
                   </div>
@@ -891,6 +1070,19 @@ const PuntoDeVenta = ({ cajaInfo, session, perfilUsuario, onVolver, onSolicitarC
         cuentasCaja={cuentasCaja}
         onFinalizar={finalizarPagoMultiple}
       />
+      {mostrarFormularioProducto && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-3 sm:p-4">
+          <div className="w-full max-w-4xl max-h-[88vh] overflow-y-auto rounded-xl bg-white shadow-2xl border border-gray-200">
+            <AgregarProducto
+              onGuardado={async () => {
+                await cargarProductos();
+                setMostrarFormularioProducto(false);
+              }}
+              onCancelar={() => setMostrarFormularioProducto(false)}
+            />
+          </div>
+        </div>
+      )}
       {mostrarCierreCaja && (
         <CierreCaja
           cajaInfo={cajaInfo}

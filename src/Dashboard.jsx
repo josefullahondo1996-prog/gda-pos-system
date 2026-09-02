@@ -177,8 +177,12 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
       if (error && error.code !== '42P01') {
         console.error('Error al recuperar la caja abierta:', error.message);
       } else {
-        const cajaDelUsuario = (data || []).find((caja) => !caja.usuario || caja.usuario === nombreUsuario);
-        setCajaActual(cajaDelUsuario || null);
+        const cajaDelUsuario = (data || []).find((caja) => {
+          const mismaUbicacion = !ubicacionUsuarioId || Number(caja.ubicacion_id) === Number(ubicacionUsuarioId);
+          const mismoUsuario = !caja.usuario || caja.usuario === nombreUsuario || caja.usuario === perfilUsuario?.nombre_usuario;
+          return mismaUbicacion && mismoUsuario;
+        });
+        setCajaActual(cajaDelUsuario || (data && data[0]) || null);
       }
       setCargandoCaja(false);
     };
@@ -482,20 +486,24 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
 
   // Estilos de los botones del Sidebar
   const estiloBotonSimple = (vista) => `
-    w-full text-left px-6 py-2.5 text-sm font-medium transition-colors flex items-center gap-3
-    ${sidebarColapsado ? 'justify-center px-0' : ''}
-    ${vistaActiva === vista ? 'bg-[#2b2b3f] text-white border-l-4 border-orange-500' : 'text-white hover:bg-[#252536] hover:text-orange-500'}
+    group relative w-full min-h-[42px] text-left text-[13px] font-semibold tracking-[0.01em] transition-all duration-300 ease-out flex items-center gap-3 overflow-hidden
+    ${sidebarColapsado ? 'justify-center px-2 mx-1.5 rounded-2xl' : 'justify-start px-3 py-2.5 mx-2 rounded-2xl'}
+    ${vistaActiva === vista
+      ? 'text-white bg-gradient-to-r from-[#1f2937] via-[#1d2434] to-[#111827] shadow-[0_16px_32px_rgba(15,23,42,0.28)] ring-1 ring-[#f59e0b]/40 before:absolute before:left-0 before:top-1.5 before:bottom-1.5 before:w-1 before:rounded-r-full before:bg-gradient-to-b before:from-[#fbbf24] before:to-[#f59e0b]'
+      : 'text-slate-600 hover:text-[#f59e0b] hover:bg-gradient-to-r hover:from-white hover:to-slate-50 hover:shadow-[0_8px_20px_rgba(15,23,42,0.08)] active:bg-slate-100'}
   `;
 
   const estiloBotonDesplegable = (menuName) => `
-    w-full text-left px-6 py-2.5 text-sm font-medium transition-colors flex justify-between items-center
-    ${sidebarColapsado ? 'justify-center px-0' : ''}
-    ${menuExpandido === menuName ? 'bg-[#2b2b3f] text-white border-l-4 border-orange-500' : 'text-white hover:bg-[#252536] hover:text-orange-500'}
+    group relative w-full min-h-[42px] text-left text-[13px] font-semibold tracking-[0.01em] transition-all duration-300 ease-out flex items-center justify-between overflow-hidden
+    ${sidebarColapsado ? 'justify-center px-2 mx-1.5 rounded-2xl' : 'px-3 py-2.5 mx-2 rounded-2xl'}
+    ${menuExpandido === menuName
+      ? 'text-white bg-gradient-to-r from-[#1f2937] via-[#1d2434] to-[#111827] shadow-[0_16px_32px_rgba(15,23,42,0.28)] ring-1 ring-[#f59e0b]/40 before:absolute before:left-0 before:top-1.5 before:bottom-1.5 before:w-1 before:rounded-r-full before:bg-gradient-to-b before:from-[#fbbf24] before:to-[#f59e0b]'
+      : 'text-slate-600 hover:text-[#f59e0b] hover:bg-gradient-to-r hover:from-white hover:to-slate-50 hover:shadow-[0_8px_20px_rgba(15,23,42,0.08)] active:bg-slate-100'}
   `;
 
   const estiloSubItem = (vista) => `
-    w-full text-left pl-12 pr-4 py-2 text-xs transition-colors flex items-center gap-2
-    ${vistaActiva === vista ? 'text-white font-bold bg-[#252536]' : 'text-white hover:text-orange-500 hover:bg-[#252536]'}
+    w-full text-left pl-10 pr-3 py-1.5 text-[11px] font-medium transition-all duration-300 ease-out flex items-center gap-2 rounded-xl mx-2 border border-transparent
+    ${vistaActiva === vista ? 'text-white font-bold bg-gradient-to-r from-[#1f2937] to-[#111827] shadow-[0_8px_16px_rgba(15,23,42,0.15)] border-[#374151] ring-1 ring-[#f59e0b]/30' : 'text-slate-500 hover:text-[#f59e0b] hover:bg-white hover:border-slate-200 hover:shadow-[0_4px_12px_rgba(15,23,42,0.05)]'}
   `;
 
   return (
@@ -586,19 +594,19 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
       {/* ========================================== */}
       {!posPantallaCompleta && (
         <aside className={`
-          ${sidebarColapsado ? 'w-[76px]' : 'w-[260px]'}
-          transition-all duration-300 bg-[#1e1e2d] text-white flex flex-col h-full shadow-xl z-30
+          ${sidebarColapsado ? 'w-[78px]' : 'w-[250px]'}
+          transition-[width,transform] duration-300 ease-out bg-gradient-to-b from-[#f8fafc] via-[#f5f7fa] to-[#f1f3f7] text-slate-800 flex flex-col h-full shadow-[0_0_0_1px_rgba(148,163,184,0.15),12px_0_40px_rgba(15,23,42,0.12)] border-r border-gradient-to-b from-slate-200 to-slate-100 z-30
           fixed inset-y-0 left-0 transform ${menuMovilAbierto ? 'translate-x-0' : '-translate-x-full'}
           hidden md:relative md:translate-x-0 md:flex
         `}>
           {/* Logo Superior con botón de cerrar para móvil */}
-          <div className="h-16 flex items-center justify-between px-4 border-b border-gray-700 bg-white overflow-hidden">
+          <div className="h-16 flex items-center justify-between px-4 border-b border-gradient-to-r from-slate-200 via-slate-150 to-slate-200 bg-gradient-to-r from-white via-slate-50/50 to-white backdrop-blur-sm overflow-hidden">
             <div className="flex-1 flex justify-center">
-              <h1 className="text-2xl font-bold tracking-wider text-[#004284] whitespace-nowrap">
+              <h1 className="text-[1.7rem] font-black tracking-[0.18em] whitespace-nowrap text-slate-800">
                 {sidebarColapsado ? (
-                  <span className="text-orange-500">P</span>
+                  <span className="inline-flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-[#f59e0b] via-[#fb923c] to-[#f97316] text-white shadow-[0_10px_20px_rgba(245,158,11,0.35)] text-lg tracking-normal">P</span>
                 ) : (
-                  <>PY<span className="text-orange-500">POS</span></>
+                  <span className="tracking-[0.14em]">PY<span className="text-transparent bg-clip-text bg-gradient-to-r from-[#f59e0b] to-[#f97316]">POS</span></span>
                 )}
               </h1>
             </div>
@@ -611,7 +619,7 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
           </div>
 
           {/* Lista de Navegación */}
-          <nav className="flex-1 overflow-y-auto overflow-x-hidden py-2 flex flex-col bg-[#1e1e2d]">
+          <nav className="flex-1 overflow-y-auto overflow-x-hidden py-3 px-1 flex flex-col bg-gradient-to-b from-[#f8fafc] to-[#f3f5f8] gap-0.5">
             {!soloPOS && tieneCategoria('ot') && (
               <>
                 <Link to="/" onClick={() => irA('inicio', '/')} className={estiloBotonSimple('inicio')} title={t('home')}>
@@ -629,10 +637,14 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
               <>
                 <button onClick={() => toggleMenu('usuarios')} className={estiloBotonDesplegable('usuarios')} title={t('userManagement')}>
                   <div className="flex items-center gap-3"><Users size={18} strokeWidth={2} /> {!sidebarColapsado && t('userManagement')}</div>
-                  {!sidebarColapsado && <span className="text-[10px]">{menuExpandido === 'usuarios' ? '▼' : '◀'}</span>}
+                  {!sidebarColapsado && (
+                    <span className={`inline-flex items-center justify-center w-5 h-5 rounded-md text-[10px] transition-colors ${menuExpandido === 'usuarios' ? 'bg-[#1f2937] text-[#f59e0b]' : 'text-slate-500 hover:bg-[#1f2937] hover:text-[#f59e0b]'}`}>
+                      {menuExpandido === 'usuarios' ? '▼' : '◀'}
+                    </span>
+                  )}
                 </button>
                 {menuExpandido === 'usuarios' && !sidebarColapsado && (
-                  <div className="bg-[#151521] py-1 flex flex-col">
+                  <div className="bg-transparent py-1 flex flex-col border-l border-slate-200 ml-5">
                     {tieneCategoria('usuarios') && (
                       <Link to="/usuarios" onClick={() => irA('usuarios', '/usuarios')} className={estiloSubItem('usuarios')}>🠖 {t('users')}</Link>
                     )}
@@ -649,10 +661,14 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
               <>
                 <button onClick={() => toggleMenu('contactos')} className={estiloBotonDesplegable('contactos')} title={t('contacts')}>
                   <div className="flex items-center gap-3"><Contact size={18} strokeWidth={2} /> {!sidebarColapsado && t('contacts')}</div>
-                  {!sidebarColapsado && <span className="text-[10px]">{menuExpandido === 'contactos' ? '▼' : '◀'}</span>}
+                  {!sidebarColapsado && (
+                    <span className={`inline-flex items-center justify-center w-5 h-5 rounded-md text-[10px] transition-colors ${menuExpandido === 'contactos' ? 'bg-[#1f2937] text-[#f59e0b]' : 'text-slate-500 hover:bg-[#1f2937] hover:text-[#f59e0b]'}`}>
+                      {menuExpandido === 'contactos' ? '▼' : '◀'}
+                    </span>
+                  )}
                 </button>
                 {menuExpandido === 'contactos' && !sidebarColapsado && (
-                  <div className="bg-[#151521] py-1 flex flex-col">
+                  <div className="bg-transparent py-1 flex flex-col border-l border-slate-200 ml-5">
                     <Link to="/proveedores" onClick={() => irA('proveedores', '/proveedores')} className={estiloSubItem('proveedores')}>🠖 {t('suppliers')}</Link>
                     <Link to="/clientes" onClick={() => irA('clientes', '/clientes')} className={estiloSubItem('clientes')}>🠖 {t('customers')}</Link>
                     <Link to="/grupos_clientes" onClick={() => irA('grupos_clientes', '/grupos_clientes')} className={estiloSubItem('grupos_clientes')}>🠖 {t('customerGroups')}</Link>
@@ -666,10 +682,14 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
               <>
                 <button onClick={() => toggleMenu('productos')} className={estiloBotonDesplegable('productos')} title={t('products')}>
                   <div className="flex items-center gap-3"><Package size={18} strokeWidth={2} /> {!sidebarColapsado && t('products')}</div>
-                  {!sidebarColapsado && <span className="text-[10px]">{menuExpandido === 'productos' ? '▼' : '◀'}</span>}
+                  {!sidebarColapsado && (
+                    <span className={`inline-flex items-center justify-center w-5 h-5 rounded-md text-[10px] transition-colors ${menuExpandido === 'productos' ? 'bg-[#1f2937] text-[#f59e0b]' : 'text-slate-500 hover:bg-[#1f2937] hover:text-[#f59e0b]'}`}>
+                      {menuExpandido === 'productos' ? '▼' : '◀'}
+                    </span>
+                  )}
                 </button>
                 {menuExpandido === 'productos' && !sidebarColapsado && (
-                  <div className="bg-[#151521] py-1 flex flex-col">
+                  <div className="bg-transparent py-1 flex flex-col border-l border-slate-200 ml-5">
                     <Link to="/catalogo" onClick={() => irA('catalogo', '/catalogo')} className={estiloSubItem('catalogo')}>🠖 {t('productList')}</Link>
                     <Link to="/agregar_producto" onClick={() => irA('agregar_producto', '/agregar_producto')} className={estiloSubItem('agregar_producto')}>🠖 {t('addProduct')}</Link>
                     <Link to="/marcas" onClick={() => irA('marcas', '/marcas')} className={estiloSubItem('marcas')}>🠖 {t('brands')}</Link>
@@ -685,10 +705,14 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
               <>
                 <button onClick={() => toggleMenu('compras')} className={estiloBotonDesplegable('compras')} title={t('purchases')}>
                   <div className="flex items-center gap-3"><ArrowDownToLine size={18} strokeWidth={2} /> {!sidebarColapsado && t('purchases')}</div>
-                  {!sidebarColapsado && <span className="text-[10px]">{menuExpandido === 'compras' ? '▼' : '◀'}</span>}
+                  {!sidebarColapsado && (
+                    <span className={`inline-flex items-center justify-center w-5 h-5 rounded-md text-[10px] transition-colors ${menuExpandido === 'compras' ? 'bg-[#1f2937] text-[#f59e0b]' : 'text-slate-500 hover:bg-[#1f2937] hover:text-[#f59e0b]'}`}>
+                      {menuExpandido === 'compras' ? '▼' : '◀'}
+                    </span>
+                  )}
                 </button>
                 {menuExpandido === 'compras' && !sidebarColapsado && (
-                  <div className="bg-[#151521] py-1 flex flex-col">
+                  <div className="bg-transparent py-1 flex flex-col border-l border-slate-200 ml-5">
                     <Link to="/compras" onClick={() => irA('compras', '/compras')} className={estiloSubItem('compras')}>🠖 {t('purchaseList')}</Link>
                     <Link to="/agregar_compra" onClick={() => irA('agregar_compra', '/agregar_compra')} className={estiloSubItem('agregar_compra')}>🠖 {t('addPurchase')}</Link>
                     <Link to="/devoluciones_compra" onClick={() => irA('devoluciones_compra', '/devoluciones_compra')} className={estiloSubItem('devoluciones_compra')}>🠖 {t('purchaseReturns')}</Link>
@@ -702,10 +726,14 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
               <>
                 <button onClick={() => toggleMenu('gastos')} className={estiloBotonDesplegable('gastos')} title={t('expenses')}>
                   <div className="flex items-center gap-3"><ArrowDownToLine size={18} strokeWidth={2} /> {!sidebarColapsado && t('expenses')}</div>
-                  {!sidebarColapsado && <span className="text-[10px]">{menuExpandido === 'gastos' ? '▼' : '◀'}</span>}
+                  {!sidebarColapsado && (
+                    <span className={`inline-flex items-center justify-center w-5 h-5 rounded-md text-[10px] transition-colors ${menuExpandido === 'gastos' ? 'bg-[#1f2937] text-[#f59e0b]' : 'text-slate-500 hover:bg-[#1f2937] hover:text-[#f59e0b]'}`}>
+                      {menuExpandido === 'gastos' ? '▼' : '◀'}
+                    </span>
+                  )}
                 </button>
                 {menuExpandido === 'gastos' && !sidebarColapsado && (
-                  <div className="bg-[#151521] py-1 flex flex-col">
+                  <div className="bg-transparent py-1 flex flex-col border-l border-slate-200 ml-5">
                     <Link to="/gastos" onClick={() => irA('gastos', '/gastos')} className={estiloSubItem('gastos')}>🠖 {t('expenseList')}</Link>
                     <Link to="/gastos/agregar" onClick={() => irA('agregar_gasto', '/gastos/agregar')} className={estiloSubItem('agregar_gasto')}>🠖 {t('addExpense')}</Link>
                     <Link to="/gastos/categorias" onClick={() => irA('categorias_gastos', '/gastos/categorias')} className={estiloSubItem('categorias_gastos')}>🠖 {t('expenseCategories')}</Link>
@@ -719,10 +747,14 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
               <>
                 <button onClick={() => toggleMenu('ventas')} className={estiloBotonDesplegable('ventas')} title={t('sales')}>
                   <div className="flex items-center gap-3"><ArrowUpFromLine size={18} strokeWidth={2} /> {!sidebarColapsado && t('sales')}</div>
-                  {!sidebarColapsado && <span className="text-[10px]">{menuExpandido === 'ventas' ? '▼' : '◀'}</span>}
+                  {!sidebarColapsado && (
+                    <span className={`inline-flex items-center justify-center w-5 h-5 rounded-md text-[10px] transition-colors ${menuExpandido === 'ventas' ? 'bg-[#1f2937] text-[#f59e0b]' : 'text-slate-500 hover:bg-[#1f2937] hover:text-[#f59e0b]'}`}>
+                      {menuExpandido === 'ventas' ? '▼' : '◀'}
+                    </span>
+                  )}
                 </button>
                 {menuExpandido === 'ventas' && !sidebarColapsado && (
-                  <div className="bg-[#151521] py-1 flex flex-col">
+                  <div className="bg-transparent py-1 flex flex-col border-l border-slate-200 ml-5">
                     <Link to="/todas_ventas" onClick={() => irA('todas_ventas', '/todas_ventas')} className={estiloSubItem('todas_ventas')}>🠖 {t('allSales')}</Link>
                     <Link to="/pos" onClick={() => irA('pos', '/pos')} className={estiloSubItem('pos')}>🠖 {t('pos')}</Link>
                     <Link to="/cobros" onClick={() => irA('cobros', '/cobros')} className={estiloSubItem('cobros')}>🠖 {t('pendingOrders')}</Link>
@@ -748,12 +780,16 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
               <>
                 <button onClick={() => toggleMenu('caja_banco')} className={estiloBotonDesplegable('caja_banco')} title="Caja / Banco">
                   <div className="flex items-center gap-3"><CreditCard size={18} strokeWidth={2} /> {!sidebarColapsado && t('cashBank')}</div>
-                  {!sidebarColapsado && <span className="text-[10px]">{menuExpandido === 'caja_banco' ? '▼' : '◀'}</span>}
+                  {!sidebarColapsado && (
+                    <span className={`inline-flex items-center justify-center w-5 h-5 rounded-md text-[10px] transition-colors ${menuExpandido === 'caja_banco' ? 'bg-[#1f2937] text-[#f59e0b]' : 'text-slate-500 hover:bg-[#1f2937] hover:text-[#f59e0b]'}`}>
+                      {menuExpandido === 'caja_banco' ? '▼' : '◀'}
+                    </span>
+                  )}
                 </button>
                 {menuExpandido === 'caja_banco' && !sidebarColapsado && (
-                  <div className="bg-[#151521] py-1 flex flex-col">
+                  <div className="bg-transparent py-1 flex flex-col border-l border-slate-200 ml-5">
                     <Link to="/cajas" onClick={() => irA('cajas', '/cajas')} className={estiloSubItem('cajas')}>🠖 {t('cashRegisters')}</Link>
-                    <Link to="/informe-caja-pago" onClick={() => irA('informe_caja_pago', '/informe-caja-pago')} className={estiloSubItem('informe_caja_pago')}>🠖 {t('paymentReport')}</Link>
+                    <Link to="/informe-caja-pago" onClick={() => irA('informe_caja-pago', '/informe-caja-pago')} className={estiloSubItem('informe_caja_pago')}>🠖 {t('paymentReport')}</Link>
                   </div>
                 )}
               </>
@@ -764,10 +800,14 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
               <>
                 <button onClick={() => toggleMenu('informes')} className={estiloBotonDesplegable('informes')} title="Informes">
                   <div className="flex items-center gap-3"><BarChart3 size={18} strokeWidth={2} /> {!sidebarColapsado && t('reports')}</div>
-                  {!sidebarColapsado && <span className="text-[10px]">{menuExpandido === 'informes' ? '▼' : '◀'}</span>}
+                  {!sidebarColapsado && (
+                    <span className={`inline-flex items-center justify-center w-5 h-5 rounded-md text-[10px] transition-colors ${menuExpandido === 'informes' ? 'bg-[#1f2937] text-[#f59e0b]' : 'text-slate-500 hover:bg-[#1f2937] hover:text-[#f59e0b]'}`}>
+                      {menuExpandido === 'informes' ? '▼' : '◀'}
+                    </span>
+                  )}
                 </button>
                 {menuExpandido === 'informes' && !sidebarColapsado && (
-                  <div className="bg-[#151521] py-1 flex flex-col">
+                  <div className="bg-transparent py-1 flex flex-col border-l border-slate-200 ml-5">
                     <Link to="/ganancias_perdidas" onClick={() => irA('ganancias_perdidas', '/ganancias_perdidas')} className={estiloSubItem('ganancias_perdidas')}>🠖 {t('profitLoss')}</Link>
                     <Link to="/ventas-por-producto" onClick={() => irA('ventas_por_producto', '/ventas-por-producto')} className={estiloSubItem('ventas_por_producto')}>🠖 {t('salesByProduct')}</Link>
                     <Link to="/cobro-de-ventas" onClick={() => irA('cobro_de_ventas', '/cobro-de-ventas')} className={estiloSubItem('cobro_de_ventas')}>🠖 {t('salesCollections')}</Link>
@@ -783,10 +823,14 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
               <>
                 <button onClick={() => toggleMenu('configuraciones')} className={estiloBotonDesplegable('configuraciones')} title="Configuraciones">
                   <div className="flex items-center gap-3"><Settings size={18} strokeWidth={2} /> {!sidebarColapsado && t('settings')}</div>
-                  {!sidebarColapsado && <span className="text-[10px]">{menuExpandido === 'configuraciones' ? '▼' : '◀'}</span>}
+                  {!sidebarColapsado && (
+                    <span className={`inline-flex items-center justify-center w-5 h-5 rounded-md text-[10px] transition-colors ${menuExpandido === 'configuraciones' ? 'bg-[#1f2937] text-[#f59e0b]' : 'text-slate-500 hover:bg-[#1f2937] hover:text-[#f59e0b]'}`}>
+                      {menuExpandido === 'configuraciones' ? '▼' : '◀'}
+                    </span>
+                  )}
                 </button>
                 {menuExpandido === 'configuraciones' && !sidebarColapsado && (
-                  <div className="bg-[#151521] py-1 flex flex-col">
+                  <div className="bg-transparent py-1 flex flex-col border-l border-slate-200 ml-5">
                     <Link to="/config_empresa" onClick={() => irA('config_empresa', '/config_empresa')} className={estiloSubItem('config_empresa')}>🠖 {t('companySettings')}</Link>
                     <Link to="/ubicaciones_comerciales" onClick={() => irA('ubicaciones_comerciales', '/ubicaciones_comerciales')} className={estiloSubItem('ubicaciones_comerciales')}>🠖 {t('commercialLocations')}</Link>
                     <Link to="/config_factura" onClick={() => irA('config_factura', '/config_factura')} className={estiloSubItem('config_factura')}>🠖 {t('invoiceSettings')}</Link>
@@ -797,13 +841,30 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
           </nav>
 
           {/* Footer del Sidebar */}
-          <div className="p-4 border-t border-gray-700 bg-[#1e1e2d] flex flex-col gap-2">
+          <div className="p-3 border-t border-slate-200 bg-gradient-to-b from-white/60 to-slate-50/60 backdrop-blur-sm flex flex-col gap-3">
+            {!sidebarColapsado && (
+              <div className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-gradient-to-br from-white via-slate-50/50 to-slate-50 px-3 py-2.5 shadow-[0_10px_20px_rgba(15,23,42,0.06)]">
+                <div className="w-9 h-9 rounded-full bg-gradient-to-br from-[#f59e0b] via-[#fb923c] to-[#f97316] text-white flex items-center justify-center text-xs font-black shadow-[0_6px_14px_rgba(245,158,11,0.28)]">
+                  {(perfilUsuario?.empresas?.nombre || perfilUsuario?.nombre || 'N').charAt(0).toUpperCase()}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">Cuenta</p>
+                  <p className="truncate text-sm font-semibold text-slate-700">
+                    {perfilUsuario?.empresas?.nombre || perfilUsuario?.nombre || 'Mi negocio'}
+                  </p>
+                </div>
+              </div>
+            )}
+
             <button
               onClick={cerrarSesion}
               title={t('logout')}
-              className="w-full bg-red-600 hover:bg-red-700 text-white py-1.5 rounded text-sm font-bold transition flex items-center justify-center gap-2"
+              className="group w-full bg-gradient-to-r from-[#1f2937] via-[#0f172a] to-[#111827] hover:from-[#111827] hover:via-[#0f172a] hover:to-[#0d1117] text-white py-2.5 rounded-2xl text-sm font-bold transition-all duration-300 flex items-center justify-center gap-2 shadow-[0_12px_24px_rgba(15,23,42,0.22)] hover:shadow-[0_16px_32px_rgba(15,23,42,0.28)]"
             >
-              <LogOut size={16} strokeWidth={2} /> {!sidebarColapsado && t('logout')}
+              <span className="inline-flex items-center justify-center w-6 h-6 rounded-xl bg-gradient-to-br from-[#fbbf24] to-[#f59e0b] text-[#1f2937] shadow-[0_4px_10px_rgba(245,158,11,0.25)] transition-all duration-300 group-hover:scale-110">
+                <LogOut size={14} strokeWidth={2.2} />
+              </span>
+              {!sidebarColapsado && t('logout')}
             </button>
           </div>
         </aside>
@@ -816,12 +877,12 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
 
         {/* Header Superior */}
         {!posPantallaCompleta && (
-          <header className="h-14 md:h-16 bg-white shadow-sm flex items-center justify-between px-4 md:px-6 z-10 border-b border-gray-200">
+          <header className="h-14 md:h-16 bg-gradient-to-r from-white via-slate-50/50 to-white shadow-[0_2px_8px_rgba(15,23,42,0.08)] flex items-center justify-between px-4 md:px-6 z-10 border-b border-slate-200/60 backdrop-blur-sm">
             <div className="flex items-center gap-3 flex-1">
               {/* BOTÓN HAMBURGUESA PARA MÓVIL */}
               <button
                 onClick={() => setMenuMovilAbierto(true)}
-                className="md:hidden flex items-center justify-center w-8 h-8 rounded-lg text-gray-500 hover:bg-gray-100 transition-colors"
+                className="md:hidden flex items-center justify-center w-8 h-8 rounded-lg text-gray-500 hover:bg-gray-100 hover:text-[#f59e0b] transition-colors"
               >
                 <Menu size={22} />
               </button>
@@ -830,9 +891,14 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
               <button
                 onClick={() => setSidebarColapsado(!sidebarColapsado)}
                 title={sidebarColapsado ? 'Expandir menú' : 'Colapsar menú'}
-                className="hidden md:flex items-center justify-center w-9 h-9 rounded-lg text-gray-500 hover:bg-gray-100 hover:text-gray-800 transition-colors"
+                className="hidden md:flex items-center justify-center w-10 h-10 rounded-xl border border-slate-200 bg-gradient-to-br from-white to-slate-50 text-slate-700 shadow-sm hover:bg-gradient-to-br hover:from-slate-50 hover:to-white hover:text-[#f59e0b] hover:shadow-[0_6px_16px_rgba(15,23,42,0.08)] transition-all duration-300"
+                aria-label={sidebarColapsado ? 'Expandir menú' : 'Colapsar menú'}
               >
-                {sidebarColapsado ? '☰' : '◀'}
+                <span className="relative flex flex-col items-center justify-center w-5 h-4">
+                  <span className={`block h-0.5 w-5 rounded-full bg-current transition-all duration-300 ${sidebarColapsado ? 'translate-y-1.5 rotate-45' : 'translate-y-0 rotate-0'}`} />
+                  <span className={`block h-0.5 w-5 rounded-full bg-current transition-all duration-300 my-0.5 ${sidebarColapsado ? 'opacity-0 scale-x-0' : 'opacity-100 scale-x-100'}`} />
+                  <span className={`block h-0.5 w-5 rounded-full bg-current transition-all duration-300 ${sidebarColapsado ? '-translate-y-1.5 -rotate-45' : 'translate-y-0 rotate-0'}`} />
+                </span>
               </button>
             </div>
 
@@ -869,12 +935,39 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
                 {vistaActiva === 'vendedores_comisiones' && t('sellersCommissions')}
               </h2>
             <div className="flex-1"></div>
+            <div className="hidden md:flex items-center gap-2 lg:gap-3">
+              <button className="flex items-center justify-center w-9 h-9 rounded-xl border border-slate-200 bg-white text-slate-700 shadow-sm hover:border-orange-200 hover:text-orange-500 transition-all duration-200">
+                <span className="text-xl leading-none">＋</span>
+              </button>
+              <button className="flex items-center justify-center w-9 h-9 rounded-xl border border-slate-200 bg-white text-slate-700 shadow-sm hover:border-orange-200 hover:text-orange-500 transition-all duration-200">
+                <ClipboardList size={17} />
+              </button>
+              <button
+                onClick={() => irA('pos', '/pos')}
+                className="flex items-center gap-2 bg-gradient-to-r from-[#f59e0b] to-[#f97316] text-white px-4 py-2.5 rounded-xl font-bold shadow-[0_10px_20px_rgba(245,158,11,0.28)] hover:shadow-[0_12px_22px_rgba(245,158,11,0.35)] transition-all duration-200"
+              >
+                <ShoppingCart size={17} />
+                <span className="text-sm">Punto de venta</span>
+              </button>
+              <div className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 shadow-sm">
+                <Clock3 size={16} className="text-slate-500" />
+                <span>{new Date().toLocaleDateString('es-PY', { day: '2-digit', month: '2-digit', year: 'numeric' })}</span>
+              </div>
+              <button className="flex items-center justify-center w-9 h-9 rounded-xl border border-slate-200 bg-white text-slate-700 shadow-sm hover:border-orange-200 hover:text-orange-500 transition-all duration-200">
+                <Bell size={17} />
+              </button>
+              <button className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-bold text-slate-700 shadow-sm hover:border-orange-200 hover:text-orange-500 transition-all duration-200">
+                <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-gradient-to-br from-[#f59e0b] to-[#f97316] text-white text-[10px] font-black shadow-[0_6px_12px_rgba(245,158,11,0.25)]">G</span>
+                <span>GDA Repuesto</span>
+                <span className="text-xs text-slate-400">▼</span>
+              </button>
+            </div>
             <div className="flex items-center gap-2 md:gap-3">
               <LanguageSelector compact />
               {/* BOTÓN ACTUALIZAR */}
               <button
                 onClick={() => setRefreshKey(k => k + 1)}
-                className="relative w-8 h-8 rounded-md text-gray-500 hover:bg-gray-100 hover:text-orange-500 flex items-center justify-center"
+                className="relative w-8 h-8 rounded-lg text-gray-500 hover:bg-gradient-to-br hover:from-orange-50 hover:to-white hover:text-orange-500 flex items-center justify-center transition-all duration-200"
                 title="Actualizar"
               >
                 <RotateCw size={17} />
@@ -885,24 +978,24 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
                 <button
                   type="button"
                   onClick={() => setMostrarNotificaciones((actual) => !actual)}
-                  className="relative w-8 h-8 rounded-md text-gray-500 hover:bg-gray-100 hover:text-orange-500 flex items-center justify-center"
+                  className="relative w-8 h-8 rounded-lg text-gray-500 hover:bg-gradient-to-br hover:from-blue-50 hover:to-white hover:text-blue-500 flex items-center justify-center transition-all duration-200"
                   title={t('notificationLabel')}
                   aria-label={t('notificationLabel')}
                 >
                   <Bell size={17} />
-                  {notificacionesSistema.length > 0 && <span className="absolute -top-1 -right-1 min-w-4 h-4 px-1 rounded-full bg-red-500 text-white text-[9px] font-black flex items-center justify-center">{notificacionesSistema.length}</span>}
+                  {notificacionesSistema.length > 0 && <span className="absolute -top-1 -right-1 min-w-4 h-4 px-1 rounded-full bg-gradient-to-r from-red-500 to-red-600 text-white text-[9px] font-black flex items-center justify-center shadow-[0_4px_8px_rgba(239,68,68,0.3)]">{notificacionesSistema.length}</span>}
                 </button>
                 {mostrarNotificaciones && (
-                  <div className="absolute right-0 top-10 z-50 w-80 max-w-[calc(100vw-2rem)] bg-white border border-gray-200 rounded-xl shadow-xl overflow-hidden">
-                    <div className="px-4 py-3 border-b flex items-center justify-between"><span className="font-bold text-gray-800">{t('notifications')}</span><span className="text-[10px] text-gray-400">{t('realtimeData')}</span></div>
+                  <div className="absolute right-0 top-10 z-50 w-80 max-w-[calc(100vw-2rem)] bg-white border border-gray-200 rounded-xl shadow-2xl overflow-hidden">
+                    <div className="px-4 py-3 border-b bg-gradient-to-r from-slate-50 to-white flex items-center justify-between"><span className="font-bold text-gray-800">{t('notifications')}</span><span className="text-[10px] text-gray-400">{t('realtimeData')}</span></div>
                     <div className="max-h-80 overflow-y-auto">
-                      {notificacionesSistema.length === 0 ? <p className="p-5 text-center text-sm text-gray-400">{t('noNotifications')}</p> : notificacionesSistema.map((aviso) => <div key={aviso.id} className="px-4 py-3 border-b last:border-0 hover:bg-gray-50"><p className={`text-xs font-bold ${aviso.tipo === 'danger' ? 'text-red-600' : aviso.tipo === 'warning' ? 'text-orange-600' : 'text-blue-600'}`}>{aviso.titulo}</p><p className="text-xs text-gray-600 mt-0.5">{aviso.texto}</p></div>)}
+                      {notificacionesSistema.length === 0 ? <p className="p-5 text-center text-sm text-gray-400">{t('noNotifications')}</p> : notificacionesSistema.map((aviso) => <div key={aviso.id} className="px-4 py-3 border-b last:border-0 hover:bg-slate-50 transition-colors"><p className={`text-xs font-bold ${aviso.tipo === 'danger' ? 'text-red-600' : aviso.tipo === 'warning' ? 'text-orange-600' : 'text-blue-600'}`}>{aviso.titulo}</p><p className="text-xs text-gray-600 mt-0.5">{aviso.texto}</p></div>)}
                     </div>
                   </div>
                 )}
               </div>
               <span className="text-xs md:text-sm font-medium text-gray-700 flex items-center gap-2">
-                <span className="bg-orange-500 text-white rounded-full w-6 h-6 flex items-center justify-center text-[10px] font-bold">
+                <span className="bg-gradient-to-br from-[#f59e0b] to-[#f97316] text-white rounded-full w-6 h-6 flex items-center justify-center text-[10px] font-bold shadow-[0_4px_10px_rgba(245,158,11,0.25)]">
                   {(perfilUsuario?.empresas?.nombre || 'N').charAt(0).toUpperCase()}
                 </span>
                 <span className="hidden sm:inline">{perfilUsuario?.empresas?.nombre || 'Mi Negocio'}</span>

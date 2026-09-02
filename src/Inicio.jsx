@@ -8,13 +8,14 @@ import {
   AlertTriangle, Handshake, LineChart, PieChart as PieChartIcon,
   BarChart3, Trophy, Lightbulb, CalendarRange, Wallet, Boxes,
   Clock, Receipt,
-  Menu, Bell, Search, Store, RefreshCw,
+  Menu, Bell, Search, Store, RefreshCw, CheckSquare, ChevronLeft, ChevronRight, Plus, CalendarDays,
 } from 'lucide-react';
 import {
   AreaChart, Area, BarChart, Bar, XAxis, Tooltip, ResponsiveContainer,
   PieChart, Pie, Cell, Legend, CartesianGrid,
 } from 'recharts';
 import { useLanguage } from './LanguageContext';
+import { useNotificacion } from './NotificacionContext';
 
 const formatCurrency = (value) => `Gs ${Math.round(Number(value) || 0).toLocaleString('es-PY')}`;
 
@@ -46,6 +47,7 @@ const COLORS = ['#3b82f6', '#f59e0b', '#ef4444', '#10b981', '#8b5cf6'];
 
 const Inicio = ({ perfilUsuario }) => {
     const { t, locale } = useLanguage();
+  const { notificar } = useNotificacion();
   const { id: empresaId, nombre: nombreDelNegocio } = useEmpresaInfo();
   // Sucursal elegida en el selector global del header (compartida con toda la app)
   const { sucursalActiva: filtroUbicacion } = useSucursalActiva();
@@ -60,6 +62,20 @@ const Inicio = ({ perfilUsuario }) => {
   const [ubicacionesMapa, setUbicacionesMapa] = useState({});
 
   const [tabActiva, setTabActiva] = useState('cobrar');
+  const [mostrarCalendario, setMostrarCalendario] = useState(false);
+  const [mesCalendario, setMesCalendario] = useState(new Date(2026, 8, 1));
+  const [fechaSeleccionadaCalendario, setFechaSeleccionadaCalendario] = useState(new Date().toISOString().slice(0, 10));
+  const [mostrarModalTarea, setMostrarModalTarea] = useState(false);
+  const [nuevaTarea, setNuevaTarea] = useState({
+    titulo: '',
+    fecha: new Date().toISOString().slice(0, 10),
+    prioridad: 'media',
+    detalle: '',
+  });
+  const [tareasPendientes, setTareasPendientes] = useState([]);
+  const [otPendientes, setOtPendientes] = useState([]);
+  const [solicitudesPendientes, setSolicitudesPendientes] = useState([]);
+  const [mostrarRecordatorios, setMostrarRecordatorios] = useState(false);
 
   // === FILTRO DE FECHA — arranca en "Hoy" por defecto ===
   const [rango, setRango] = useState(() => {
@@ -96,6 +112,156 @@ const Inicio = ({ perfilUsuario }) => {
     setNotaPagoInicio('');
     setDocumentoPagoInicio(null);
     setNombreDocumentoPagoInicio('');
+  };
+
+  const abrirModalAgregarTarea = () => {
+    setMostrarModalTarea(true);
+    setNuevaTarea({
+      titulo: '',
+      fecha: new Date().toISOString().slice(0, 10),
+      prioridad: 'media',
+      detalle: '',
+    });
+  };
+
+  const cargarTareas = async () => {
+    if (!empresaId) return;
+    const { data, error } = await supabase
+      .from('tareas')
+      .select('*')
+      .eq('empresa_id', empresaId)
+      .order('fecha', { ascending: true })
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      console.error('Error al cargar tareas:', error);
+      return;
+    }
+
+    setTareasPendientes(data || []);
+  };
+
+  const cargarRecordatorios = async () => {
+    if (!empresaId) return;
+    try {
+      const hoy = new Date().toISOString().slice(0, 10);
+
+      // Cargar tareas de hoy
+      const { data: tareasHoy } = await supabase
+        .from('tareas')
+        .select('*')
+        .eq('empresa_id', empresaId)
+        .eq('fecha', hoy)
+        .eq('completada', false)
+        .order('prioridad', { ascending: false });
+
+      // Cargar OT pendientes (sin completar)
+      const { data: otsData, error: otError } = await supabase
+        .from('ordenes_trabajo')
+        .select('*')
+        .eq('empresa_id', empresaId)
+        .neq('estado', 'Completada')
+        .neq('estado', 'Cerrada')
+        .order('fecha_creacion', { ascending: false })
+        .limit(5);
+
+      if (!otError) setOtPendientes(otsData || []);
+
+      // Cargar pagos vencidos (saldo pendiente > 0 y fecha vencimiento pasada)
+      const { data: pagosData } = await supabase
+        .from('ventas')
+        .select('id, cliente, total, saldo_pendiente, fecha, estado_pago')
+        .eq('empresa_id', empresaId)
+        .gt('saldo_pendiente', 0)
+        .lte('fecha', hoy)
+        .order('fecha', { ascending: true })
+        .limit(5);
+
+      setSolicitudesPendientes(pagosData || []);
+      
+      // Agregar tareas de hoy a las solicitudes para mostrarlas juntas
+      if (tareasHoy && tareasHoy.length > 0) {
+        setSolicitudesPendientes((prev) => [
+          ...tareasHoy.map(t => ({ ...t, tipo: 'tarea' })),
+          ...(pagosData || [])
+        ]);
+      }
+    } catch (error) {
+      console.error('Error al cargar recordatorios:', error);
+    }
+  };
+
+  const guardarTarea = async () => {
+    const titulo = nuevaTarea.titulo.trim();
+    if (!titulo) {
+      notificar.info('Escribí un título para la tarea.');
+      return;
+    }
+
+    if (!empresaId) {
+      notificar.info('Primero seleccioná una empresa activa para guardar la tarea.');
+      return;
+    }
+
+    const payload = {
+      empresa_id: empresaId,
+      usuario_id: perfilUsuario?.id || null,
+      titulo,
+      fecha: nuevaTarea.fecha || new Date().toISOString().slice(0, 10),
+      prioridad: nuevaTarea.prioridad || 'media',
+      detalle: nuevaTarea.detalle.trim(),
+      completada: false,
+    };
+
+    const { data, error } = await supabase
+      .from('tareas')
+      .insert([payload])
+      .select()
+      .single();
+
+    if (error) {
+      console.error('Error al guardar tarea:', error);
+      notificar.error('No se pudo guardar la tarea en Supabase. Revisa la tabla tareas.');
+      return;
+    }
+
+    const tareaGuardada = data || {
+      ...payload,
+      id: Date.now(),
+      created_at: new Date().toISOString(),
+    };
+
+    setTareasPendientes((prev) => [tareaGuardada, ...prev]);
+    setFechaSeleccionadaCalendario(tareaGuardada.fecha);
+    setMostrarCalendario(true);
+    setMostrarModalTarea(false);
+    setNuevaTarea({
+      titulo: '',
+      fecha: new Date().toISOString().slice(0, 10),
+      prioridad: 'media',
+      detalle: '',
+    });
+    notificar.exito(`✅ Tarea "${titulo}" agregada correctamente`);
+    setTimeout(() => {
+      notificar.info(`📋 Total de tareas pendientes: ${tareasPendientes.length + 1}`);
+    }, 500);
+  };
+
+  const alternarTarea = async (id, completada) => {
+    const { error } = await supabase
+      .from('tareas')
+      .update({ completada: !completada })
+      .eq('id', id);
+
+    if (error) {
+      console.error('Error al actualizar tarea:', error);
+      alert('No se pudo actualizar el estado de la tarea.');
+      return;
+    }
+
+    setTareasPendientes((prev) => prev.map((t) => (
+      t.id === id ? { ...t, completada: !completada } : t
+    )));
   };
 
   const manejarDocumentoPagoInicio = async (e) => {
@@ -229,6 +395,12 @@ const Inicio = ({ perfilUsuario }) => {
     cargarDatos();
     return () => { isMounted = false; };
   }, [empresaId, filtroUbicacion]);
+
+  useEffect(() => {
+    if (!empresaId) return;
+    cargarTareas();
+    cargarRecordatorios();
+  }, [empresaId]);
 
   // === CAJAS ABIERTAS EN VIVO: se actualiza sola cada 20s, sin recargar todo ===
   // Así, si otro cajero cierra su caja desde otra máquina, desaparece de acá
@@ -539,8 +711,192 @@ const Inicio = ({ perfilUsuario }) => {
   if (cargando) return <div className="p-10 text-center font-bold text-orange-500">{t('loadingData')}</div>;
   if (error) return <div className="p-10 text-center font-bold text-red-500">{error}</div>;
 
+  const renderCalendarioPantalla = () => {
+    const mesAnterior = () => setMesCalendario(new Date(mesCalendario.getFullYear(), mesCalendario.getMonth() - 1, 1));
+    const mesSiguiente = () => setMesCalendario(new Date(mesCalendario.getFullYear(), mesCalendario.getMonth() + 1, 1));
+    const nombreMes = new Intl.DateTimeFormat('es-ES', { month: 'long', year: 'numeric' }).format(mesCalendario);
+    const primerDia = new Date(mesCalendario.getFullYear(), mesCalendario.getMonth(), 1);
+    const ultimoDiaMes = new Date(mesCalendario.getFullYear(), mesCalendario.getMonth() + 1, 0);
+    const primerDiaSemana = (primerDia.getDay() + 6) % 7;
+    const diasMes = Array.from({ length: ultimoDiaMes.getDate() }, (_, i) => i + 1);
+    const diasVacios = Array.from({ length: primerDiaSemana }, (_, i) => i);
+    const diasTotales = [...diasVacios, ...diasMes];
+    const semanas = [];
+    while (diasTotales.length) semanas.push(diasTotales.splice(0, 7));
+    const tareasDelDiaSeleccionado = tareasPendientes.filter((t) => t.fecha === fechaSeleccionadaCalendario);
+
+    const fechaISO = (day) => new Date(mesCalendario.getFullYear(), mesCalendario.getMonth(), day).toISOString().slice(0, 10);
+
+    return (
+      <div className="min-h-screen bg-[#f5dfe6] text-slate-700">
+        <header className="flex items-center justify-between border-b border-slate-200 bg-white/70 px-5 py-4 backdrop-blur-sm">
+          <div className="flex items-center gap-3 text-sm text-slate-600">
+            <button type="button" className="rounded-lg border border-slate-200 bg-white p-2 shadow-sm">←</button>
+            <button type="button" className="rounded-lg border border-slate-200 bg-white p-2 shadow-sm">→</button>
+            <div className="rounded-lg border border-slate-200 bg-white px-3 py-2 font-medium text-slate-700 shadow-sm">Hoy</div>
+          </div>
+
+          <div className="flex items-center gap-3">
+            <button type="button" onClick={() => setMostrarCalendario(false)} className="rounded-lg border border-slate-200 bg-white p-2 shadow-sm text-slate-600">✕</button>
+          </div>
+        </header>
+
+        <div className="p-5">
+          <div className="rounded-[18px] bg-white/70 p-5 shadow-[0_12px_24px_rgba(15,23,42,0.06)] border border-slate-200/80">
+            <div className="mb-4 flex items-center justify-between gap-4">
+              <div className="flex items-center gap-3">
+                <button type="button" onClick={abrirModalAgregarTarea} className="inline-flex items-center gap-2 rounded-xl bg-[#1fc6a3] px-4 py-2.5 font-bold text-white shadow-[0_10px_18px_rgba(31,198,163,0.3)] hover:brightness-105 transition-all">
+                  <Plus size={16} />
+                  Agregar a hacer
+                </button>
+              </div>
+
+              {tareasPendientes.length > 0 && (
+                <div className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
+                  {tareasPendientes.filter((t) => !t.completada).length} pendientes
+                </div>
+              )}
+            </div>
+
+            {tareasPendientes.length > 0 && (
+              <div className="mb-5 rounded-2xl border border-slate-200 bg-slate-50/70 p-3">
+                <div className="mb-2 flex items-center justify-between">
+                  <h3 className="text-sm font-bold uppercase tracking-[0.12em] text-slate-500">A hacer</h3>
+                </div>
+                <div className="space-y-2">
+                  {tareasPendientes.map((tarea) => (
+                    <div key={tarea.id} className={`flex items-center justify-between gap-3 rounded-xl border px-3 py-2 ${tarea.completada ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : 'border-slate-200 bg-white text-slate-700'}`}>
+                      <div className="flex items-center gap-3">
+                        <input type="checkbox" checked={tarea.completada} onChange={() => alternarTarea(tarea.id)} className="h-4 w-4 accent-emerald-500" />
+                        <div>
+                          <p className={`text-sm font-bold ${tarea.completada ? 'line-through' : ''}`}>{tarea.titulo}</p>
+                          {tarea.detalle && <p className="text-[11px] text-slate-500">{tarea.detalle}</p>}
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold uppercase ${
+                          tarea.prioridad === 'alta' ? 'bg-red-100 text-red-600' : tarea.prioridad === 'media' ? 'bg-amber-100 text-amber-700' : 'bg-sky-100 text-sky-700'
+                        }`}>
+                          {tarea.prioridad}
+                        </span>
+                        <span className="text-[11px] font-medium text-slate-500">{new Date(tarea.fecha).toLocaleDateString('es-PY', { day: '2-digit', month: '2-digit' })}</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {tareasDelDiaSeleccionado.length > 0 && (
+              <div className="mb-5 rounded-2xl border border-orange-200 bg-orange-50 p-3">
+                <div className="mb-2 flex items-center justify-between">
+                  <h3 className="text-sm font-bold uppercase tracking-[0.12em] text-orange-700">Tareas del día</h3>
+                  <span className="text-xs font-semibold text-orange-600">{new Date(fechaSeleccionadaCalendario).toLocaleDateString('es-PY', { day: '2-digit', month: '2-digit', year: 'numeric' })}</span>
+                </div>
+                <div className="space-y-2">
+                  {tareasDelDiaSeleccionado.map((tarea) => (
+                    <div key={tarea.id} className="flex items-center justify-between gap-3 rounded-xl border border-orange-100 bg-white px-3 py-2">
+                      <div className="flex items-center gap-3">
+                        <input type="checkbox" checked={!!tarea.completada} onChange={() => alternarTarea(tarea.id, !!tarea.completada)} className="h-4 w-4 accent-orange-500" />
+                        <div>
+                          <p className="text-sm font-bold text-slate-700">{tarea.titulo}</p>
+                          {tarea.detalle && <p className="text-[11px] text-slate-500">{tarea.detalle}</p>}
+                        </div>
+                      </div>
+                      <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold uppercase ${
+                        tarea.prioridad === 'alta' ? 'bg-red-100 text-red-600' : tarea.prioridad === 'media' ? 'bg-amber-100 text-amber-700' : 'bg-sky-100 text-sky-700'
+                      }`}>{tarea.prioridad}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <div className="mb-4 flex items-center justify-between gap-4">
+              <div className="flex items-center gap-3">
+                <label className="text-sm font-semibold text-slate-600">Usuario:</label>
+                <select className="min-w-[180px] rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 shadow-sm outline-none focus:border-orange-300">
+                  <option>GDA Repuesto</option>
+                </select>
+              </div>
+
+              <div className="flex items-center gap-3">
+                <button type="button" onClick={mesAnterior} className="rounded-lg border border-slate-200 bg-white p-2 text-slate-600 shadow-sm"><ChevronLeft size={16} /></button>
+                <h2 className="min-w-[180px] text-center text-2xl font-bold capitalize text-slate-800">{nombreMes}</h2>
+                <button type="button" onClick={mesSiguiente} className="rounded-lg border border-slate-200 bg-white p-2 text-slate-600 shadow-sm"><ChevronRight size={16} /></button>
+                <div className="flex rounded-lg border border-slate-200 bg-slate-50 p-1 text-xs font-semibold text-slate-500">
+                  <button type="button" className="rounded-md bg-white px-3 py-1.5 shadow-sm text-slate-700">Mes</button>
+                  <button type="button" className="px-3 py-1.5">Semana</button>
+                  <button type="button" className="px-3 py-1.5">Día</button>
+                  <button type="button" className="px-3 py-1.5">Agenda</button>
+                </div>
+              </div>
+            </div>
+
+            <div className="mb-4 flex items-center gap-4">
+              <div className="flex items-center gap-3">
+                <label className="text-sm font-semibold text-slate-600">Ubicación:</label>
+                <select className="min-w-[220px] rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 shadow-sm outline-none focus:border-orange-300">
+                  <option>G.D.A - Repuestos y Servicios (BL00...)</option>
+                </select>
+              </div>
+
+              <label className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 shadow-sm">
+                <input type="checkbox" defaultChecked className="h-4 w-4 accent-orange-500" />
+                Reservas
+              </label>
+            </div>
+
+            <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-inner">
+              <div className="grid grid-cols-7 border-b border-slate-200 bg-slate-50 text-center text-[12px] font-bold uppercase tracking-[0.08em] text-slate-500">
+                {['lun.', 'mar.', 'mié.', 'jue.', 'vie.', 'sáb.', 'dom.'].map((dia) => (
+                  <div key={dia} className="py-3 border-r border-slate-200 last:border-r-0">{dia}</div>
+                ))}
+              </div>
+
+              <div className="grid grid-cols-7">
+                {semanas.flat().map((dia, index) => {
+                  const isEmpty = typeof dia !== 'number';
+                  const fechaDia = !isEmpty ? fechaISO(dia) : null;
+                  const hayTareasEnDia = !isEmpty && tareasPendientes.some((t) => t.fecha === fechaDia);
+                  const esSeleccionado = !isEmpty && fechaDia === fechaSeleccionadaCalendario;
+                  return (
+                    <div
+                      key={`${index}-${dia ?? 'empty'}`}
+                      onClick={() => {
+                        if (!isEmpty) {
+                          setFechaSeleccionadaCalendario(fechaDia);
+                          setMostrarCalendario(true);
+                        }
+                      }}
+                      className={`relative h-28 border-r border-b border-slate-200 bg-white p-2 text-left transition-colors ${isEmpty ? 'bg-slate-50/60' : 'hover:bg-slate-50 cursor-pointer'} ${esSeleccionado ? 'bg-[#f8f0d0]' : ''}`}
+                    >
+                      {!isEmpty && (
+                        <>
+                          <div className={`text-sm font-medium ${esSeleccionado ? 'text-slate-800' : 'text-slate-600'}`}>{dia}</div>
+                          {hayTareasEnDia && (
+                            <div className="mt-2 flex items-center gap-1">
+                              <span className="inline-block h-2.5 w-2.5 rounded-full bg-orange-500" />
+                              <span className="text-[10px] font-bold text-orange-600">{tareasPendientes.filter((t) => t.fecha === fechaDia && !t.completada).length}</span>
+                            </div>
+                          )}
+                          {esSeleccionado && <div className="mt-3 h-3 w-3 rounded-full bg-orange-400" />}
+                        </>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   return (
     <>
+      {mostrarCalendario ? renderCalendarioPantalla() : (
       <div className="bg-[#f4f7fa] min-h-screen w-full">
 
         {/* HEADER */}
@@ -553,6 +909,53 @@ const Inicio = ({ perfilUsuario }) => {
             <FiltroFecha value={rango} onChange={(nuevoRango) => setRango(nuevoRango)} />
           </div>
           <div className="absolute top-0 right-0 w-64 h-64 bg-white/5 rounded-full -mr-20 -mt-20 blur-3xl"></div>
+        </div>
+
+        {/* MÓDULOS RÁPIDOS SUPERIORES */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+          <button type="button" onClick={() => setMostrarCalendario(true)} className="group flex items-center justify-between rounded-2xl border border-slate-200 bg-white/80 px-5 py-4 text-left shadow-[0_10px_20px_rgba(15,23,42,0.06)] transition-all duration-200 hover:-translate-y-0.5 hover:border-orange-200 hover:shadow-[0_16px_30px_rgba(15,23,42,0.08)]">
+            <div className="flex items-center gap-3">
+              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-slate-100 text-slate-700 shadow-inner group-hover:bg-orange-50 group-hover:text-orange-500">
+                <CalendarRange size={20} />
+              </div>
+              <div>
+                <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-400">Calendario</p>
+                <p className="text-base font-bold text-slate-700">Agenda</p>
+              </div>
+            </div>
+            <span className="text-lg text-slate-400">›</span>
+          </button>
+
+          <button type="button" onClick={() => { setMostrarCalendario(true); abrirModalAgregarTarea(); }} className="group flex items-center justify-between rounded-2xl border border-slate-200 bg-white/80 px-5 py-4 text-left shadow-[0_10px_20px_rgba(15,23,42,0.06)] transition-all duration-200 hover:-translate-y-0.5 hover:border-orange-200 hover:shadow-[0_16px_30px_rgba(15,23,42,0.08)]">
+            <div className="flex items-center gap-3">
+              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-orange-50 text-orange-600 shadow-inner">
+                <CheckSquare size={20} />
+              </div>
+              <div>
+                <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-400">Agregar a</p>
+                <p className="text-base font-bold text-slate-700">hacer</p>
+              </div>
+            </div>
+            <span className="text-lg text-slate-400">›</span>
+          </button>
+
+          <button type="button" onClick={() => setMostrarRecordatorios(true)} className="group flex items-center justify-between rounded-2xl border border-slate-200 bg-white/80 px-5 py-4 text-left shadow-[0_10px_20px_rgba(15,23,42,0.06)] transition-all duration-200 hover:-translate-y-0.5 hover:border-orange-200 hover:shadow-[0_16px_30px_rgba(15,23,42,0.08)]">
+            <div className="flex items-center gap-3">
+              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-sky-50 text-sky-600 shadow-inner relative">
+                <Bell size={20} />
+                {(otPendientes.length + solicitudesPendientes.length > 0) && (
+                  <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs font-bold rounded-full w-5 h-5 flex items-center justify-center">
+                    {otPendientes.length + solicitudesPendientes.length}
+                  </span>
+                )}
+              </div>
+              <div>
+                <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-400">Recordatorio</p>
+                <p className="text-base font-bold text-slate-700">de solicitud</p>
+              </div>
+            </div>
+            <span className="text-lg text-slate-400">›</span>
+          </button>
         </div>
 
         {/* KPIs FILA 1 */}
@@ -913,6 +1316,152 @@ const Inicio = ({ perfilUsuario }) => {
         </div>
 
       </div>
+      )}
+
+      {mostrarModalTarea && (
+        <div className="fixed inset-0 z-[10000] flex items-center justify-center bg-black/45 p-4" onClick={() => setMostrarModalTarea(false)}>
+          <div className="w-full max-w-md rounded-2xl bg-white p-5 shadow-2xl" onClick={(e) => e.stopPropagation()}>
+            <div className="mb-4 flex items-center justify-between">
+              <h3 className="text-lg font-black text-slate-800">Agregar a hacer</h3>
+              <button type="button" onClick={() => setMostrarModalTarea(false)} className="rounded-lg border border-slate-200 px-2 py-1 text-slate-500 hover:bg-slate-100">✕</button>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <label className="mb-1 block text-xs font-bold uppercase tracking-[0.12em] text-slate-500">Título</label>
+                <input
+                  type="text"
+                  value={nuevaTarea.titulo}
+                  onChange={(e) => setNuevaTarea((prev) => ({ ...prev, titulo: e.target.value }))}
+                  placeholder="Ej: Revisar stock de baterías"
+                  className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-700 outline-none focus:border-orange-300 focus:ring-2 focus:ring-orange-100"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="mb-1 block text-xs font-bold uppercase tracking-[0.12em] text-slate-500">Fecha</label>
+                  <input
+                    type="date"
+                    value={nuevaTarea.fecha}
+                    onChange={(e) => setNuevaTarea((prev) => ({ ...prev, fecha: e.target.value }))}
+                    className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-700 outline-none focus:border-orange-300 focus:ring-2 focus:ring-orange-100"
+                  />
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs font-bold uppercase tracking-[0.12em] text-slate-500">Prioridad</label>
+                  <select
+                    value={nuevaTarea.prioridad}
+                    onChange={(e) => setNuevaTarea((prev) => ({ ...prev, prioridad: e.target.value }))}
+                    className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-700 outline-none focus:border-orange-300 focus:ring-2 focus:ring-orange-100"
+                  >
+                    <option value="alta">Alta</option>
+                    <option value="media">Media</option>
+                    <option value="baja">Baja</option>
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="mb-1 block text-xs font-bold uppercase tracking-[0.12em] text-slate-500">Detalle</label>
+                <textarea
+                  value={nuevaTarea.detalle}
+                  onChange={(e) => setNuevaTarea((prev) => ({ ...prev, detalle: e.target.value }))}
+                  rows={3}
+                  placeholder="Detalle opcional..."
+                  className="w-full resize-none rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-700 outline-none focus:border-orange-300 focus:ring-2 focus:ring-orange-100"
+                />
+              </div>
+            </div>
+
+            <div className="mt-5 flex justify-end gap-3">
+              <button type="button" onClick={() => setMostrarModalTarea(false)} className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-bold text-slate-600 hover:bg-slate-50">Cancelar</button>
+              <button type="button" onClick={guardarTarea} className="rounded-xl bg-orange-500 px-4 py-2.5 text-sm font-bold text-white hover:bg-orange-600">Guardar tarea</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {mostrarRecordatorios && (
+        <div className="fixed inset-0 z-[10000] flex items-center justify-center bg-black/45 p-4" onClick={() => setMostrarRecordatorios(false)}>
+          <div className="w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded-2xl bg-white p-6 shadow-2xl" onClick={(e) => e.stopPropagation()}>
+            <div className="mb-4 flex items-center justify-between sticky top-0 bg-white pb-4">
+              <h3 className="text-lg font-black text-slate-800">🔔 Recordatorios y Solicitudes</h3>
+              <button type="button" onClick={() => setMostrarRecordatorios(false)} className="rounded-lg border border-slate-200 px-2 py-1 text-slate-500 hover:bg-slate-100">✕</button>
+            </div>
+
+            <div className="space-y-4">
+              {/* TAREAS DE HOY */}
+              {solicitudesPendientes.some(s => s.tipo === 'tarea') && (
+                <div className="rounded-xl border border-blue-200 bg-blue-50 p-4">
+                  <h4 className="mb-3 font-bold text-blue-700 flex items-center gap-2">
+                    <span>✓</span> Tareas para Hoy ({solicitudesPendientes.filter(s => s.tipo === 'tarea').length})
+                  </h4>
+                  <div className="space-y-2">
+                    {solicitudesPendientes.filter(s => s.tipo === 'tarea').map((tarea) => (
+                      <div key={tarea.id} className="rounded-lg bg-white p-3 border border-blue-100">
+                        <p className="text-sm font-bold text-slate-800">{tarea.titulo}</p>
+                        {tarea.detalle && <p className="text-xs text-slate-600 mt-1">{tarea.detalle}</p>}
+                        <span className={`inline-block text-[10px] font-bold uppercase mt-2 rounded-full px-2 py-0.5 ${
+                          tarea.prioridad === 'alta' ? 'bg-red-100 text-red-600' : tarea.prioridad === 'media' ? 'bg-amber-100 text-amber-700' : 'bg-sky-100 text-sky-700'
+                        }`}>
+                          {tarea.prioridad}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* OT PENDIENTES */}
+              {otPendientes.length > 0 && (
+                <div className="rounded-xl border border-orange-200 bg-orange-50 p-4">
+                  <h4 className="mb-3 font-bold text-orange-700 flex items-center gap-2">
+                    <span>🔧</span> Órdenes de Trabajo Pendientes ({otPendientes.length})
+                  </h4>
+                  <div className="space-y-2">
+                    {otPendientes.map((ot) => (
+                      <div key={ot.id} className="rounded-lg bg-white p-3 border border-orange-100">
+                        <p className="text-sm font-bold text-slate-800">{ot.numero_ot}</p>
+                        <p className="text-xs text-slate-600">{ot.cliente}</p>
+                        <p className="text-[11px] text-orange-600 font-semibold mt-1">{ot.estado || 'Sin completar'}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* PAGOS VENCIDOS */}
+              {solicitudesPendientes.filter(s => s.tipo !== 'tarea').length > 0 && (
+                <div className="rounded-xl border border-red-200 bg-red-50 p-4">
+                  <h4 className="mb-3 font-bold text-red-700 flex items-center gap-2">
+                    <span>💰</span> Pagos Vencidos ({solicitudesPendientes.filter(s => s.tipo !== 'tarea').length})
+                  </h4>
+                  <div className="space-y-2">
+                    {solicitudesPendientes.filter(s => s.tipo !== 'tarea').map((pago) => (
+                      <div key={pago.id} className="rounded-lg bg-white p-3 border border-red-100">
+                        <p className="text-sm font-bold text-slate-800">{pago.cliente}</p>
+                        <p className="text-xs text-slate-600">{new Date(pago.fecha).toLocaleDateString('es-PY')}</p>
+                        <p className="text-[11px] text-red-600 font-semibold mt-1">Debe: {formatCurrency(pago.saldo_pendiente)}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {solicitudesPendientes.length === 0 && otPendientes.length === 0 && (
+                <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-6 text-center">
+                  <p className="text-emerald-700 font-bold">✅ ¡Todo al día! No hay recordatorios pendientes</p>
+                </div>
+              )}
+            </div>
+
+            <div className="mt-5 flex justify-end">
+              <button type="button" onClick={() => setMostrarRecordatorios(false)} className="rounded-xl bg-sky-500 px-4 py-2.5 text-sm font-bold text-white hover:bg-sky-600">Entendido</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* MODAL: Monto total pagado o pago parcial */}
       {deudaPagar && (

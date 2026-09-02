@@ -158,6 +158,11 @@ export default function Clientes() {
   const [terminoPagoTipo, setTerminoPagoTipo] = useState('Dias');
   const [limiteCredito, setLimiteCredito] = useState('0');
 
+  const manejarCambioTipoDoc = (nuevoTipoDoc) => {
+    setTipoDoc(nuevoTipoDoc);
+    setEsEmpresa(nuevoTipoDoc === 'RUC');
+  };
+
   useEffect(() => {
     if (nombreDelNegocio) setVendedorAsignado((prev) => prev || nombreDelNegocio);
   }, [nombreDelNegocio]);
@@ -959,50 +964,42 @@ export default function Clientes() {
     <div className="bg-transparent text-sm text-gray-700 relative h-full">
 
       <h2 className="text-2xl font-bold mb-4 text-gray-800">
-        Clientes <span className="text-sm font-normal text-gray-500">Administra tus Clientes</span>
         {t('customers')} <span className="text-sm font-normal text-gray-500">{t('manageCustomers')}</span>
       </h2>
 
       {/* FILTROS SUPERIORES */}
       <div className="bg-white p-4 rounded-lg shadow-sm border-t-2 border-[#004284] mb-4">
         <h3 className="text-xs font-bold text-gray-500 mb-4 flex items-center gap-1 uppercase">
-          Filtros
-                  {t('filters')}
+          {t('filters')}
         </h3>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
           <label className="flex items-center gap-2 text-xs font-bold text-gray-700 cursor-pointer">
             <input type="checkbox" checked={filtroCreditosOtorgados} onChange={(e) => { setFiltroCreditosOtorgados(e.target.checked); setPaginaActual(1); }} />
-            Creditos otorgados
-                      {t('creditGranted')}
+            {t('creditGranted')}
           </label>
           <label className="flex items-center gap-2 text-xs font-bold text-gray-400 cursor-not-allowed" title="Necesita el modulo de Devoluciones (todavia no existe en tu sistema)">
             <input type="checkbox" disabled />
-            Devolucion de Venta
-                      {t('salesReturn')}
+            {t('salesReturn')}
           </label>
           <label className="flex items-center gap-2 text-xs font-bold text-gray-700 cursor-pointer">
             <input type="checkbox" checked={filtroPagoRealizado} onChange={(e) => { setFiltroPagoRealizado(e.target.checked); setPaginaActual(1); }} />
-            Pago Realizado
-                      {t('paymentCompleted')}
+            {t('paymentCompleted')}
           </label>
           <label className="flex items-center gap-2 text-xs font-bold text-gray-700 cursor-pointer">
             <input type="checkbox" checked={filtroCreditoAFavor} onChange={(e) => { setFiltroCreditoAFavor(e.target.checked); setPaginaActual(1); }} />
-            Credito a favor
-                      {t('creditBalance')}
+            {t('creditBalance')}
           </label>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
           <div>
-            <label className="block text-xs font-bold text-gray-700 mb-1">Grupo de clientes:</label>
-                        <label className="block text-xs font-bold text-gray-700 mb-1">{t('customerGroup')}:</label>
+            <label className="block text-xs font-bold text-gray-700 mb-1">{t('customerGroup')}:</label>
             <select className="w-full border rounded p-2 bg-white outline-none" value={filtroGrupo} onChange={(e) => { setFiltroGrupo(e.target.value); setPaginaActual(1); }}>
               <option>Ninguna</option>
               {gruposDisponibles.map((g) => <option key={g}>{g}</option>)}
             </select>
           </div>
           <div>
-            <label className="block text-xs font-bold text-gray-700 mb-1">Estado:</label>
-                        <label className="block text-xs font-bold text-gray-700 mb-1">{t('status')}:</label>
+            <label className="block text-xs font-bold text-gray-700 mb-1">{t('status')}:</label>
             <select className="w-full border rounded p-2 bg-white outline-none" value={filtroEstado} onChange={(e) => { setFiltroEstado(e.target.value); setPaginaActual(1); }}>
               <option>Ninguna</option>
               {estadosDisponibles.map((es) => <option key={es}>{es}</option>)}
@@ -1014,19 +1011,16 @@ export default function Clientes() {
       {/* TABLA PRINCIPAL DE ENTRADAS */}
       <div className="bg-white rounded-lg shadow-sm border-t-2 border-[#004284]">
         <div className="p-4 border-b flex justify-between items-center">
-          <h3 className="text-base font-bold text-gray-700">Todos sus Clientes</h3>
-                    <h3 className="text-base font-bold text-gray-700">{t('allCustomers')}</h3>
+          <h3 className="text-base font-bold text-gray-700">{t('allCustomers')}</h3>
           <button onClick={() => { setClienteEditando(null); resetearFormulario(); setMostrarModalAñadir(true); }} className="bg-[#fd7e14] text-white px-4 py-2 rounded text-sm font-bold hover:bg-[#e86e04] transition shadow-sm">
-            + Añadir
-                      + {t('add')}
+            + {t('add')}
           </button>
         </div>
 
         <div className="p-4">
           <div className="flex flex-wrap justify-between items-center gap-3 mb-4">
             <div className="flex items-center gap-2 text-gray-600 font-medium">
-              <span>Mostrar</span>
-                            <span>{t('show')}</span>
+              <span>{t('show')}</span>
               <select
                 className="border rounded p-1"
                 value={entradasPorPagina}
@@ -1037,8 +1031,7 @@ export default function Clientes() {
                 <option value={50}>50</option>
                 <option value={100}>100</option>
               </select>
-              <span>entradas</span>
-                          <span>{t('entries')}</span>
+              <span>{t('entries')}</span>
             </div>
 
             <div className="flex flex-wrap gap-2">
@@ -1289,67 +1282,68 @@ export default function Clientes() {
       {/* MODAL AVANZADO DE APERTURA: CLON TOTAL PYpos                            */}
       {/* ======================================================================= */}
       {mostrarModalAñadir && (
-        <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-[9999] p-4">
-          <div className="bg-white w-full max-w-5xl rounded-lg shadow-2xl overflow-hidden flex flex-col max-h-[95vh]">
+        <div className="fixed inset-0 bg-slate-950/30 backdrop-blur-[2px] flex items-center justify-center z-[9999] p-4">
+          <div className="bg-white w-full max-w-5xl rounded-2xl shadow-[0_0_0_1px_rgba(255,255,255,0.06),0_30px_90px_rgba(15,23,42,0.42)] overflow-hidden flex flex-col max-h-[95vh] ring-1 ring-slate-200/70">
 
-            <div className="px-6 py-4 border-b flex justify-between items-center bg-[#1b2032] text-white">
-              <h3 className="text-lg font-bold flex items-center gap-2">
-                👤 {clienteEditando ? 'EDITAR CLIENTE' : 'NUEVO CLIENTE'}
+            <div className="px-6 py-5 border-b flex justify-between items-center bg-gradient-to-r from-[#1f2937] via-[#1d2434] to-[#111827] text-white">
+              <h3 className="text-xl font-bold flex items-center gap-3">
+                <span className="text-2xl">👤</span> 
+                <span>{clienteEditando ? 'EDITAR CLIENTE' : 'NUEVO CLIENTE'}</span>
               </h3>
-              <button onClick={() => { setMostrarModalAñadir(false); setClienteEditando(null); }} className="text-white/70 hover:text-white text-2xl font-bold">×</button>
+              <button onClick={() => { setMostrarModalAñadir(false); setClienteEditando(null); }} className="text-white/60 hover:text-white text-3xl font-bold transition-colors hover:bg-white/10 w-8 h-8 rounded flex items-center justify-center">×</button>
             </div>
 
-            <div className="p-6 overflow-y-auto bg-gray-50 flex-1 text-xs">
+            <div className="p-6 overflow-y-auto bg-gradient-to-b from-[#f8fafc] via-[#f5f7fa] to-[#f1f3f7] flex-1 text-xs">
               <form id="form-cliente" onSubmit={guardarCliente}>
 
                 {/* SELECTORES DE CABECERA */}
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6 items-end">
                   <div>
-                    <label className="block font-bold text-gray-700 uppercase mb-1">TIPO DE CONTACTO *</label>
-                    <select className="w-full border rounded p-2.5 bg-white outline-none" value={tipoContacto} onChange={(e) => setTipoContacto(e.target.value)}>
+                    <label className="block font-bold text-gray-700 uppercase mb-2 text-xs">TIPO DE CONTACTO *</label>
+                    <select className="w-full border border-gray-300 rounded-lg p-3 bg-white outline-none focus:border-[#f59e0b] focus:ring-2 focus:ring-[#f59e0b]/30 transition-all shadow-sm">
                       <option value="Clientes">Clientes</option>
                       <option value="Proveedores">Proveedores</option>
                       <option value="Ambos">Ambos (Proveedor y Cliente)</option>
                     </select>
                   </div>
 
-                  <div className="flex border rounded overflow-hidden shadow-sm h-[42px]">
-                    <button type="button" onClick={() => setEsEmpresa(false)} className={`flex-1 font-bold flex items-center justify-center gap-2 transition-colors ${!esEmpresa ? 'bg-gray-200 text-gray-800 border-b-2 border-blue-500' : 'bg-white text-gray-500'}`}>
-                      <span></span> Individual
+                  <div className="flex border border-gray-300 rounded-lg overflow-hidden shadow-sm h-[42px] bg-white">
+                    <button type="button" onClick={() => setEsEmpresa(false)} className={`flex-1 font-bold flex items-center justify-center gap-2 transition-all ${!esEmpresa ? 'bg-gradient-to-r from-[#fbbf24] to-[#f59e0b] text-white shadow-md' : 'bg-white text-gray-600 hover:bg-gray-50'}`}>
+                      <span>👤</span> Individual
                     </button>
-                    <button type="button" onClick={() => setEsEmpresa(true)} className={`flex-1 font-bold flex items-center justify-center gap-2 transition-colors ${esEmpresa ? 'bg-gray-200 text-gray-800 border-b-2 border-blue-500' : 'bg-white text-gray-500'}`}>
-                      <span></span> Empresa
+                    <button type="button" onClick={() => setEsEmpresa(true)} className={`flex-1 font-bold flex items-center justify-center gap-2 transition-all ${esEmpresa ? 'bg-gradient-to-r from-[#fbbf24] to-[#f59e0b] text-white shadow-md' : 'bg-white text-gray-600 hover:bg-gray-50'}`}>
+                      <span>🏢</span> Empresa
                     </button>
                   </div>
 
                   <div>
-                    <label className="block font-bold text-gray-700 uppercase mb-1">CÓDIGO</label>
-                    <input type="text" className="w-full border rounded p-2.5 bg-gray-100 outline-none" placeholder="Automático" value={codigo} onChange={(e) => setCodigo(e.target.value)} disabled />
+                    <label className="block font-bold text-gray-700 uppercase mb-2 text-xs">CÓDIGO</label>
+                    <input type="text" className="w-full border border-gray-300 rounded-lg p-3 bg-gray-100 outline-none text-gray-600" placeholder="Automático" value={codigo} onChange={(e) => setCodigo(e.target.value)} disabled />
                   </div>
                 </div>
 
                 {/* CAJA DE REGISTRO FISCAL */}
-                <div className="border border-blue-100 bg-blue-50/40 p-4 rounded-lg mb-6">
-                  <h4 className="text-[#004284] font-bold mb-3 flex items-center gap-1">🔍 BUSCAR O REGISTRAR CONTACTO</h4>
+                <div className="border border-blue-200 bg-gradient-to-br from-blue-50/60 to-blue-50/30 p-4 rounded-xl mb-6 shadow-sm">
+                  <h4 className="text-[#004284] font-bold mb-3 flex items-center gap-2">🔍 BUSCAR O REGISTRAR CONTACTO</h4>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
-                      <label className="block font-bold text-[#004284] uppercase mb-1">TIPO DOC.</label>
-                      <select className="w-full border rounded p-2 bg-white" value={tipoDoc} onChange={(e) => setTipoDoc(e.target.value)}>
+                      <label className="block font-bold text-[#004284] uppercase mb-2 text-xs">TIPO DOC.</label>
+                      <select className="w-full border border-blue-300 rounded-lg p-3 bg-white focus:border-[#f59e0b] focus:ring-2 focus:ring-[#f59e0b]/30 outline-none transition-all" value={tipoDoc} onChange={(e) => manejarCambioTipoDoc(e.target.value)}>
                         <option value="RUC">RUC</option>
                         <option value="CÉDULA DE IDENTIDAD">CÉDULA DE IDENTIDAD</option>
                         <option value="PASAPORTE">PASAPORTE</option>
                       </select>
                     </div>
                     <div>
-                      <label className="block font-bold text-[#004284] uppercase mb-1">NRO. DOCUMENTO *</label>
+                      <label className="block font-bold text-[#004284] uppercase mb-2 text-xs">NRO. DOCUMENTO *</label>
                       <div className="flex gap-2">
-                        <input type="text" className="w-full border rounded p-2 bg-white outline-none focus:border-orange-500" placeholder="Ej: 4671379-4" required value={nroDoc} onChange={(e) => setNroDoc(e.target.value)} />
+                        <input type="text" className="w-full border border-blue-300 rounded-lg p-3 bg-white outline-none focus:border-[#f59e0b] focus:ring-2 focus:ring-[#f59e0b]/30 transition-all" placeholder="Ej: 4671379-4" required value={nroDoc} onChange={(e) => setNroDoc(e.target.value)} />
                         <button
                           type="button"
                           onClick={buscarRuc}
                           disabled={cargandoRuc}
                           title="Buscar RUC"
-                          className="bg-orange-500 hover:bg-orange-600 disabled:bg-gray-400 text-white rounded-full w-10 h-10 flex items-center justify-center shrink-0 shadow-sm transition-colors"
+                          className="bg-gradient-to-r from-[#f59e0b] to-[#f97316] hover:from-[#ea8c13] hover:to-[#f07c00] disabled:from-gray-400 disabled:to-gray-500 text-white rounded-lg w-12 h-12 flex items-center justify-center shrink-0 shadow-md transition-all font-bold"
                         >
                           {cargandoRuc ? (
                             <svg className="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
@@ -1366,42 +1360,42 @@ export default function Clientes() {
                 </div>
 
                 {/* 1. ACORDEÓN: IDENTIFICACIÓN (DINÁMICO INDIVIDUAL / EMPRESA) */}
-                <div className="bg-white border rounded-lg mb-3 overflow-hidden shadow-sm">
-                  <div className="p-3 bg-white flex justify-between items-center cursor-pointer border-b" onClick={() => setAcordeonIdentificacion(!acordeonIdentificacion)}>
-                    <h4 className="font-bold text-[#004284]">Identificación</h4>
-                    <span className="text-gray-400 font-bold">{acordeonIdentificacion ? '' : ''}</span>
+                <div className="bg-white border border-gray-200 rounded-xl mb-3 overflow-hidden shadow-sm hover:shadow-md transition-shadow">
+                  <div className="p-4 bg-gradient-to-r from-blue-50 to-blue-100 flex justify-between items-center cursor-pointer border-b hover:from-blue-100 hover:to-blue-150 transition-colors" onClick={() => setAcordeonIdentificacion(!acordeonIdentificacion)}>
+                    <h4 className="font-bold text-blue-700 flex items-center gap-2">ℹ️ Identificación</h4>
+                    <span className={`text-blue-400 font-bold transition-transform ${acordeonIdentificacion ? 'rotate-180' : ''}`}>▼</span>
                   </div>
 
                   {acordeonIdentificacion && (
-                    <div className="p-4">
+                    <div className="p-5 bg-gradient-to-br from-blue-50/30 to-white">
                       {esEmpresa ? (
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 animate-fade-in">
                           <div>
-                            <label className="block font-bold text-gray-700 uppercase mb-1">RAZÓN SOCIAL / NOMBRE COMERCIAL *</label>
-                            <input type="text" className="w-full border rounded p-2 bg-white outline-none focus:border-orange-500" placeholder="Nombre de la Empresa / Razón Social" required={esEmpresa} value={nombreEmpresa} onChange={(e) => setNombreEmpresa(e.target.value)} />
+                            <label className="block font-bold text-gray-700 uppercase mb-2 text-xs">RAZÓN SOCIAL / NOMBRE COMERCIAL *</label>
+                            <input type="text" className="w-full border border-gray-300 rounded-lg p-3 bg-white outline-none focus:border-[#f59e0b] focus:ring-2 focus:ring-[#f59e0b]/30 transition-all" placeholder="Nombre de la Empresa / Razón Social" required={esEmpresa} value={nombreEmpresa} onChange={(e) => setNombreEmpresa(e.target.value)} />
                           </div>
                           <div>
-                            <label className="block font-bold text-gray-700 uppercase mb-1">REPRESENTANTE LEGAL</label>
-                            <input type="text" className="w-full border rounded p-2 bg-white outline-none focus:border-orange-500" placeholder="Nombre del Representante" value={representanteLegal} onChange={(e) => setRepresentanteLegal(e.target.value)} />
+                            <label className="block font-bold text-gray-700 uppercase mb-2 text-xs">REPRESENTANTE LEGAL</label>
+                            <input type="text" className="w-full border border-gray-300 rounded-lg p-3 bg-white outline-none focus:border-[#f59e0b] focus:ring-2 focus:ring-[#f59e0b]/30 transition-all" placeholder="Nombre del Representante" value={representanteLegal} onChange={(e) => setRepresentanteLegal(e.target.value)} />
                           </div>
                         </div>
                       ) : (
                         <div className="grid grid-cols-1 md:grid-cols-4 gap-4 animate-fade-in">
                           <div>
-                            <label className="block font-bold text-gray-700 uppercase mb-1">PREFIJO</label>
-                            <input type="text" className="w-full border rounded p-2 bg-white outline-none" placeholder="—" value={prefijo} onChange={(e) => setPrefijo(e.target.value)} />
+                            <label className="block font-bold text-gray-700 uppercase mb-2 text-xs">PREFIJO</label>
+                            <input type="text" className="w-full border border-gray-300 rounded-lg p-3 bg-white outline-none focus:border-[#f59e0b] focus:ring-2 focus:ring-[#f59e0b]/30 transition-all" placeholder="—" value={prefijo} onChange={(e) => setPrefijo(e.target.value)} />
                           </div>
                           <div>
-                            <label className="block font-bold text-gray-700 uppercase mb-1">NOMBRE *</label>
-                            <input type="text" className="w-full border rounded p-2 bg-white outline-none" placeholder="Nombre" required={!esEmpresa} value={nombre} onChange={(e) => setNombre(e.target.value)} />
+                            <label className="block font-bold text-gray-700 uppercase mb-2 text-xs">NOMBRE *</label>
+                            <input type="text" className="w-full border border-gray-300 rounded-lg p-3 bg-white outline-none focus:border-[#f59e0b] focus:ring-2 focus:ring-[#f59e0b]/30 transition-all" placeholder="Nombre" required={!esEmpresa} value={nombre} onChange={(e) => setNombre(e.target.value)} />
                           </div>
                           <div>
-                            <label className="block font-bold text-gray-700 uppercase mb-1">SEGUNDO NOMBRE</label>
-                            <input type="text" className="w-full border rounded p-2 bg-white outline-none" placeholder="Segundo nombre" value={segundoNombre} onChange={(e) => setSegundoNombre(e.target.value)} />
+                            <label className="block font-bold text-gray-700 uppercase mb-2 text-xs">SEGUNDO NOMBRE</label>
+                            <input type="text" className="w-full border border-gray-300 rounded-lg p-3 bg-white outline-none focus:border-[#f59e0b] focus:ring-2 focus:ring-[#f59e0b]/30 transition-all" placeholder="Segundo nombre" value={segundoNombre} onChange={(e) => setSegundoNombre(e.target.value)} />
                           </div>
                           <div>
-                            <label className="block font-bold text-gray-700 uppercase mb-1">APELLIDO *</label>
-                            <input type="text" className="w-full border rounded p-2 bg-white outline-none" placeholder="Apellido" required={!esEmpresa} value={apellido} onChange={(e) => setApellido(e.target.value)} />
+                            <label className="block font-bold text-gray-700 uppercase mb-2 text-xs">APELLIDO *</label>
+                            <input type="text" className="w-full border border-gray-300 rounded-lg p-3 bg-white outline-none focus:border-[#f59e0b] focus:ring-2 focus:ring-[#f59e0b]/30 transition-all" placeholder="Apellido" required={!esEmpresa} value={apellido} onChange={(e) => setApellido(e.target.value)} />
                           </div>
                         </div>
                       )}
@@ -1410,53 +1404,54 @@ export default function Clientes() {
                 </div>
 
                 {/* ACORDEONES: FOTO Y DOCUMENTOS */}
-                <div className="bg-white border rounded-lg mb-3 overflow-hidden shadow-sm">
-                  <div className="p-3 bg-white flex justify-between items-center cursor-pointer border-b" onClick={() => setAcordeonFoto(!acordeonFoto)}>
-                    <h4 className="font-bold text-gray-600 flex items-center gap-1"><span>📷</span> Foto del Cliente</h4>
-                    <span className="text-gray-400 font-bold">{acordeonFoto ? '▲' : '▼'}</span>
+                <div className="bg-white border border-gray-200 rounded-xl mb-3 overflow-hidden shadow-sm hover:shadow-md transition-shadow">
+                  <div className="p-4 bg-gradient-to-r from-gray-50 to-gray-100 flex justify-between items-center cursor-pointer border-b hover:from-gray-100 hover:to-gray-150 transition-colors" onClick={() => setAcordeonFoto(!acordeonFoto)}>
+                    <h4 className="font-bold text-gray-700 flex items-center gap-2"><span>📷</span> Foto del Cliente</h4>
+                    <span className={`text-gray-400 font-bold transition-transform ${acordeonFoto ? 'rotate-180' : ''}`}>▼</span>
                   </div>
                   {acordeonFoto && (
-                    <div className="p-4">
-                      <div className="flex flex-col items-center gap-3">
-                        <div className="w-24 h-24 rounded-full bg-gray-100 border border-gray-200 flex items-center justify-center overflow-hidden">
+                    <div className="p-5 bg-gradient-to-br from-gray-50/50 to-white">
+                      <div className="flex flex-col items-center gap-4">
+                        <div className="w-28 h-28 rounded-full bg-gradient-to-br from-gray-100 to-gray-200 border-2 border-gray-300 flex items-center justify-center overflow-hidden shadow-md">
                           {imagenClientePreview ? (
                             <img src={imagenClientePreview} alt="preview" className="w-full h-full object-cover" />
                           ) : (
-                            <span className="text-4xl text-gray-300">👤</span>
+                            <span className="text-5xl">👤</span>
                           )}
                         </div>
 
                         <div className="flex gap-2 flex-wrap justify-center">
-                          <label className={`border rounded px-4 py-2 text-xs font-bold text-gray-700 cursor-pointer hover:bg-gray-50 flex items-center gap-1 ${subiendoImagenCliente ? 'opacity-60 pointer-events-none' : ''}`}>
+                          <label className={`border border-gray-300 rounded-lg px-4 py-2 text-xs font-bold text-gray-700 cursor-pointer hover:bg-orange-50 hover:border-[#f59e0b] flex items-center gap-2 transition-all ${subiendoImagenCliente ? 'opacity-60 pointer-events-none' : ''}`}>
                             ⬆️ {subiendoImagenCliente ? 'Subiendo...' : 'Subir archivo'}
                             <input type="file" accept="image/jpeg,image/png" className="hidden" onChange={manejarImagenCliente} disabled={subiendoImagenCliente} />
                           </label>
-                          <button type="button" onClick={abrirCamaraCliente} className="border rounded px-4 py-2 text-xs font-bold text-gray-700 hover:bg-gray-50 flex items-center gap-1" disabled={subiendoImagenCliente}>
-                            📷 Camara Web
+                          <button type="button" onClick={abrirCamaraCliente} className="border border-gray-300 rounded-lg px-4 py-2 text-xs font-bold text-gray-700 hover:bg-blue-50 hover:border-blue-400 flex items-center gap-2 transition-all" disabled={subiendoImagenCliente}>
+                            📷 Cámara Web
                           </button>
                           {imagenClientePreview && (
-                            <button type="button" onClick={() => setImagenClientePreview(null)} className="bg-gray-100 hover:bg-gray-200 text-gray-600 text-xs font-bold px-4 py-2 rounded">
-                              Quitar foto
+                            <button type="button" onClick={() => setImagenClientePreview(null)} className="bg-gray-200 hover:bg-red-200 text-gray-600 hover:text-red-600 text-xs font-bold px-4 py-2 rounded-lg transition-all">
+                              ✕ Quitar
                             </button>
                           )}
                         </div>
 
-                        <label className="w-full max-w-xs border-2 border-dashed border-gray-300 rounded-lg py-4 text-center cursor-pointer hover:border-orange-400 hover:bg-orange-50/30 transition-colors">
+                        <label className="w-full max-w-xs border-2 border-dashed border-gray-300 rounded-lg py-6 text-center cursor-pointer hover:border-[#f59e0b] hover:bg-orange-50/40 transition-all duration-200">
                           <span className="text-xs font-bold text-gray-500">🖼️ Seleccionar imagen</span>
                           <input type="file" accept="image/jpeg,image/png" className="hidden" onChange={manejarImagenCliente} disabled={subiendoImagenCliente} />
                         </label>
-                        <p className="text-[10px] text-gray-400">JPG o PNG, max 5MB</p>
+                        <p className="text-[10px] text-gray-400">JPG o PNG, máx 5MB</p>
                       </div>
 
                       {/* Modal de cámara web */}
                       {camaraClienteAbierta && (
-                        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-[10000] p-4">
-                          <div className="bg-white rounded-xl shadow-2xl p-4 flex flex-col items-center gap-3 max-w-sm w-full">
-                            <video ref={videoClienteRef} autoPlay playsInline className="w-full rounded-lg bg-black" />
+                        <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-[10000] p-4 backdrop-blur-sm">
+                          <div className="bg-white rounded-2xl shadow-2xl p-5 flex flex-col items-center gap-4 max-w-sm w-full">
+                            <h4 className="font-bold text-gray-800">Captura desde cámara web</h4>
+                            <video ref={videoClienteRef} autoPlay playsInline className="w-full rounded-xl bg-black" />
                             <canvas ref={canvasClienteRef} className="hidden" />
                             <div className="flex gap-2 w-full">
-                              <button type="button" onClick={capturarFotoCliente} className="flex-1 bg-orange-500 hover:bg-orange-600 text-white font-bold py-2 rounded-lg text-sm">📸 Capturar</button>
-                              <button type="button" onClick={cerrarCamaraCliente} className="flex-1 border text-gray-600 font-bold py-2 rounded-lg text-sm hover:bg-gray-50">Cancelar</button>
+                              <button type="button" onClick={capturarFotoCliente} className="flex-1 bg-gradient-to-r from-[#f59e0b] to-[#f97316] hover:from-[#ea8c13] hover:to-[#f07c00] text-white font-bold py-2 rounded-lg text-sm shadow-md transition-all">📸 Capturar</button>
+                              <button type="button" onClick={cerrarCamaraCliente} className="flex-1 border border-gray-300 text-gray-600 font-bold py-2 rounded-lg text-sm hover:bg-gray-50 transition-all">Cancelar</button>
                             </div>
                           </div>
                         </div>
@@ -1465,59 +1460,59 @@ export default function Clientes() {
                   )}
                 </div>
 
-                <div className="bg-white border rounded-lg mb-3 overflow-hidden shadow-sm">
-                  <div className="p-3 bg-white flex justify-between items-center cursor-pointer border-b" onClick={() => setAcordeonDocumentos(!acordeonDocumentos)}>
-                    <h4 className="font-bold text-gray-600 flex items-center gap-1"><span>📎</span> Cargar Documentos <span className="text-[10px] font-normal normal-case text-gray-400">(CI, contratos, etc.)</span></h4>
-                    <span className="text-gray-400 font-bold">{acordeonDocumentos ? '▲' : '▼'}</span>
+                <div className="bg-white border border-gray-200 rounded-xl mb-3 overflow-hidden shadow-sm hover:shadow-md transition-shadow">
+                  <div className="p-4 bg-gradient-to-r from-gray-50 to-gray-100 flex justify-between items-center cursor-pointer border-b hover:from-gray-100 hover:to-gray-150 transition-colors" onClick={() => setAcordeonDocumentos(!acordeonDocumentos)}>
+                    <h4 className="font-bold text-gray-700 flex items-center gap-2"><span>📎</span> Cargar Documentos <span className="text-[9px] font-normal text-gray-500">(CI, contratos, etc.)</span></h4>
+                    <span className={`text-gray-400 font-bold transition-transform ${acordeonDocumentos ? 'rotate-180' : ''}`}>▼</span>
                   </div>
                   {acordeonDocumentos && (
-                    <div className="p-4 text-gray-400 italic">La carga de documentos todavía no está conectada — próximamente.</div>
+                    <div className="p-5 bg-gray-50 text-gray-500 italic text-sm">La carga de documentos todavía no está conectada — próximamente.</div>
                   )}
                 </div>
 
                 {/* 2. ACORDEÓN: CONTACTO */}
-                <div className="bg-white border rounded-lg mb-3 overflow-hidden shadow-sm">
-                  <div className="p-3 bg-white flex justify-between items-center cursor-pointer border-b" onClick={() => setAcordeonContacto(!acordeonContacto)}>
-                    <h4 className="font-bold text-green-600 flex items-center gap-1"><span>📞</span> Contacto</h4>
-                    <span className="text-gray-400 font-bold">{acordeonContacto ? '▲' : '▼'}</span>
+                <div className="bg-white border border-gray-200 rounded-xl mb-3 overflow-hidden shadow-sm hover:shadow-md transition-shadow">
+                  <div className="p-4 bg-gradient-to-r from-green-50 to-green-100 flex justify-between items-center cursor-pointer border-b hover:from-green-100 hover:to-green-150 transition-colors" onClick={() => setAcordeonContacto(!acordeonContacto)}>
+                    <h4 className="font-bold text-green-700 flex items-center gap-2">📞 Contacto</h4>
+                    <span className={`text-green-400 font-bold transition-transform ${acordeonContacto ? 'rotate-180' : ''}`}>▼</span>
                   </div>
                   {acordeonContacto && (
-                    <div className="p-4 grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div className="p-5 bg-gradient-to-br from-green-50/30 to-white grid grid-cols-1 md:grid-cols-3 gap-4">
                       <div>
-                        <label className="block font-bold text-gray-700 uppercase mb-1">TELÉFONO</label>
-                        <input type="text" className="w-full border rounded p-2 bg-white outline-none" placeholder="Celular / Teléfono" value={telefono} onChange={(e) => setTelefono(e.target.value)} />
+                        <label className="block font-bold text-gray-700 uppercase mb-2 text-xs">TELÉFONO</label>
+                        <input type="text" className="w-full border border-gray-300 rounded-lg p-3 bg-white outline-none focus:border-[#f59e0b] focus:ring-2 focus:ring-[#f59e0b]/30 transition-all" placeholder="Celular / Teléfono" value={telefono} onChange={(e) => setTelefono(e.target.value)} />
                       </div>
                       <div>
-                        <label className="block font-bold text-gray-700 uppercase mb-1">EMAIL</label>
-                        <input type="email" className="w-full border rounded p-2 bg-white outline-none" placeholder="Email" value={email} onChange={(e) => setEmail(e.target.value)} />
+                        <label className="block font-bold text-gray-700 uppercase mb-2 text-xs">EMAIL</label>
+                        <input type="email" className="w-full border border-gray-300 rounded-lg p-3 bg-white outline-none focus:border-[#f59e0b] focus:ring-2 focus:ring-[#f59e0b]/30 transition-all" placeholder="Email" value={email} onChange={(e) => setEmail(e.target.value)} />
                       </div>
                       <div>
-                        <label className="block font-bold text-gray-700 uppercase mb-1">FECHA NACIMIENTO</label>
-                        <input type="date" className="w-full border rounded p-2 bg-white outline-none" value={fechaNacimiento} onChange={(e) => setFechaNacimiento(e.target.value)} />
+                        <label className="block font-bold text-gray-700 uppercase mb-2 text-xs">FECHA NACIMIENTO</label>
+                        <input type="date" className="w-full border border-gray-300 rounded-lg p-3 bg-white outline-none focus:border-[#f59e0b] focus:ring-2 focus:ring-[#f59e0b]/30 transition-all" value={fechaNacimiento} onChange={(e) => setFechaNacimiento(e.target.value)} />
                       </div>
                     </div>
                   )}
                 </div>
 
                 {/* 3. ACORDEÓN: UBICACIÓN Y DATOS FISCALES */}
-                <div className="bg-white border rounded-lg mb-3 overflow-hidden shadow-sm">
-                  <div className="p-3 bg-white flex justify-between items-center cursor-pointer border-b hover:bg-gray-50" onClick={() => setAcordeonUbicacion(!acordeonUbicacion)}>
-                    <h4 className="font-bold text-red-500 flex items-center gap-1"><span>📍</span> Ubicación y Datos Fiscales</h4>
-                    <span className="text-gray-400 font-bold">{acordeonUbicacion ? '' : ''}</span>
+                <div className="bg-white border border-gray-200 rounded-xl mb-3 overflow-hidden shadow-sm hover:shadow-md transition-shadow">
+                  <div className="p-4 bg-gradient-to-r from-red-50 to-red-100 flex justify-between items-center cursor-pointer border-b hover:from-red-100 hover:to-red-150 transition-colors" onClick={() => setAcordeonUbicacion(!acordeonUbicacion)}>
+                    <h4 className="font-bold text-red-700 flex items-center gap-2">📍 Ubicación y Datos Fiscales</h4>
+                    <span className={`text-red-400 font-bold transition-transform ${acordeonUbicacion ? 'rotate-180' : ''}`}>▼</span>
                   </div>
                   {acordeonUbicacion && (
-                    <div className="p-4 grid grid-cols-1 md:grid-cols-4 gap-4 animate-fade-in">
+                    <div className="p-5 bg-gradient-to-br from-red-50/30 to-white grid grid-cols-1 md:grid-cols-4 gap-4 animate-fade-in">
                       <div>
-                        <label className="block font-bold text-gray-700 uppercase mb-1">PAÍS</label>
-                        <select className="w-full border rounded p-2 bg-white" value={pais} onChange={(e) => setPais(e.target.value)}>
+                        <label className="block font-bold text-gray-700 uppercase mb-2 text-xs">PAÍS</label>
+                        <select className="w-full border border-gray-300 rounded-lg p-3 bg-white focus:border-[#f59e0b] focus:ring-2 focus:ring-[#f59e0b]/30 outline-none transition-all" value={pais} onChange={(e) => setPais(e.target.value)}>
                           <option value="Paraguay">Paraguay</option>
                           <option value="Brasil">Brasil</option>
                           <option value="Argentina">Argentina</option>
                         </select>
                       </div>
                       <div>
-                        <label className="block font-bold text-gray-700 uppercase mb-1">DEPARTAMENTO</label>
-                        <select className="w-full border rounded p-2 bg-white" value={departamento} onChange={(e) => setDepartamento(e.target.value)}>
+                        <label className="block font-bold text-gray-700 uppercase mb-2 text-xs">DEPARTAMENTO</label>
+                        <select className="w-full border border-gray-300 rounded-lg p-3 bg-white focus:border-[#f59e0b] focus:ring-2 focus:ring-[#f59e0b]/30 outline-none transition-all" value={departamento} onChange={(e) => setDepartamento(e.target.value)}>
                           <option value="-- Depto --">-- Depto --</option>
                           <option value="ALTO PARANA">ALTO PARANA</option>
                           <option value="CENTRAL">CENTRAL</option>
@@ -1526,67 +1521,67 @@ export default function Clientes() {
                         </select>
                       </div>
                       <div>
-                        <label className="block font-bold text-gray-700 uppercase mb-1">CIUDAD</label>
-                        <input type="text" className="w-full border rounded p-2 bg-white outline-none" placeholder="Ciudad" value={ciudad} onChange={(e) => setCiudad(e.target.value)} />
+                        <label className="block font-bold text-gray-700 uppercase mb-2 text-xs">CIUDAD</label>
+                        <input type="text" className="w-full border border-gray-300 rounded-lg p-3 bg-white outline-none focus:border-[#f59e0b] focus:ring-2 focus:ring-[#f59e0b]/30 transition-all" placeholder="Ciudad" value={ciudad} onChange={(e) => setCiudad(e.target.value)} />
                       </div>
                       <div>
-                        <label className="block font-bold text-gray-700 uppercase mb-1">CÓD. POSTAL</label>
-                        <input type="text" className="w-full border rounded p-2 bg-white outline-none" value={codPostal} onChange={(e) => setCodPostal(e.target.value)} />
+                        <label className="block font-bold text-gray-700 uppercase mb-2 text-xs">CÓD. POSTAL</label>
+                        <input type="text" className="w-full border border-gray-300 rounded-lg p-3 bg-white outline-none focus:border-[#f59e0b] focus:ring-2 focus:ring-[#f59e0b]/30 transition-all" value={codPostal} onChange={(e) => setCodPostal(e.target.value)} />
                       </div>
                       <div className="md:col-span-2">
-                        <label className="block font-bold text-gray-700 uppercase mb-1">DIRECCIÓN (CALLE / BARRIO / AV)</label>
-                        <input type="text" className="w-full border rounded p-2 bg-white outline-none" placeholder="Calle / Barrio / Av / Referencia" value={direccionCalle} onChange={(e) => setDireccionCalle(e.target.value)} />
+                        <label className="block font-bold text-gray-700 uppercase mb-2 text-xs">DIRECCIÓN (CALLE / BARRIO / AV)</label>
+                        <input type="text" className="w-full border border-gray-300 rounded-lg p-3 bg-white outline-none focus:border-[#f59e0b] focus:ring-2 focus:ring-[#f59e0b]/30 transition-all" placeholder="Calle / Barrio / Av / Referencia" value={direccionCalle} onChange={(e) => setDireccionCalle(e.target.value)} />
                       </div>
                       <div>
-                        <label className="block font-bold text-gray-700 uppercase mb-1">NRO. CASA</label>
-                        <input type="text" className="w-full border rounded p-2 bg-white outline-none" placeholder="Ej: 123" value={nroCasa} onChange={(e) => setNroCasa(e.target.value)} />
+                        <label className="block font-bold text-gray-700 uppercase mb-2 text-xs">NRO. CASA</label>
+                        <input type="text" className="w-full border border-gray-300 rounded-lg p-3 bg-white outline-none focus:border-[#f59e0b] focus:ring-2 focus:ring-[#f59e0b]/30 transition-all" placeholder="Ej: 123" value={nroCasa} onChange={(e) => setNroCasa(e.target.value)} />
                       </div>
                       <div>
-                        <label className="block font-bold text-gray-700 uppercase mb-1">EDIFICIO / PISO / DPTO</label>
-                        <input type="text" className="w-full border rounded p-2 bg-white outline-none" placeholder="Opcional" value={edificioPiso} onChange={(e) => setEdificioPiso(e.target.value)} />
+                        <label className="block font-bold text-gray-700 uppercase mb-2 text-xs">EDIFICIO / PISO / DPTO</label>
+                        <input type="text" className="w-full border border-gray-300 rounded-lg p-3 bg-white outline-none focus:border-[#f59e0b] focus:ring-2 focus:ring-[#f59e0b]/30 transition-all" placeholder="Opcional" value={edificioPiso} onChange={(e) => setEdificioPiso(e.target.value)} />
                       </div>
                     </div>
                   )}
                 </div>
 
                 {/* 4. ACORDEÓN: CRÉDITO Y CONDICIONES */}
-                <div className="bg-white border rounded-lg mb-3 overflow-hidden shadow-sm">
-                  <div className="p-3 bg-white flex justify-between items-center cursor-pointer border-b hover:bg-gray-50" onClick={() => setAcordeonCredito(!acordeonCredito)}>
-                    <h4 className="font-bold text-purple-600 flex items-center gap-1"><span>💳</span> Crédito y Condiciones</h4>
-                    <span className="text-gray-400 font-bold">{acordeonCredito ? '' : ''}</span>
+                <div className="bg-white border border-gray-200 rounded-xl mb-3 overflow-hidden shadow-sm hover:shadow-md transition-shadow">
+                  <div className="p-4 bg-gradient-to-r from-purple-50 to-purple-100 flex justify-between items-center cursor-pointer border-b hover:from-purple-100 hover:to-purple-150 transition-colors" onClick={() => setAcordeonCredito(!acordeonCredito)}>
+                    <h4 className="font-bold text-purple-700 flex items-center gap-2">💳 Crédito y Condiciones</h4>
+                    <span className={`text-purple-400 font-bold transition-transform ${acordeonCredito ? 'rotate-180' : ''}`}>▼</span>
                   </div>
                   {acordeonCredito && (
-                    <div className="p-4 grid grid-cols-1 md:grid-cols-4 gap-4 animate-fade-in">
+                    <div className="p-5 bg-gradient-to-br from-purple-50/30 to-white grid grid-cols-1 md:grid-cols-4 gap-4 animate-fade-in">
                       <div>
-                        <label className="block font-bold text-gray-700 uppercase mb-1">VENDEDOR ASIGNADO</label>
-                        <select className="w-full border rounded p-2 bg-white" value={vendedorAsignado} onChange={(e) => setVendedorAsignado(e.target.value)}>
+                        <label className="block font-bold text-gray-700 uppercase mb-2 text-xs">VENDEDOR ASIGNADO</label>
+                        <select className="w-full border border-gray-300 rounded-lg p-3 bg-white focus:border-[#f59e0b] focus:ring-2 focus:ring-[#f59e0b]/30 outline-none transition-all" value={vendedorAsignado} onChange={(e) => setVendedorAsignado(e.target.value)}>
                           <option value={nombreDelNegocio}>{nombreDelNegocio}</option>
                           <option value="Richard Richard">Richard Richard</option>
                           <option value="Fabian">Fabian</option>
                         </select>
                       </div>
                       <div>
-                        <label className="block font-bold text-gray-700 uppercase mb-1">GRUPO DE CLIENTES</label>
-                        <select className="w-full border rounded p-2 bg-white" value={grupoClientes} onChange={(e) => setGrupoClientes(e.target.value)}>
+                        <label className="block font-bold text-gray-700 uppercase mb-2 text-xs">GRUPO DE CLIENTES</label>
+                        <select className="w-full border border-gray-300 rounded-lg p-3 bg-white focus:border-[#f59e0b] focus:ring-2 focus:ring-[#f59e0b]/30 outline-none transition-all" value={grupoClientes} onChange={(e) => setGrupoClientes(e.target.value)}>
                           <option value="Ninguna">Ninguna</option>
                           <option value="Cliente Vip">Cliente Vip</option>
                           <option value="Regular">Regular</option>
                         </select>
                       </div>
                       <div>
-                        <label className="block font-bold text-gray-700 uppercase mb-1">SALDO INICIAL</label>
-                        <input type="number" className="w-full border rounded p-2 bg-white outline-none" value={saldoInicial} onChange={(e) => setSaldoInicial(e.target.value)} />
+                        <label className="block font-bold text-gray-700 uppercase mb-2 text-xs">SALDO INICIAL</label>
+                        <input type="number" className="w-full border border-gray-300 rounded-lg p-3 bg-white outline-none focus:border-[#f59e0b] focus:ring-2 focus:ring-[#f59e0b]/30 transition-all" value={saldoInicial} onChange={(e) => setSaldoInicial(e.target.value)} />
                       </div>
                       <div>
-                        <label className="block font-bold text-gray-700 uppercase mb-1">LÍMITE DE CRÉDITO</label>
-                        <input type="number" className="w-full border rounded p-2 bg-white outline-none" value={limiteCredito} onChange={(e) => setLimiteCredito(e.target.value)} />
-                        <span className="text-[10px] text-gray-400">Dejar en 0 para "Sin límite"</span>
+                        <label className="block font-bold text-gray-700 uppercase mb-2 text-xs">LÍMITE DE CRÉDITO</label>
+                        <input type="number" className="w-full border border-gray-300 rounded-lg p-3 bg-white outline-none focus:border-[#f59e0b] focus:ring-2 focus:ring-[#f59e0b]/30 transition-all" value={limiteCredito} onChange={(e) => setLimiteCredito(e.target.value)} />
+                        <span className="text-[9px] text-gray-500 block mt-1">Dejar en 0 para "Sin límite"</span>
                       </div>
                       <div className="md:col-span-2">
-                        <label className="block font-bold text-gray-700 uppercase mb-1">TÉRMINO DE PAGO</label>
+                        <label className="block font-bold text-gray-700 uppercase mb-2 text-xs">TÉRMINO DE PAGO</label>
                         <div className="flex gap-2">
-                          <input type="number" className="w-1/2 border rounded p-2 bg-white outline-none" placeholder="N°" value={terminoPagoNum} onChange={(e) => setTerminoPagoNum(e.target.value)} />
-                          <select className="w-1/2 border rounded p-2 bg-white" value={terminoPagoTipo} onChange={(e) => setTerminoPagoTipo(e.target.value)}>
+                          <input type="number" className="w-1/2 border border-gray-300 rounded-lg p-3 bg-white outline-none focus:border-[#f59e0b] focus:ring-2 focus:ring-[#f59e0b]/30 transition-all" placeholder="N°" value={terminoPagoNum} onChange={(e) => setTerminoPagoNum(e.target.value)} />
+                          <select className="w-1/2 border border-gray-300 rounded-lg p-3 bg-white focus:border-[#f59e0b] focus:ring-2 focus:ring-[#f59e0b]/30 outline-none transition-all" value={terminoPagoTipo} onChange={(e) => setTerminoPagoTipo(e.target.value)}>
                             <option value="Dias">Días</option>
                             <option value="Meses">Meses</option>
                           </select>
@@ -1600,9 +1595,13 @@ export default function Clientes() {
             </div>
 
             {/* BOTONES INFERIORES */}
-            <div className="px-6 py-4 border-t bg-gray-50 flex justify-end items-center gap-3">
-              <button type="button" onClick={() => { setMostrarModalAñadir(false); setClienteEditando(null); }} className="bg-white border text-gray-700 px-5 py-2 rounded font-bold hover:bg-gray-100 transition shadow-sm">Cerrar</button>
-              <button type="submit" form="form-cliente" className="bg-[#fd7e14] text-white px-6 py-2 rounded font-bold hover:bg-[#e86e04] transition shadow-md flex items-center gap-1"><span></span> Guardar</button>
+            <div className="px-6 py-4 border-t bg-gradient-to-r from-[#f8fafc] via-[#f5f7fa] to-[#f1f3f7] flex justify-end items-center gap-3">
+              <button type="button" onClick={() => { setMostrarModalAñadir(false); setClienteEditando(null); }} className="border border-gray-300 text-gray-700 px-6 py-2.5 rounded-lg font-bold hover:bg-gray-100 transition-all shadow-sm">
+                Cancelar
+              </button>
+              <button type="submit" form="form-cliente" className="bg-gradient-to-r from-[#f59e0b] to-[#f97316] hover:from-[#ea8c13] hover:to-[#f07c00] text-white px-8 py-2.5 rounded-lg font-bold shadow-md hover:shadow-lg transition-all flex items-center gap-2">
+                <span>💾</span> Guardar Cliente
+              </button>
             </div>
 
           </div>

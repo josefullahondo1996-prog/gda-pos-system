@@ -352,13 +352,9 @@ const AgregarProducto = ({ onGuardado, onCancelar, productoEditar }) => {
     }
 
     return (
-        <div className="bg-transparent text-sm text-gray-700">
-
-            {/* Breadcrumb */}
-            <div className="flex items-center justify-between mb-4">
-                <p className="text-xs font-bold text-gray-500">
-                    <span className="text-blue-600">CDEpos</span> / {t('products')} / <span className="text-gray-700">{productoEditar ? t('editProduct') : t('addNewProduct')}</span>
-                </p>
+        <div className="bg-transparent text-sm text-gray-700 p-3 sm:p-4">
+            <div className="flex items-center justify-between mb-4 px-1">
+                <h2 className="text-base font-bold text-gray-800">{productoEditar ? t('editProduct') : t('addNewProduct')}</h2>
                 <button onClick={() => onCancelar && onCancelar()} className="text-xs font-bold text-gray-500 hover:text-gray-800">
                     ← {t('backToList')}
                 </button>

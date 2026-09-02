@@ -235,6 +235,19 @@ CREATE TABLE gastos (
     creado_en timestamptz NOT NULL DEFAULT now()
 );
 
+CREATE TABLE IF NOT EXISTS tareas (
+    id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    empresa_id uuid NOT NULL REFERENCES empresas(id) ON DELETE CASCADE,
+    usuario_id bigint REFERENCES usuarios(id) ON DELETE SET NULL,
+    titulo text NOT NULL,
+    detalle text,
+    fecha date NOT NULL,
+    prioridad text NOT NULL DEFAULT 'media',
+    completada boolean NOT NULL DEFAULT false,
+    created_at timestamptz NOT NULL DEFAULT now(),
+    updated_at timestamptz NOT NULL DEFAULT now()
+);
+
 ALTER TABLE gastos ADD COLUMN IF NOT EXISTS fecha date;
 ALTER TABLE gastos ADD COLUMN IF NOT EXISTS proveedor text;
 ALTER TABLE gastos ADD COLUMN IF NOT EXISTS nro_referencia text;
@@ -258,6 +271,8 @@ CREATE INDEX ON proveedores(empresa_id);
 CREATE INDEX ON compras(empresa_id);
 CREATE INDEX ON detalle_compras(empresa_id);
 CREATE INDEX ON pagos_compras(empresa_id);
+CREATE INDEX IF NOT EXISTS idx_tareas_empresa_fecha ON tareas(empresa_id, fecha);
+CREATE INDEX IF NOT EXISTS idx_tareas_usuario ON tareas(usuario_id);
 CREATE INDEX ON pagos_compras(compra_id);
 CREATE INDEX ON ventas(empresa_id);
 CREATE INDEX ON detalle_ventas(empresa_id);
@@ -270,6 +285,7 @@ ALTER TABLE usuarios ENABLE ROW LEVEL SECURITY;
 ALTER TABLE clientes ENABLE ROW LEVEL SECURITY;
 ALTER TABLE pagos_compras ENABLE ROW LEVEL SECURITY;
 ALTER TABLE categorias_gastos ENABLE ROW LEVEL SECURITY;
+ALTER TABLE tareas ENABLE ROW LEVEL SECURITY;
 
 CREATE POLICY "categorias_gastos_select_own_company"
 ON categorias_gastos FOR SELECT
@@ -357,6 +373,37 @@ WITH CHECK (
 
 CREATE POLICY "clientes_delete_own_company"
 ON clientes
+FOR DELETE
+USING (
+    empresa_id IN (SELECT empresa_id FROM usuarios WHERE auth_user_id = auth.uid())
+);
+
+CREATE POLICY "tareas_select_own_company"
+ON tareas
+FOR SELECT
+USING (
+    empresa_id IN (SELECT empresa_id FROM usuarios WHERE auth_user_id = auth.uid())
+);
+
+CREATE POLICY "tareas_insert_own_company"
+ON tareas
+FOR INSERT
+WITH CHECK (
+    empresa_id IN (SELECT empresa_id FROM usuarios WHERE auth_user_id = auth.uid())
+);
+
+CREATE POLICY "tareas_update_own_company"
+ON tareas
+FOR UPDATE
+USING (
+    empresa_id IN (SELECT empresa_id FROM usuarios WHERE auth_user_id = auth.uid())
+)
+WITH CHECK (
+    empresa_id IN (SELECT empresa_id FROM usuarios WHERE auth_user_id = auth.uid())
+);
+
+CREATE POLICY "tareas_delete_own_company"
+ON tareas
 FOR DELETE
 USING (
     empresa_id IN (SELECT empresa_id FROM usuarios WHERE auth_user_id = auth.uid())

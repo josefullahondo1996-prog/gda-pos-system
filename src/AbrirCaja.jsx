@@ -36,6 +36,30 @@ const AbrirCaja = ({ onCajaAbierta, perfilUsuario }) => {
     setCargando(true);
     try {
       const nombreUsuarioActual = [perfilUsuario?.nombre, perfilUsuario?.apellido].filter(Boolean).join(' ') || perfilUsuario?.nombre_usuario || perfilUsuario?.email || 'Usuario sin nombre';
+
+      const query = supabase
+        .from('caja_registros')
+        .select('id, empresa_id, saldo_inicial, estado, fecha_apertura, ubicacion_id, usuario')
+        .eq('empresa_id', empresaId)
+        .eq('estado', 'Abierta')
+        .order('fecha_apertura', { ascending: false });
+
+      const { data: cajasAbiertas, error: errorConsulta } = await query;
+      if (errorConsulta && errorConsulta.code !== '42P01') throw errorConsulta;
+
+      const cajaExistente = (cajasAbiertas || []).find((caja) => {
+        const mismoUsuario = !caja.usuario || caja.usuario === nombreUsuarioActual || caja.usuario === perfilUsuario?.nombre_usuario;
+        const mismaUbicacion = Number(caja.ubicacion_id) === Number(ubicacionElegida);
+        if (usuarioVeTodas) return mismoUsuario && mismaUbicacion;
+        return mismaUbicacion && (mismoUsuario || !caja.usuario);
+      });
+
+      if (cajaExistente) {
+        sonidoExito();
+        if (onCajaAbierta) onCajaAbierta(cajaExistente);
+        return;
+      }
+
       const nuevaCaja = {
         empresa_id: empresaId,
         saldo_inicial: Number(saldoInicial),
