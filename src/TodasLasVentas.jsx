@@ -3,7 +3,6 @@ import { supabase } from './supabaseClient';
 import { useEmpresaInfo } from './utils/useEmpresa';
 import { generateReceipt } from './utils/generateReceipt';
 import { generateNotaRemision } from './utils/generateNotaRemision';
-import { ajustarStockUbicacion } from './utils/stockUbicacion';
 import { consultarFacturaElectronica, getBadgeSifen } from './utils/goekuaService';
 import FiltroFecha from './FiltroFecha';
 import jsPDF from 'jspdf';
@@ -134,27 +133,6 @@ export default function TodasLasVentas({ onNuevaVenta }) {
         return data || [];
     };
 
-    // Repone stock (global + por sucursal) de todos los ítems de la venta.
-    // Se usa tanto para Anular como para Borrar como para Devolución, así una venta
-    // nunca queda "consumiendo" stock fantasma sin explicación.
-    const reponerStockDeVenta = async (venta) => {
-        const items = await cargarDetalleVenta(venta);
-        for (const item of items) {
-            if (!item.producto_id) continue;
-            const { data: prod } = await supabase.from('productos').select('stock_actual').eq('id', item.producto_id).eq('empresa_id', empresaId).single();
-            const nuevoStock = (Number(prod?.stock_actual) || 0) + Number(item.cantidad || 0);
-            await supabase.from('productos').update({ stock_actual: nuevoStock }).eq('id', item.producto_id).eq('empresa_id', empresaId);
-            if (venta.ubicacion_id) {
-                try {
-                    await ajustarStockUbicacion({ empresaId, productoId: item.producto_id, ubicacionId: venta.ubicacion_id, delta: Number(item.cantidad || 0) });
-                } catch (e) {
-                    console.warn('No se pudo reponer stock por sucursal:', e.message);
-                }
-            }
-        }
-        return items;
-    };
-
     const abrirModalAnular = (venta) => {
         setMenuAbiertoId(null);
         if (venta.estado_pago === 'Anulada' || venta.estado_pago === 'Devuelta') return alert('Esta venta ya está anulada.');
@@ -166,12 +144,11 @@ export default function TodasLasVentas({ onNuevaVenta }) {
         if (!ventaAAnular) return;
         setAnulando(true);
         try {
-            await reponerStockDeVenta(ventaAAnular);
-            const { error } = await supabase
-                .from('ventas')
-                .update({ estado_pago: 'Anulada', motivo_anulacion: motivoAnulacion || null })
-                .eq('id', ventaAAnular.id)
-                .eq('empresa_id', empresaId);
+            const { error } = await supabase.rpc('anular_venta', {
+                p_venta_id: ventaAAnular.id,
+                p_empresa_id: empresaId,
+                p_motivo: motivoAnulacion || null,
+            });
             if (error) throw error;
             setVentaAAnular(null);
             cargarTodo();
@@ -185,8 +162,10 @@ export default function TodasLasVentas({ onNuevaVenta }) {
     const devolverVenta = async (venta) => {
         if (venta.estado_pago === 'Anulada' || venta.estado_pago === 'Devuelta') return alert('Esta venta ya fue anulada/devuelta.');
         if (!confirm(`¿Registrar devolución completa de la venta #${venta.id}? Se repondrá el stock de todos los productos.`)) return;
-        await reponerStockDeVenta(venta);
-        const { error } = await supabase.from('ventas').update({ estado_pago: 'Devuelta' }).eq('id', venta.id).eq('empresa_id', empresaId);
+        const { error } = await supabase.rpc('devolver_venta', {
+            p_venta_id: venta.id,
+            p_empresa_id: empresaId,
+        });
         if (error) return alert('Error al registrar la devolución: ' + error.message);
         cargarTodo();
     };
@@ -197,7 +176,12 @@ export default function TodasLasVentas({ onNuevaVenta }) {
         setCargando(true);
         try {
             if (venta.estado_pago !== 'Anulada' && venta.estado_pago !== 'Devuelta') {
-                await reponerStockDeVenta(venta);
+                const { error: errorReversion } = await supabase.rpc('anular_venta', {
+                    p_venta_id: venta.id,
+                    p_empresa_id: empresaId,
+                    p_motivo: 'Eliminación manual de venta',
+                });
+                if (errorReversion) throw errorReversion;
             }
             // Borrar detalles y pagos asociados para no dejar registros huérfanos
             await supabase.from('detalle_ventas').delete().eq('venta_id', venta.id);

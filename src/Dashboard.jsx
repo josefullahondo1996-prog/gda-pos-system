@@ -5,7 +5,7 @@ import {
   LayoutDashboard, Users, Contact, Package, Factory, Wrench,
   ArrowDownToLine, ArrowUpFromLine, BarChart3, ShoppingCart, LogOut, Settings,
   MapPin, FileText, Barcode, Printer, Percent, ClipboardList, CreditCard,
-  Menu, X, Bell, DollarSign, RotateCw, BookOpen, Truck, ShoppingBag, Clock3, Building2
+  Menu, X, DollarSign, BookOpen, Truck, ShoppingBag, Clock3, Building2, CircleHelp, CalendarDays
 } from 'lucide-react';
 import ConfiguracionEmpresa from './ConfiguracionEmpresa';
 import ConfiguracionFacturaElectronica from './ConfiguracionFacturaElectronica';
@@ -102,49 +102,23 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
   };
   const [sidebarColapsado, setSidebarColapsado] = useState(false);
   const [menuMovilAbierto, setMenuMovilAbierto] = useState(false);
+  const [menuCuentaAbierto, setMenuCuentaAbierto] = useState(false);
+  const [menuAccionesAbierto, setMenuAccionesAbierto] = useState(false);
+  const [accionInicio, setAccionInicio] = useState(null);
   const [fechaHora, setFechaHora] = useState(new Date());
-  const [notificacionesSistema, setNotificacionesSistema] = useState([]);
-  const [mostrarNotificaciones, setMostrarNotificaciones] = useState(false);
 
   useEffect(() => {
     const intervalo = setInterval(() => setFechaHora(new Date()), 30000);
     return () => clearInterval(intervalo);
   }, []);
 
-  const cargarNotificacionesSistema = async () => {
-    const empresaId = perfilUsuario?.empresas?.id || perfilUsuario?.empresa_id;
-    if (!empresaId) return;
-
-    const [comprasResult, cajasResult, productosResult] = await Promise.all([
-      supabase.from('compras').select('id, proveedor_nombre, saldo_pendiente').eq('empresa_id', empresaId).gt('saldo_pendiente', 0).limit(5),
-      supabase.from('caja_registros').select('id, usuario, fecha_apertura').eq('empresa_id', empresaId).eq('estado', 'Abierta').limit(5),
-      supabase.from('productos').select('id, nombre, stock_actual, alerta_stock_bajo').eq('empresa_id', empresaId).limit(100),
-    ]);
-
-    const avisos = [];
-    (comprasResult.data || []).forEach((compra) => avisos.push({
-      id: `compra-${compra.id}`, tipo: 'warning', titulo: t('purchasePending'),
-      texto: `${compra.proveedor_nombre || 'Proveedor'} · ${Number(compra.saldo_pendiente || 0).toLocaleString('es-PY')} Gs`,
-    }));
-    (cajasResult.data || []).forEach((caja) => avisos.push({
-      id: `caja-${caja.id}`, tipo: 'info', titulo: t('openRegister'),
-      texto: caja.usuario ? `${t('openedBy')} ${caja.usuario}` : t('registerOpen'),
-    }));
-    (productosResult.data || []).filter((producto) => Number(producto.stock_actual || 0) <= Number(producto.alerta_stock_bajo ?? 5)).slice(0, 5).forEach((producto) => avisos.push({
-      id: `stock-${producto.id}`, tipo: 'danger', titulo: t('lowStock'),
-      texto: `${producto.nombre} · ${Number(producto.stock_actual || 0)} ${t('unitsLabel')}`,
-    }));
-    setNotificacionesSistema(avisos.slice(0, 12));
-  };
-
-  useEffect(() => {
-    cargarNotificacionesSistema();
-    const intervalo = setInterval(cargarNotificacionesSistema, 60000);
-    return () => clearInterval(intervalo);
-  }, [perfilUsuario?.empresas?.id, perfilUsuario?.empresa_id]);
-
   const cerrarSesion = async () => {
     await supabase.auth.signOut();
+  };
+
+  const abrirAccionInicio = (accion) => {
+    setAccionInicio({ tipo: accion, id: Date.now() });
+    irA('inicio', '/');
   };
 
   const posPantallaCompleta = vistaActiva === 'pos' && !!cajaActual;
@@ -345,7 +319,7 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
 
     switch (vistaActiva) {
       case 'inicio':
-        return <Inicio key={refreshInicio} perfilUsuario={perfilUsuario} />;
+        return <Inicio key={refreshInicio} perfilUsuario={perfilUsuario} accionInicial={accionInicio} />;
 
       case 'ot':
         return <OT key={refreshKey} perfilUsuario={perfilUsuario} />;
@@ -386,15 +360,6 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
             onNuevoGasto={() => setVistaActiva('nuevo_gasto')}
           />
         );
-
-      case 'reporte_cierre':
-        return (
-          <ReporteCierreCaja
-            reporte={reporteCierre}
-            onVolver={irAInicio}
-          />
-        );
-
       case 'nuevo_gasto':
         return (
           <NuevoGasto
@@ -573,7 +538,7 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
                 <span>Configuración</span>
               </button>
               <button type="button" onClick={() => irA('inicio', '/soporte')} className="w-full min-h-[74px] px-8 flex items-center gap-6 text-left text-[21px] tracking-wide text-[#202020] hover:bg-[#fff5f0]">
-                <Bell size={32} strokeWidth={2.1} className="shrink-0" />
+                <CircleHelp size={32} strokeWidth={2.1} className="shrink-0" />
                 <span>Soporte</span>
               </button>
               <button type="button" onClick={cerrarSesion} className="w-full min-h-[74px] px-8 flex items-center gap-6 text-left text-[21px] tracking-wide text-[#e14c4c] hover:bg-red-50">
@@ -840,33 +805,6 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
             )}
           </nav>
 
-          {/* Footer del Sidebar */}
-          <div className="p-3 border-t border-slate-200 bg-gradient-to-b from-white/60 to-slate-50/60 backdrop-blur-sm flex flex-col gap-3">
-            {!sidebarColapsado && (
-              <div className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-gradient-to-br from-white via-slate-50/50 to-slate-50 px-3 py-2.5 shadow-[0_10px_20px_rgba(15,23,42,0.06)]">
-                <div className="w-9 h-9 rounded-full bg-gradient-to-br from-[#f59e0b] via-[#fb923c] to-[#f97316] text-white flex items-center justify-center text-xs font-black shadow-[0_6px_14px_rgba(245,158,11,0.28)]">
-                  {(perfilUsuario?.empresas?.nombre || perfilUsuario?.nombre || 'N').charAt(0).toUpperCase()}
-                </div>
-                <div className="min-w-0 flex-1">
-                  <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">Cuenta</p>
-                  <p className="truncate text-sm font-semibold text-slate-700">
-                    {perfilUsuario?.empresas?.nombre || perfilUsuario?.nombre || 'Mi negocio'}
-                  </p>
-                </div>
-              </div>
-            )}
-
-            <button
-              onClick={cerrarSesion}
-              title={t('logout')}
-              className="group w-full bg-gradient-to-r from-[#1f2937] via-[#0f172a] to-[#111827] hover:from-[#111827] hover:via-[#0f172a] hover:to-[#0d1117] text-white py-2.5 rounded-2xl text-sm font-bold transition-all duration-300 flex items-center justify-center gap-2 shadow-[0_12px_24px_rgba(15,23,42,0.22)] hover:shadow-[0_16px_32px_rgba(15,23,42,0.28)]"
-            >
-              <span className="inline-flex items-center justify-center w-6 h-6 rounded-xl bg-gradient-to-br from-[#fbbf24] to-[#f59e0b] text-[#1f2937] shadow-[0_4px_10px_rgba(245,158,11,0.25)] transition-all duration-300 group-hover:scale-110">
-                <LogOut size={14} strokeWidth={2.2} />
-              </span>
-              {!sidebarColapsado && t('logout')}
-            </button>
-          </div>
         </aside>
       )}
 
@@ -936,9 +874,35 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
               </h2>
             <div className="flex-1"></div>
             <div className="hidden md:flex items-center gap-2 lg:gap-3">
-              <button className="flex items-center justify-center w-9 h-9 rounded-xl border border-slate-200 bg-white text-slate-700 shadow-sm hover:border-orange-200 hover:text-orange-500 transition-all duration-200">
-                <span className="text-xl leading-none">＋</span>
-              </button>
+                <LanguageSelector compact />
+              <div className="relative">
+                <button
+                  type="button"
+                  onClick={() => setMenuAccionesAbierto((abierto) => !abierto)}
+                  className="flex items-center justify-center w-9 h-9 rounded-xl border border-slate-200 bg-white text-slate-700 shadow-sm hover:border-orange-200 hover:text-orange-500 transition-all duration-200"
+                  aria-label="Acciones rápidas"
+                  aria-expanded={menuAccionesAbierto}
+                  aria-haspopup="menu"
+                >
+                  <span className="text-xl leading-none">＋</span>
+                </button>
+                {menuAccionesAbierto && (
+                  <div className="absolute left-0 top-12 z-50 w-48 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xl" role="menu">
+                    <button type="button" onClick={() => { setMenuAccionesAbierto(false); abrirAccionInicio('calendario'); }} className="flex w-full items-center gap-3 px-4 py-3 text-left text-sm text-slate-700 hover:bg-slate-50" role="menuitem">
+                      <CalendarDays size={16} className="text-slate-500" />
+                      Calendario
+                    </button>
+                    <button type="button" onClick={() => { setMenuAccionesAbierto(false); abrirAccionInicio('tarea'); }} className="flex w-full items-center gap-3 border-t border-slate-100 px-4 py-3 text-left text-sm text-slate-700 hover:bg-slate-50" role="menuitem">
+                      <ClipboardList size={16} className="text-orange-500" />
+                      Agregar a hacer
+                    </button>
+                    <button type="button" onClick={() => { setMenuAccionesAbierto(false); abrirAccionInicio('solicitudes'); }} className="flex w-full items-center gap-3 border-t border-slate-100 px-4 py-3 text-left text-sm text-slate-700 hover:bg-slate-50" role="menuitem">
+                      <CircleHelp size={16} className="text-sky-500" />
+                      Recorrido de solicitud
+                    </button>
+                  </div>
+                )}
+              </div>
               <button className="flex items-center justify-center w-9 h-9 rounded-xl border border-slate-200 bg-white text-slate-700 shadow-sm hover:border-orange-200 hover:text-orange-500 transition-all duration-200">
                 <ClipboardList size={17} />
               </button>
@@ -953,53 +917,57 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
                 <Clock3 size={16} className="text-slate-500" />
                 <span>{new Date().toLocaleDateString('es-PY', { day: '2-digit', month: '2-digit', year: 'numeric' })}</span>
               </div>
-              <button className="flex items-center justify-center w-9 h-9 rounded-xl border border-slate-200 bg-white text-slate-700 shadow-sm hover:border-orange-200 hover:text-orange-500 transition-all duration-200">
-                <Bell size={17} />
-              </button>
-              <button className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-bold text-slate-700 shadow-sm hover:border-orange-200 hover:text-orange-500 transition-all duration-200">
-                <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-gradient-to-br from-[#f59e0b] to-[#f97316] text-white text-[10px] font-black shadow-[0_6px_12px_rgba(245,158,11,0.25)]">G</span>
-                <span>GDA Repuesto</span>
-                <span className="text-xs text-slate-400">▼</span>
-              </button>
-            </div>
-            <div className="flex items-center gap-2 md:gap-3">
-              <LanguageSelector compact />
-              {/* BOTÓN ACTUALIZAR */}
-              <button
-                onClick={() => setRefreshKey(k => k + 1)}
-                className="relative w-8 h-8 rounded-lg text-gray-500 hover:bg-gradient-to-br hover:from-orange-50 hover:to-white hover:text-orange-500 flex items-center justify-center transition-all duration-200"
-                title="Actualizar"
-              >
-                <RotateCw size={17} />
-              </button>
-
-              {/* BOTÓN NOTIFICACIONES */}
               <div className="relative">
                 <button
                   type="button"
-                  onClick={() => setMostrarNotificaciones((actual) => !actual)}
-                  className="relative w-8 h-8 rounded-lg text-gray-500 hover:bg-gradient-to-br hover:from-blue-50 hover:to-white hover:text-blue-500 flex items-center justify-center transition-all duration-200"
-                  title={t('notificationLabel')}
-                  aria-label={t('notificationLabel')}
+                  onClick={() => setMenuCuentaAbierto((abierto) => !abierto)}
+                  className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-bold text-slate-700 shadow-sm hover:border-orange-200 hover:text-orange-500 transition-all duration-200"
+                  aria-expanded={menuCuentaAbierto}
+                  aria-haspopup="menu"
                 >
-                  <Bell size={17} />
-                  {notificacionesSistema.length > 0 && <span className="absolute -top-1 -right-1 min-w-4 h-4 px-1 rounded-full bg-gradient-to-r from-red-500 to-red-600 text-white text-[9px] font-black flex items-center justify-center shadow-[0_4px_8px_rgba(239,68,68,0.3)]">{notificacionesSistema.length}</span>}
+                  <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-gradient-to-br from-[#f59e0b] to-[#f97316] text-white text-[10px] font-black shadow-[0_6px_12px_rgba(245,158,11,0.25)]">
+                    {(perfilUsuario?.empresas?.nombre || 'N').charAt(0).toUpperCase()}
+                  </span>
+                  <span>{perfilUsuario?.empresas?.nombre || 'Mi Negocio'}</span>
+                  <span className="text-xs text-slate-400">{menuCuentaAbierto ? '▲' : '▼'}</span>
                 </button>
-                {mostrarNotificaciones && (
-                  <div className="absolute right-0 top-10 z-50 w-80 max-w-[calc(100vw-2rem)] bg-white border border-gray-200 rounded-xl shadow-2xl overflow-hidden">
-                    <div className="px-4 py-3 border-b bg-gradient-to-r from-slate-50 to-white flex items-center justify-between"><span className="font-bold text-gray-800">{t('notifications')}</span><span className="text-[10px] text-gray-400">{t('realtimeData')}</span></div>
-                    <div className="max-h-80 overflow-y-auto">
-                      {notificacionesSistema.length === 0 ? <p className="p-5 text-center text-sm text-gray-400">{t('noNotifications')}</p> : notificacionesSistema.map((aviso) => <div key={aviso.id} className="px-4 py-3 border-b last:border-0 hover:bg-slate-50 transition-colors"><p className={`text-xs font-bold ${aviso.tipo === 'danger' ? 'text-red-600' : aviso.tipo === 'warning' ? 'text-orange-600' : 'text-blue-600'}`}>{aviso.titulo}</p><p className="text-xs text-gray-600 mt-0.5">{aviso.texto}</p></div>)}
+                {menuCuentaAbierto && (
+                  <div className="absolute right-0 top-12 z-50 w-72 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-2xl" role="menu">
+                    <div className="border-b border-slate-100 px-4 py-3">
+                      <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Mi cuenta</p>
+                      <p className="mt-1 text-sm font-bold text-slate-800">{perfilUsuario?.empresas?.nombre || 'Mi Negocio'}</p>
+                      <p className="mt-1 truncate text-xs text-slate-500">{perfilUsuario?.email || session?.user?.email || ''}</p>
                     </div>
+                    <button
+                      type="button"
+                      onClick={() => setMenuCuentaAbierto(false)}
+                      className="flex w-full items-center gap-3 px-4 py-3 text-left text-sm text-slate-700 hover:bg-slate-50"
+                      role="menuitem"
+                    >
+                      <Users size={16} className="text-slate-500" />
+                      Perfil
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => { setMenuCuentaAbierto(false); irA('config_empresa', '/configuracion'); }}
+                      className="flex w-full items-center gap-3 border-t border-slate-100 px-4 py-3 text-left text-sm text-slate-700 hover:bg-slate-50"
+                      role="menuitem"
+                    >
+                      <Settings size={16} className="text-slate-500" />
+                      Configuraciones
+                    </button>
+                    <button
+                      type="button"
+                      onClick={cerrarSesion}
+                      className="flex w-full items-center gap-3 border-t border-slate-100 px-4 py-3 text-left text-sm text-red-600 hover:bg-red-50"
+                      role="menuitem"
+                    >
+                      <LogOut size={16} />
+                      Desconectar
+                    </button>
                   </div>
                 )}
               </div>
-              <span className="text-xs md:text-sm font-medium text-gray-700 flex items-center gap-2">
-                <span className="bg-gradient-to-br from-[#f59e0b] to-[#f97316] text-white rounded-full w-6 h-6 flex items-center justify-center text-[10px] font-bold shadow-[0_4px_10px_rgba(245,158,11,0.25)]">
-                  {(perfilUsuario?.empresas?.nombre || 'N').charAt(0).toUpperCase()}
-                </span>
-                <span className="hidden sm:inline">{perfilUsuario?.empresas?.nombre || 'Mi Negocio'}</span>
-              </span>
             </div>
           </header>
         )}

@@ -1,8 +1,14 @@
 [functions.create-user]
-verify_jwt = false
+verify_jwt = true
 
 [functions.delete-user]
-verify_jwt = false
+verify_jwt = true
+
+[functions.generate-invoice]
+verify_jwt = true
+
+[functions.consultar-factura]
+verify_jwt = true
 
 [functions.crear-negocio]
 verify_jwt = false

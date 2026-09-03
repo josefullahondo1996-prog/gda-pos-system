@@ -1,4 +1,5 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { getAuthenticatedUser, unauthorized } from '../_shared/auth.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -12,6 +13,9 @@ Deno.serve(async (req) => {
   }
 
   try {
+    const { user, error: authError } = await getAuthenticatedUser(req);
+    if (!user) return unauthorized(authError || 'No autorizado.', corsHeaders);
+
     const { auth_user_id, usuario_id, empresa_id } = await req.json();
 
     if (!usuario_id || !empresa_id) {
@@ -25,6 +29,17 @@ Deno.serve(async (req) => {
       Deno.env.get('SUPABASE_URL') ?? '',
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     );
+
+    const { data: solicitante } = await supabaseAdmin
+      .from('usuarios')
+      .select('empresa_id, roles(nombre)')
+      .eq('auth_user_id', user.id)
+      .eq('empresa_id', empresa_id)
+      .maybeSingle();
+    const rol = String(solicitante?.roles?.nombre || '').toLowerCase();
+    if (!solicitante || !rol.includes('admin')) {
+      return unauthorized('No tenés permisos para eliminar usuarios.', corsHeaders);
+    }
 
     // 1) Borramos la ficha de la tabla "usuarios", limitado siempre a su propia
     // empresa: aunque esto corre con la clave de servicio (que salta RLS),

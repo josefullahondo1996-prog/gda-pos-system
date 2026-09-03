@@ -448,64 +448,9 @@ const PuntoDeVenta = ({ cajaInfo, session, perfilUsuario, onVolver, onSolicitarC
       });
       if (error) throw error;
 
-      // Algunas versiones de la RPC solo actualizan el detalle o el stock por
-      // sucursal. Sincronizamos el stock global únicamente si aún conserva el
-      // valor anterior, para no descontarlo dos veces.
-      for (const item of carrito) {
-        const productoAntes = productos.find((p) => p.id === item.id);
-        const stockAntes = Number(productoAntes?.stock_actual);
-        if (!Number.isFinite(stockAntes)) continue;
-
-        const { data: productoDespues } = await supabase
-          .from('productos')
-          .select('stock_actual')
-          .eq('id', item.id)
-          .eq('empresa_id', empresaId)
-          .single();
-        const stockActual = Number(productoDespues?.stock_actual);
-        if (stockActual !== stockAntes) continue;
-
-        await supabase
-          .from('productos')
-          .update({ stock_actual: Math.max(0, stockAntes - Number(item.cantidad)) })
-          .eq('id', item.id)
-          .eq('empresa_id', empresaId)
-          .eq('stock_actual', stockAntes);
-      }
-
-      // Para productos tipo Combo, descontamos también el stock de cada sub-componente
-      // según la cantidad de combos vendidos. Usamos el mismo patrón optimista
-      // (leemos stock actual, solo escribimos si no cambió) para evitar doble descuento.
       const itemsCombo = carrito.filter(
         (item) => item.tipo_producto === 'Combo' && Array.isArray(item.combo_productos) && item.combo_productos.length > 0
       );
-      for (const itemCombo of itemsCombo) {
-        const cantidadCombosVendidos = Number(itemCombo.cantidad) || 1;
-        for (const comp of itemCombo.combo_productos) {
-          const subProductoId = comp.id || comp.producto_id;
-          const cantidadPorCombo = Number(comp.cantidad) || 1;
-          const cantidadTotalADescontar = cantidadPorCombo * cantidadCombosVendidos;
-
-          // Leemos el stock actual del sub-componente
-          const { data: subProductoActual } = await supabase
-            .from('productos')
-            .select('stock_actual')
-            .eq('id', subProductoId)
-            .eq('empresa_id', empresaId)
-            .single();
-
-          const stockSubAntes = Number(subProductoActual?.stock_actual);
-          if (!Number.isFinite(stockSubAntes)) continue;
-
-          // Descontamos con bloqueo optimista (solo si el stock no cambió entretanto)
-          await supabase
-            .from('productos')
-            .update({ stock_actual: Math.max(0, stockSubAntes - cantidadTotalADescontar) })
-            .eq('id', subProductoId)
-            .eq('empresa_id', empresaId)
-            .eq('stock_actual', stockSubAntes);
-        }
-      }
 
       window.dispatchEvent(new Event('stock-actualizado'));
 

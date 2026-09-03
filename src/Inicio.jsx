@@ -45,7 +45,7 @@ const toDate = (value) => {
 const MESES_CORTOS = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
 const COLORS = ['#3b82f6', '#f59e0b', '#ef4444', '#10b981', '#8b5cf6'];
 
-const Inicio = ({ perfilUsuario }) => {
+const Inicio = ({ perfilUsuario, accionInicial }) => {
     const { t, locale } = useLanguage();
   const { notificar } = useNotificacion();
   const { id: empresaId, nombre: nombreDelNegocio } = useEmpresaInfo();
@@ -76,6 +76,7 @@ const Inicio = ({ perfilUsuario }) => {
   const [otPendientes, setOtPendientes] = useState([]);
   const [solicitudesPendientes, setSolicitudesPendientes] = useState([]);
   const [mostrarRecordatorios, setMostrarRecordatorios] = useState(false);
+  const [pagoActivo, setPagoActivo] = useState(null);
 
   // === FILTRO DE FECHA — arranca en "Hoy" por defecto ===
   const [rango, setRango] = useState(() => {
@@ -123,6 +124,16 @@ const Inicio = ({ perfilUsuario }) => {
       detalle: '',
     });
   };
+
+  useEffect(() => {
+    if (!accionInicial?.tipo) return;
+    if (accionInicial.tipo === 'calendario') setMostrarCalendario(true);
+    if (accionInicial.tipo === 'tarea') {
+      setMostrarCalendario(true);
+      abrirModalAgregarTarea();
+    }
+    if (accionInicial.tipo === 'solicitudes') setMostrarRecordatorios(true);
+  }, [accionInicial?.id]);
 
   const cargarTareas = async () => {
     if (!empresaId) return;
@@ -457,6 +468,56 @@ const Inicio = ({ perfilUsuario }) => {
   const totalCompras = comprasF.reduce((a, c) => a + getNumericValue(c, ['total', 'total_compra']), 0);
   const neto = totalVentas - totalCompras - totalGastos;
 
+  const ventasSemana = useMemo(() => {
+    const ahora = new Date();
+    const inicio = new Date(ahora);
+    const diasDesdeLunes = (ahora.getDay() + 6) % 7;
+    inicio.setDate(ahora.getDate() - diasDesdeLunes);
+    inicio.setHours(0, 0, 0, 0);
+    const fin = new Date(inicio);
+    fin.setDate(inicio.getDate() + 7);
+    return ventas.filter((venta) => {
+      const fecha = toDate(venta.fecha);
+      return fecha && fecha >= inicio && fecha < fin;
+    }).reduce((total, venta) => total + getNumericValue(venta, ['total', 'monto', 'valor']), 0);
+  }, [ventas]);
+
+  const ventasMes = useMemo(() => {
+    const ahora = new Date();
+    const inicio = new Date(ahora.getFullYear(), ahora.getMonth(), 1);
+    const fin = new Date(ahora.getFullYear(), ahora.getMonth() + 1, 1);
+    return ventas.filter((venta) => {
+      const fecha = toDate(venta.fecha);
+      return fecha && fecha >= inicio && fecha < fin;
+    }).reduce((total, venta) => total + getNumericValue(venta, ['total', 'monto', 'valor']), 0);
+  }, [ventas]);
+
+  const variacionVentasSemana = useMemo(() => {
+    const ahora = new Date();
+    const diasDesdeLunes = (ahora.getDay() + 6) % 7;
+    const inicioActual = new Date(ahora);
+    inicioActual.setDate(ahora.getDate() - diasDesdeLunes);
+    inicioActual.setHours(0, 0, 0, 0);
+    const inicioAnterior = new Date(inicioActual);
+    inicioAnterior.setDate(inicioActual.getDate() - 7);
+    const ventasAnteriores = ventas.filter((venta) => {
+      const fecha = toDate(venta.fecha);
+      return fecha && fecha >= inicioAnterior && fecha < inicioActual;
+    }).reduce((total, venta) => total + getNumericValue(venta, ['total', 'monto', 'valor']), 0);
+    return ventasAnteriores ? ((ventasSemana - ventasAnteriores) / ventasAnteriores) * 100 : null;
+  }, [ventas, ventasSemana]);
+
+  const variacionVentasMes = useMemo(() => {
+    const ahora = new Date();
+    const inicioActual = new Date(ahora.getFullYear(), ahora.getMonth(), 1);
+    const inicioAnterior = new Date(ahora.getFullYear(), ahora.getMonth() - 1, 1);
+    const ventasAnteriores = ventas.filter((venta) => {
+      const fecha = toDate(venta.fecha);
+      return fecha && fecha >= inicioAnterior && fecha < inicioActual;
+    }).reduce((total, venta) => total + getNumericValue(venta, ['total', 'monto', 'valor']), 0);
+    return ventasAnteriores ? ((ventasMes - ventasAnteriores) / ventasAnteriores) * 100 : null;
+  }, [ventas, ventasMes]);
+
   // === SALDOS ACTUALES (no dependen del filtro de fecha) ===
   const deudaCompras = compras.reduce((a, c) => a + getNumericValue(c, ['saldo_pendiente', 'saldo']), 0);
   const ventasConCredito = ventas.filter((v) => getNumericValue(v, ['saldo_pendiente', 'saldo']) > 0);
@@ -477,35 +538,54 @@ const Inicio = ({ perfilUsuario }) => {
     return ((totalVentas - ventasAnterior) / ventasAnterior) * 100;
   }, [rango, ventas, totalVentas]);
 
-  // === GRÁFICO: VENTAS DEL PERÍODO, POR DÍA ===
-  const datosLinea = useMemo(() => {
-    const desde = rango.desde || (() => { const d = new Date(); d.setDate(d.getDate() - 29); d.setHours(0, 0, 0, 0); return d; })();
-    const hasta = rango.hasta || new Date();
-    const cantDias = Math.min(90, Math.max(1, Math.round((hasta - desde) / 86400000) + 1));
+  // === GRÁFICO: VENTAS DE LOS ÚLTIMOS 30 DÍAS, POR DÍA ===
+  const datosUltimos30Dias = useMemo(() => {
+    const hasta = new Date();
+    const desde = new Date(hasta);
+    desde.setDate(hasta.getDate() - 29);
+    desde.setHours(0, 0, 0, 0);
     const mapa = {};
     const orden = [];
-    for (let i = 0; i < cantDias; i++) {
+    for (let i = 0; i < 30; i++) {
       const d = new Date(desde); d.setDate(d.getDate() + i);
-      if (d > hasta) break;
       const key = d.toLocaleDateString(locale, { day: '2-digit', month: 'short' });
       mapa[key] = 0;
       orden.push(key);
     }
-    ventasF.forEach((v) => {
+    ventas.forEach((v) => {
       const f = toDate(v.fecha);
-      if (!f) return;
+      if (!f || f < desde || f > hasta) return;
       const key = f.toLocaleDateString(locale, { day: '2-digit', month: 'short' });
       if (mapa[key] !== undefined) mapa[key] += getNumericValue(v, ['total', 'monto', 'valor']);
     });
     return orden.map((name) => ({ name, total: mapa[name] }));
-  }, [ventasF, rango]);
+  }, [ventas, locale]);
 
-  // === PIE: COMPOSICIÓN VENTAS/COMPRAS/GASTOS DEL PERÍODO ===
-  const datosPie = [
-    { name: 'Ventas', value: totalVentas },
-    { name: 'Compras', value: totalCompras },
-    { name: 'Gastos', value: totalGastos },
-  ].filter((d) => d.value > 0);
+  // === PIE: COMPOSICIÓN DE PAGOS DE LOS ÚLTIMOS 3 MESES ===
+  const datosComposicionPagos = useMemo(() => {
+    const ahora = new Date();
+    const inicio = new Date(ahora.getFullYear(), ahora.getMonth() - 2, 1);
+    const acumulado = {};
+    ventas.forEach((venta) => {
+      const fecha = toDate(venta.fecha);
+      if (!fecha || fecha < inicio || fecha > ahora) return;
+      const metodoOriginal = String(venta.metodo_pago || 'Efectivo').trim();
+      const metodoNormalizado = metodoOriginal.toLowerCase();
+      const metodo = metodoNormalizado.includes('efect')
+        ? 'Efectivo'
+        : metodoNormalizado.includes('transfer')
+          ? 'Transferencia'
+          : metodoNormalizado.includes('tarjet')
+            ? 'Tarjeta'
+            : metodoOriginal || 'Sin método';
+      acumulado[metodo] = (acumulado[metodo] || 0) + getNumericValue(venta, ['total', 'monto', 'valor']);
+    });
+    return Object.entries(acumulado)
+      .map(([name, value]) => ({ name, value }))
+      .filter((dato) => dato.value > 0)
+      .sort((a, b) => b.value - a.value);
+  }, [ventas]);
+  const totalComposicionPagos = datosComposicionPagos.reduce((total, dato) => total + dato.value, 0);
 
   // === BARRAS: VENTAS VS COMPRAS VS GASTOS (6 MESES, siempre histórico reciente) ===
   const datos6meses = useMemo(() => {
@@ -911,57 +991,10 @@ const Inicio = ({ perfilUsuario }) => {
           <div className="absolute top-0 right-0 w-64 h-64 bg-white/5 rounded-full -mr-20 -mt-20 blur-3xl"></div>
         </div>
 
-        {/* MÓDULOS RÁPIDOS SUPERIORES */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-          <button type="button" onClick={() => setMostrarCalendario(true)} className="group flex items-center justify-between rounded-2xl border border-slate-200 bg-white/80 px-5 py-4 text-left shadow-[0_10px_20px_rgba(15,23,42,0.06)] transition-all duration-200 hover:-translate-y-0.5 hover:border-orange-200 hover:shadow-[0_16px_30px_rgba(15,23,42,0.08)]">
-            <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-slate-100 text-slate-700 shadow-inner group-hover:bg-orange-50 group-hover:text-orange-500">
-                <CalendarRange size={20} />
-              </div>
-              <div>
-                <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-400">Calendario</p>
-                <p className="text-base font-bold text-slate-700">Agenda</p>
-              </div>
-            </div>
-            <span className="text-lg text-slate-400">›</span>
-          </button>
-
-          <button type="button" onClick={() => { setMostrarCalendario(true); abrirModalAgregarTarea(); }} className="group flex items-center justify-between rounded-2xl border border-slate-200 bg-white/80 px-5 py-4 text-left shadow-[0_10px_20px_rgba(15,23,42,0.06)] transition-all duration-200 hover:-translate-y-0.5 hover:border-orange-200 hover:shadow-[0_16px_30px_rgba(15,23,42,0.08)]">
-            <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-orange-50 text-orange-600 shadow-inner">
-                <CheckSquare size={20} />
-              </div>
-              <div>
-                <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-400">Agregar a</p>
-                <p className="text-base font-bold text-slate-700">hacer</p>
-              </div>
-            </div>
-            <span className="text-lg text-slate-400">›</span>
-          </button>
-
-          <button type="button" onClick={() => setMostrarRecordatorios(true)} className="group flex items-center justify-between rounded-2xl border border-slate-200 bg-white/80 px-5 py-4 text-left shadow-[0_10px_20px_rgba(15,23,42,0.06)] transition-all duration-200 hover:-translate-y-0.5 hover:border-orange-200 hover:shadow-[0_16px_30px_rgba(15,23,42,0.08)]">
-            <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-sky-50 text-sky-600 shadow-inner relative">
-                <Bell size={20} />
-                {(otPendientes.length + solicitudesPendientes.length > 0) && (
-                  <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs font-bold rounded-full w-5 h-5 flex items-center justify-center">
-                    {otPendientes.length + solicitudesPendientes.length}
-                  </span>
-                )}
-              </div>
-              <div>
-                <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-400">Recordatorio</p>
-                <p className="text-base font-bold text-slate-700">de solicitud</p>
-              </div>
-            </div>
-            <span className="text-lg text-slate-400">›</span>
-          </button>
-        </div>
-
         {/* KPIs FILA 1 */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-6">
           <CardKpi icon={ShoppingCart} gradient="from-blue-500 to-blue-700" label={t('totalSales')} value={totalVentas} trend={variacionVsAnterior} />
-          <CardKpi icon={TrendingUp} gradient="from-teal-400 to-emerald-600" label={t('profit')} value={neto} sublabel={t('salesMinusCosts')} />
+          <CardKpi icon={TrendingUp} gradient="from-teal-400 to-emerald-600" label="Neto" value={neto} sublabel={t('salesMinusCosts')} />
           <CardKpi icon={FileWarning} gradient="from-orange-400 to-amber-600" label={t('billToPay')} value={deudaCompras} sublabel={t('pendingSuppliers')} />
           <CardKpi icon={MinusCircle} gradient="from-red-500 to-rose-600" label={t('expenses')} value={totalGastos} sublabel={t('period')} />
         </div>
@@ -997,21 +1030,21 @@ const Inicio = ({ perfilUsuario }) => {
         </div>
 
         {/* CAJAS ABIERTAS */}
-        <div className="bg-white p-6 rounded-3xl shadow-sm border border-gray-50 mb-6 transition-all duration-300 hover:shadow-xl hover:border-gray-200">
-          <h3 className="font-black text-gray-800 mb-1 flex items-center gap-2">
+        <div className="bg-white p-4 rounded-3xl shadow-sm border border-gray-50 mb-6 transition-all duration-300 hover:shadow-xl hover:border-gray-200">
+          <h3 className="font-black text-gray-800 mb-0.5 flex items-center gap-2">
             <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 inline-block animate-pulse" />
             <Wallet size={20} className="text-emerald-600" /> {t('openRegisters')}
             {cajasAbiertasConDatos.length > 0 && (
               <span className="bg-emerald-100 text-emerald-700 text-xs font-black px-2 py-0.5 rounded-full">{cajasAbiertasConDatos.length}</span>
             )}
           </h3>
-          <p className="text-[10px] text-gray-400 mb-4">{t('autoRefresh')}</p>
+          <p className="text-[10px] text-gray-400 mb-2">{t('autoRefresh')}</p>
           {cajasAbiertasConDatos.length === 0 ? (
-            <p className="text-center text-gray-400 text-sm py-8">{t('noOpenRegisters')}</p>
+            <p className="text-center text-gray-400 text-sm py-3">{t('noOpenRegisters')}</p>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {cajasAbiertasConDatos.map((caja) => (
-                <div key={caja.id} className="border border-emerald-100 bg-emerald-50/40 rounded-2xl p-4">
+                <div key={caja.id} className="border border-emerald-100 bg-emerald-50/40 rounded-2xl p-3">
                   <p className="font-bold text-gray-800 text-sm flex items-center gap-1.5">
                     <span className="text-emerald-600">👤</span> {caja.usuarioMostrado}
                   </p>
@@ -1052,14 +1085,20 @@ const Inicio = ({ perfilUsuario }) => {
           )}
         </div>
 
+        {/* RESUMEN DE VENTAS */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+          <CardKpi icon={CalendarDays} gradient="from-slate-500 to-slate-700" label="Ventas esta semana" value={ventasSemana} trend={variacionVentasSemana} />
+          <CardKpi icon={CalendarDays} gradient="from-slate-500 to-slate-700" label="Ventas este mes" value={ventasMes} trend={variacionVentasMes} />
+        </div>
+
         {/* GRÁFICO ÚLTIMOS DÍAS + COMPOSICIÓN */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
           <div className="lg:col-span-2 bg-white p-6 rounded-3xl shadow-sm border border-gray-50 transition-all duration-300 hover:shadow-xl hover:border-gray-200">
-            <h3 className="font-black text-gray-800 mb-6 flex items-center gap-2"><LineChart size={20} className="text-blue-500" /> Ventas ({rango.label})</h3>
+            <h3 className="font-black text-gray-800 mb-6 flex items-center gap-2"><LineChart size={20} className="text-blue-500" /> Ventas últimos 30 días</h3>
             <div className="h-[240px] sm:h-[300px] w-full min-w-0">
-              {datosLinea.some((d) => d.total > 0) ? (
+              {datosUltimos30Dias.some((d) => d.total > 0) ? (
                 <ResponsiveContainer width="100%" height="100%">
-                  <AreaChart data={datosLinea}>
+                  <AreaChart data={datosUltimos30Dias}>
                     <defs>
                       <linearGradient id="colorUv" x1="0" y1="0" x2="0" y2="1">
                         <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.3} />
@@ -1078,13 +1117,34 @@ const Inicio = ({ perfilUsuario }) => {
           </div>
 
           <div className="bg-white p-6 rounded-3xl shadow-sm border border-gray-50 transition-all duration-300 hover:shadow-xl hover:border-gray-200">
-            <h3 className="font-black text-gray-800 mb-6 flex items-center gap-2"><PieChartIcon size={20} className="text-blue-500" /> {t('composition')}</h3>
-            <div className="h-[240px] sm:h-[300px] w-full min-w-0">
-              {datosPie.length > 0 ? (
+            <div className="flex items-start justify-between gap-3 mb-4">
+              <div>
+                <h3 className="font-black text-gray-800 flex items-center gap-2"><PieChartIcon size={20} className="text-blue-500" /> Composición de pagos</h3>
+                <p className="mt-1 text-xs font-medium text-gray-400">Distribución de los últimos 3 meses</p>
+              </div>
+              <span className="rounded-full bg-blue-50 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-blue-600">Pagos</span>
+            </div>
+            <div className="relative h-[240px] sm:h-[300px] w-full min-w-0">
+              {datosComposicionPagos.length > 0 ? (
                 <ResponsiveContainer width="100%" height="100%">
                   <PieChart>
-                    <Pie data={datosPie} innerRadius={60} outerRadius={80} paddingAngle={5} dataKey="value">
-                      {datosPie.map((entry, index) => <Cell key={entry.name} fill={COLORS[index % COLORS.length]} />)}
+                    <Pie
+                      data={datosComposicionPagos}
+                      innerRadius={60}
+                      outerRadius={80}
+                      paddingAngle={5}
+                      dataKey="value"
+                      activeIndex={pagoActivo}
+                      activeShape={{ outerRadius: 88 }}
+                      label={({ name, percent }) => `${name}: ${Math.round(percent * 100)}%`}
+                      labelLine
+                      onMouseEnter={(_, index) => setPagoActivo(index)}
+                      onMouseLeave={() => setPagoActivo(null)}
+                    >
+                      {datosComposicionPagos.map((entry, index) => {
+                        const colores = { Efectivo: '#4361ee', Transferencia: '#2ec4b6', Tarjeta: '#ff9f1c' };
+                        return <Cell key={entry.name} fill={colores[entry.name] || COLORS[index % COLORS.length]} />;
+                      })}
                     </Pie>
                     <Tooltip formatter={(value) => formatCurrency(value)} />
                     <Legend verticalAlign="bottom" height={36} />
@@ -1092,6 +1152,18 @@ const Inicio = ({ perfilUsuario }) => {
                 </ResponsiveContainer>
               ) : (
                 <div className="flex h-full items-center justify-center text-gray-400">{t('noDataPeriod')}</div>
+              )}
+              {datosComposicionPagos.length > 0 && (
+                <div className="pointer-events-none absolute left-1/2 top-[39%] -translate-x-1/2 -translate-y-1/2 text-center">
+                  <p className="max-w-[105px] truncate text-[10px] font-bold uppercase tracking-wider text-gray-400">
+                    {pagoActivo === null ? 'Total' : datosComposicionPagos[pagoActivo]?.name}
+                  </p>
+                  <p className="text-sm font-black text-gray-800">
+                    {pagoActivo === null
+                      ? formatCurrency(totalComposicionPagos)
+                      : `${Math.round((datosComposicionPagos[pagoActivo]?.value / totalComposicionPagos) * 100)}%`}
+                  </p>
+                </div>
               )}
             </div>
           </div>

@@ -2,7 +2,6 @@ import { useEffect, useState, useMemo } from 'react';
 import { supabase } from './supabaseClient';
 import { useEmpresaInfo } from './utils/useEmpresa';
 import { generateReceipt } from './utils/generateReceipt';
-import { ajustarStockUbicacion } from './utils/stockUbicacion';
 import { useNotificacion } from './NotificacionContext';
 
 export default function ListaVentas() {
@@ -54,31 +53,18 @@ export default function ListaVentas() {
     setCargando(false);
   };
 
-  const reponerStockDeVenta = async (venta) => {
-    const { data: items } = await supabase.from('detalle_ventas').select('*').eq('venta_id', venta.id);
-    if (!items) return;
-    for (const item of items) {
-      if (!item.producto_id) continue;
-      const { data: prod } = await supabase.from('productos').select('stock_actual').eq('id', item.producto_id).eq('empresa_id', empresaId).single();
-      const nuevoStock = (Number(prod?.stock_actual) || 0) + Number(item.cantidad || 0);
-      await supabase.from('productos').update({ stock_actual: nuevoStock }).eq('id', item.producto_id).eq('empresa_id', empresaId);
-      if (venta.ubicacion_id) {
-        try {
-          await ajustarStockUbicacion({ empresaId, productoId: item.producto_id, ubicacionId: venta.ubicacion_id, delta: Number(item.cantidad || 0) });
-        } catch (e) {
-          console.warn('No se pudo reponer stock:', e.message);
-        }
-      }
-    }
-  };
-
   const borrarVenta = async (venta) => {
     if (!(await confirmar(`La venta #${venta.id} será eliminada y se repondrá el stock de sus productos.`, { titulo: '¿Estás seguro?', textoConfirmar: 'Eliminar venta', textoCancelar: 'Cancelar', peligroso: true }))) return;
       notificar.exito('Venta eliminada y stock devuelto correctamente.');
     setCargando(true);
     try {
       if ((venta.estado_pago || venta.estado) !== 'Anulada') {
-        await reponerStockDeVenta(venta);
+        const { error: errorReversion } = await supabase.rpc('anular_venta', {
+          p_venta_id: venta.id,
+          p_empresa_id: empresaId,
+          p_motivo: 'Eliminación manual de venta',
+        });
+        if (errorReversion) throw errorReversion;
       }
       await supabase.from('detalle_ventas').delete().eq('venta_id', venta.id);
       await supabase.from('pagos_clientes').delete().eq('venta_id', venta.id);

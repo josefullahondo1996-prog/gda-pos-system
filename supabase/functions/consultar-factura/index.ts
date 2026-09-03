@@ -1,4 +1,5 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { getAuthenticatedUser, unauthorized } from '../_shared/auth.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -12,6 +13,9 @@ Deno.serve(async (req) => {
   }
 
   try {
+    const { user, error: authError } = await getAuthenticatedUser(req);
+    if (!user) return unauthorized(authError || 'No autorizado.', corsHeaders);
+
     const { cdc, empresaId } = await req.json();
 
     if (!cdc || !empresaId) {
@@ -25,6 +29,14 @@ Deno.serve(async (req) => {
       Deno.env.get('SUPABASE_URL') ?? '',
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     );
+
+    const { data: miembro } = await supabase
+      .from('usuarios')
+      .select('id')
+      .eq('auth_user_id', user.id)
+      .eq('empresa_id', empresaId)
+      .maybeSingle();
+    if (!miembro) return unauthorized('No tenés acceso a esta empresa.', corsHeaders);
 
     // Obtener API Key de la empresa
     const { data: empresa, error: empresaError } = await supabase
