@@ -21,9 +21,10 @@ const crearFilaVacia = (producto) => ({
     nota: '',
 });
 
-const AperturaStock = ({ producto, onGuardado, onCancelar }) => {
+const AperturaStock = ({ producto, onGuardado, onCancelar, ubicacionId: ubicacionIdProp }) => {
     const { id: empresaId, nombre: nombreEmpresa } = useEmpresaInfo();
-    const { id: ubicacionId, nombre: nombreUbicacionUsuario, codigo: codigoUbicacionUsuario } = useUbicacionUsuario();
+    const { id: ubicacionUsuarioId, nombre: nombreUbicacionUsuario, codigo: codigoUbicacionUsuario } = useUbicacionUsuario();
+    const ubicacionId = ubicacionIdProp || ubicacionUsuarioId;
     const [filas, setFilas] = useState([crearFilaVacia(producto)]);
     const [guardando, setGuardando] = useState(false);
 
@@ -70,22 +71,19 @@ const AperturaStock = ({ producto, onGuardado, onCancelar }) => {
                     .eq('empresa_id', empresaId);
                 if (errorUpdate) throw errorUpdate;
 
-                // Además del stock global (arriba, sin tocar), sumamos el stock de la sucursal
-                // del usuario que está cargando. Si esto falla no frena la carga de apertura.
+                // Además del stock global (arriba), sumamos el stock de la sucursal
+                // seleccionada o asignada al usuario.
                 if (ubicacionId) {
-                    try {
-                        await ajustarStockUbicacion({
-                            empresaId,
-                            productoId: fila.productoId,
-                            ubicacionId,
-                            delta: Number(fila.cantidad),
-                        });
-                    } catch (errStock) {
-                        console.error('No se pudo actualizar el stock por sucursal:', errStock.message);
-                    }
+                    await ajustarStockUbicacion({
+                        empresaId,
+                        productoId: fila.productoId,
+                        ubicacionId,
+                        delta: Number(fila.cantidad),
+                    });
                 }
             }
 
+            window.dispatchEvent(new Event('stock-actualizado'));
             sonidoExito();
             alert('¡Stock de apertura guardado con éxito!');
             if (onGuardado) onGuardado();

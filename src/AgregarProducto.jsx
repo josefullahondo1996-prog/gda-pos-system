@@ -19,7 +19,7 @@ const GRUPOS_PRECIO_INICIALES = [
     { nombre: 'Precio con Entrega Batería', margen: 25 },
 ];
 
-const AgregarProducto = ({ onGuardado, onCancelar, productoEditar }) => {
+const AgregarProducto = ({ onGuardado, onCancelar, productoEditar, ubicacionId }) => {
     const { t } = useLanguage();
     const { id: empresaId, nombre: nombreEmpresa } = useEmpresaInfo();
     const [nombre, setNombre] = useState('');
@@ -323,6 +323,10 @@ const AgregarProducto = ({ onGuardado, onCancelar, productoEditar }) => {
                 return;
             }
 
+            // Notificamos a PuntoDeVenta (y a cualquier otro componente que escuche)
+            // para que recargue la grilla de productos con los datos actualizados.
+            window.dispatchEvent(new Event('stock-actualizado'));
+
             sonidoExito();
             alert(productoEditar ? t('productUpdated') : t('productSaved'));
 
@@ -345,6 +349,7 @@ const AgregarProducto = ({ onGuardado, onCancelar, productoEditar }) => {
         return (
             <AperturaStock
                 producto={productoParaStock}
+                ubicacionId={ubicacionId}
                 onGuardado={() => { setProductoParaStock(null); if (onGuardado) onGuardado('cargar_stock'); }}
                 onCancelar={() => { setProductoParaStock(null); if (onGuardado) onGuardado('cargar_stock'); }}
             />

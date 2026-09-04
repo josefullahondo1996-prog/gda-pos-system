@@ -360,6 +360,13 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
             onNuevoGasto={() => setVistaActiva('nuevo_gasto')}
           />
         );
+      case 'reporte_cierre':
+        return (
+          <ReporteCierreCaja
+            reporte={reporteCierre}
+            onVolver={irAInicio}
+          />
+        );
       case 'nuevo_gasto':
         return (
           <NuevoGasto

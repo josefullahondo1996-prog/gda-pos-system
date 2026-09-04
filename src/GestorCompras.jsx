@@ -308,6 +308,9 @@ export default function GestorCompras({ vistaInicial = 'lista' }) {
 
       sonidoExito();
       notificar.exito(modoEdicion ? '¡Compra actualizada con éxito!' : '¡Compra registrada con éxito!');
+      // Notificamos al PuntoDeVenta (y a ListaProductos) para que recarguen
+      // los productos con el nuevo stock que entró por esta compra.
+      window.dispatchEvent(new Event('stock-actualizado'));
       setMostrarFormulario(false);
       setModoEdicion(false);
       setCompraEditandoId(null);

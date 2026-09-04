@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { supabase } from './supabaseClient';
 import { useEmpresaInfo } from './utils/useEmpresa';
+import { formatearStock } from './utils/cantidadProducto';
 
 export default function Inventario() {
   const { id: empresaId } = useEmpresaInfo();
@@ -65,7 +66,7 @@ export default function Inventario() {
                     <td className="py-3 font-medium">{prod.nombre}</td>
                     <td className="py-3">Gs {Number(prod.precio_venta).toLocaleString('es-PY')}</td>
                     <td className={`py-3 font-bold text-lg ${stockCritico ? 'text-red-600' : 'text-gray-700'}`}>
-                      {prod.stock_actual}
+                      {formatearStock(prod.stock_actual, prod.unidad)}
                     </td>
                     <td className="py-3 text-gray-500">{prod.alerta_stock_bajo}</td>
                     <td className="py-3">

@@ -15,6 +15,18 @@ export const cantidadVisible = (cantidad, unidad) => (
     unidadEsGramo(unidad) ? Number(cantidad || 0) * 1000 : Number(cantidad || 0)
 );
 
+export const formatearStock = (cantidad, unidad) => {
+    if (!unidadEsKilogramo(unidad)) {
+        return `${cantidadVisible(cantidad, unidad)} ${unidad || 'UNID'}`;
+    }
+
+    const gramosTotales = Math.max(0, Math.round(Number(cantidad || 0) * 1000));
+    const kilogramos = Math.floor(gramosTotales / 1000);
+    const gramos = gramosTotales % 1000;
+
+    return `${kilogramos} kg ${gramos} g`;
+};
+
 export const cantidadInterna = (cantidad, unidad) => (
     unidadEsGramo(unidad) ? Number(cantidad) / 1000 : Number(cantidad)
 );

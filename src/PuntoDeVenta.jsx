@@ -14,7 +14,7 @@ import { useEmpresaInfo } from './utils/useEmpresa';
 import { useUbicacionUsuario } from './utils/useUbicacion';
 import { cargarMapaStockPorUbicacion } from './utils/stockUbicacion';
 import { useNotificacion } from './NotificacionContext';
-import { cantidadInicial, pasoCantidad, cantidadValida, cantidadVisible, cantidadInterna, pasoVisible, etiquetaCantidad } from './utils/cantidadProducto';
+import { cantidadInicial, pasoCantidad, cantidadValida, cantidadVisible, cantidadInterna, pasoVisible, etiquetaCantidad, formatearStock } from './utils/cantidadProducto';
 import { useLanguage } from './LanguageContext';
 
 const formatGs = (valor) => `Gs ${Number(valor || 0).toLocaleString('es-PY')}`;
@@ -37,10 +37,13 @@ const PuntoDeVenta = ({ cajaInfo, session, perfilUsuario, onVolver, onSolicitarC
   // cargado por sucursal (ej: productos viejos, antes de esta función), usamos el
   // stock global como respaldo para no bloquear ventas por datos que faltan cargar.
   const stockEnSucursal = (producto) => {
-    if (ubicacionActivaId && mapaStockUbicacion[producto.id]?.[ubicacionActivaId] !== undefined) {
-      return mapaStockUbicacion[producto.id][ubicacionActivaId];
+    if (ubicacionActivaId) {
+      const stockUbicacion = mapaStockUbicacion[producto.id]?.[ubicacionActivaId];
+      if (stockUbicacion !== undefined && stockUbicacion !== null && Number(stockUbicacion) > 0) {
+        return Number(stockUbicacion);
+      }
     }
-    return producto.stock_actual;
+    return Number(producto.stock_actual) || 0;
   };
   const [mostrarCierreCaja, setMostrarCierreCaja] = useState(false);
   const [mostrarNuevoCliente, setMostrarNuevoCliente] = useState(false);
@@ -248,6 +251,15 @@ const PuntoDeVenta = ({ cajaInfo, session, perfilUsuario, onVolver, onSolicitarC
 
   useEffect(() => {
     cargarProductos();
+  }, [empresaId]);
+
+  useEffect(() => {
+    const actualizarStock = () => {
+      cargarProductos();
+      if (empresaId) cargarMapaStockPorUbicacion(empresaId).then(setMapaStockUbicacion);
+    };
+    window.addEventListener('stock-actualizado', actualizarStock);
+    return () => window.removeEventListener('stock-actualizado', actualizarStock);
   }, [empresaId]);
 
     useEffect(() => {
@@ -980,7 +992,7 @@ const PuntoDeVenta = ({ cajaInfo, session, perfilUsuario, onVolver, onSolicitarC
                     <div className="p-3 flex flex-col justify-between flex-1">
                       <p className="font-bold text-gray-800 text-sm leading-tight line-clamp-2">{prod.nombre}</p>
                       <div className="mt-1">
-                        <p className="text-[11px] text-gray-400 mb-1">{prod.codigo || '—'} · Stock: {stockEnSucursal(prod) ?? 0}</p>
+                        <p className="text-[11px] text-gray-400 mb-1">{prod.codigo || '—'} · Stock: {formatearStock(stockEnSucursal(prod), prod.unidad)}</p>
                         <p className="text-orange-600 font-black">{formatMoneda(convertirDesdeGs(prod.precio_venta || prod.precio), monedaVenta)}</p>
                       </div>
                     </div>
@@ -1019,8 +1031,10 @@ const PuntoDeVenta = ({ cajaInfo, session, perfilUsuario, onVolver, onSolicitarC
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-3 sm:p-4">
           <div className="w-full max-w-4xl max-h-[88vh] overflow-y-auto rounded-xl bg-white shadow-2xl border border-gray-200">
             <AgregarProducto
+              ubicacionId={ubicacionActivaId}
               onGuardado={async () => {
                 await cargarProductos();
+                if (empresaId) await cargarMapaStockPorUbicacion(empresaId).then(setMapaStockUbicacion);
                 setMostrarFormularioProducto(false);
               }}
               onCancelar={() => setMostrarFormularioProducto(false)}

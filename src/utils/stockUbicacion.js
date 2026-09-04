@@ -8,24 +8,35 @@ import { supabase } from '../supabaseClient';
 export const ajustarStockUbicacion = async ({ empresaId, productoId, ubicacionId, delta }) => {
     if (!empresaId || !productoId || !ubicacionId || !delta) return;
 
-    const { data: filaActual } = await supabase
+    const { data: filaActual, error: errorLectura } = await supabase
         .from('producto_stock_ubicacion')
         .select('id, cantidad')
         .eq('producto_id', productoId)
         .eq('ubicacion_id', ubicacionId)
         .maybeSingle();
+    if (errorLectura) throw errorLectura;
 
-    const cantidadNueva = Math.max(0, Number(filaActual?.cantidad || 0) + Number(delta));
+    let cantidadBase = 0;
+    if (filaActual) {
+        cantidadBase = Number(filaActual.cantidad || 0);
+    } else {
+        const { data: prod } = await supabase.from('productos').select('stock_actual').eq('id', productoId).maybeSingle();
+        cantidadBase = Number(prod?.stock_actual || 0);
+    }
+
+    const cantidadNueva = Math.max(0, cantidadBase + Number(delta));
 
     if (filaActual) {
-        await supabase
+        const { error } = await supabase
             .from('producto_stock_ubicacion')
             .update({ cantidad: cantidadNueva, actualizado_en: new Date().toISOString() })
             .eq('id', filaActual.id);
+        if (error) throw error;
     } else {
-        await supabase
+        const { error } = await supabase
             .from('producto_stock_ubicacion')
             .insert([{ empresa_id: empresaId, producto_id: productoId, ubicacion_id: ubicacionId, cantidad: cantidadNueva }]);
+        if (error) throw error;
     }
 };
 

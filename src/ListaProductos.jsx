@@ -10,14 +10,14 @@ import { useUbicacionUsuario } from './utils/useUbicacion';
 import { useSucursalActiva } from './utils/SucursalContext';
 import { cargarMapaStockPorUbicacion } from './utils/stockUbicacion';
 import { useNotificacion } from './NotificacionContext';
-import { cantidadVisible } from './utils/cantidadProducto';
+import { formatearStock } from './utils/cantidadProducto';
 import { useLanguage } from './LanguageContext';
 
 export default function ListaProductos() {
   const { t } = useLanguage();
   const { id: empresaId, nombre: nombreEmpresa } = useEmpresaInfo();
   const { confirmar } = useNotificacion();
-  const { nombre: nombreUbicacionUsuario, ve_todas: usuarioVeTodas } = useUbicacionUsuario();
+  const { id: ubicacionUsuarioId, nombre: nombreUbicacionUsuario, ve_todas: usuarioVeTodas } = useUbicacionUsuario();
   // sucursalActiva: la elegida en el selector global del header.
   // Si el usuario está fijo a una sola sucursal, el contexto ya la deja bloqueada acá también.
   const { sucursalActiva, nombreSucursalActiva } = useSucursalActiva();
@@ -58,6 +58,7 @@ export default function ListaProductos() {
   const [mostrarFormularioNuevo, setMostrarFormularioNuevo] = useState(false);
   const [productoEditando, setProductoEditando] = useState(null);
   const [productoDetalle, setProductoDetalle] = useState(null);
+  const ubicacionParaNuevoProducto = sucursalActiva || ubicacionUsuarioId || null;
 
   useEffect(() => {
     cargarProductos();
@@ -107,11 +108,16 @@ export default function ListaProductos() {
   };
 
   const stockVisible = (producto) => {
-    const stockSucursal = sucursalActiva ? mapaStockUbicacion[producto.id]?.[sucursalActiva] : undefined;
-    return stockSucursal !== undefined ? Number(stockSucursal) : Number(producto.stock_actual) || 0;
+    if (sucursalActiva) {
+      const stockUbicacion = mapaStockUbicacion[producto.id]?.[sucursalActiva];
+      if (stockUbicacion !== undefined && stockUbicacion !== null && Number(stockUbicacion) > 0) {
+        return Number(stockUbicacion);
+      }
+    }
+    return Number(producto.stock_actual) || 0;
   };
 
-  const stockFormateado = (producto, cantidad) => cantidadVisible(cantidad, producto.unidad);
+  const stockFormateado = (producto, cantidad) => formatearStock(cantidad, producto.unidad);
 
   useEffect(() => {
     if (!empresaId) return;
@@ -310,10 +316,12 @@ export default function ListaProductos() {
     return (
       <AgregarProducto
         productoEditar={productoEditando}
+        ubicacionId={ubicacionParaNuevoProducto}
         onGuardado={() => {
           setMostrarFormularioNuevo(false);
           setProductoEditando(null);
           cargarProductos();
+          window.dispatchEvent(new Event('stock-actualizado'));
         }}
         onCancelar={() => {
           setMostrarFormularioNuevo(false);
@@ -571,11 +579,11 @@ export default function ListaProductos() {
                       </td>
                       <td className="p-3 text-center">
                         <span className={`px-2 py-0.5 rounded-sm font-bold text-[11px] ${stockVisible(prod) <= Number(prod.alerta_stock_bajo || 5) ? 'bg-red-100 text-red-700' : 'bg-gray-100 text-gray-700'}`}>
-                          {stockFormateado(prod, stockVisible(prod))} {prod.unidad || 'UNID'}
+                          {stockFormateado(prod, stockVisible(prod))}
                         </span>
                         {sucursalActiva && (
                           <div className="text-[10px] text-gray-400 mt-1">
-                            En {nombreSucursalActiva}: <span className="font-bold text-gray-600">{stockFormateado(prod, mapaStockUbicacion[prod.id]?.[sucursalActiva] ?? 0)} {prod.unidad || 'UNID'}</span>
+                            En {nombreSucursalActiva}: <span className="font-bold text-gray-600">{stockFormateado(prod, mapaStockUbicacion[prod.id]?.[sucursalActiva] ?? 0)}</span>
                           </div>
                         )}
                       </td>
@@ -703,7 +711,12 @@ export default function ListaProductos() {
             <div className="overflow-y-auto p-4">
               <AperturaStock
                 producto={productoStockInicial}
-                onGuardado={() => { setProductoStockInicial(null); cargarProductos(); }}
+                ubicacionId={sucursalActiva}
+                onGuardado={async () => {
+                  setProductoStockInicial(null);
+                  await cargarProductos();
+                  if (empresaId) cargarMapaStockPorUbicacion(empresaId).then(setMapaStockUbicacion);
+                }}
                 onCancelar={() => setProductoStockInicial(null)}
               />
             </div>

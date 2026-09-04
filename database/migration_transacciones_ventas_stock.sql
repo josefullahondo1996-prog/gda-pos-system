@@ -41,7 +41,7 @@ BEGIN
     VALUES (p_empresa_id, p_producto_id, p_ubicacion_id, GREATEST(0, p_delta), now())
     ON CONFLICT (empresa_id, producto_id, ubicacion_id)
     DO UPDATE SET
-        cantidad = GREATEST(0, producto_stock_ubicacion.cantidad + EXCLUDED.cantidad),
+        cantidad = GREATEST(0, producto_stock_ubicacion.cantidad + p_delta),
         actualizado_en = now();
 END;
 $$;
