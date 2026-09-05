@@ -3,6 +3,52 @@
 
 ALTER TABLE ventas ADD COLUMN IF NOT EXISTS ubicacion_id uuid;
 ALTER TABLE ventas ADD COLUMN IF NOT EXISTS motivo_anulacion text;
+ALTER TABLE caja_registros ADD COLUMN IF NOT EXISTS ubicacion_id bigint;
+ALTER TABLE caja_registros ADD COLUMN IF NOT EXISTS usuario text;
+ALTER TABLE caja_registros DROP CONSTRAINT IF EXISTS caja_registros_ubicacion_id_fkey;
+
+DO $$
+DECLARE
+    v_tipo text;
+BEGIN
+    SELECT data_type INTO v_tipo
+    FROM information_schema.columns
+    WHERE table_schema = 'public'
+      AND table_name = 'caja_registros'
+      AND column_name = 'ubicacion_id';
+
+    IF v_tipo = 'uuid' THEN
+        ALTER TABLE caja_registros
+            ALTER COLUMN ubicacion_id TYPE bigint USING NULL;
+    END IF;
+END;
+$$;
+
+DO $$
+DECLARE
+    v_tipo text;
+BEGIN
+    SELECT data_type INTO v_tipo
+    FROM information_schema.columns
+    WHERE table_schema = 'public'
+      AND table_name = 'caja_registros'
+      AND column_name = 'usuario_id';
+
+    IF v_tipo = 'bigint' THEN
+        ALTER TABLE caja_registros
+            ALTER COLUMN usuario_id TYPE uuid USING NULL;
+    END IF;
+END;
+$$;
+
+ALTER TABLE caja_registros ADD COLUMN IF NOT EXISTS usuario_id uuid;
+
+CREATE INDEX IF NOT EXISTS idx_caja_registros_usuario_abierta
+    ON caja_registros (empresa_id, usuario_id, estado);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_caja_registros_usuario_sucursal_abierta
+    ON caja_registros (empresa_id, usuario_id, ubicacion_id)
+    WHERE estado = 'Abierta' AND usuario_id IS NOT NULL AND ubicacion_id IS NOT NULL;
 
 CREATE TABLE IF NOT EXISTS producto_stock_ubicacion (
     id uuid PRIMARY KEY DEFAULT gen_random_uuid(),

@@ -220,6 +220,9 @@ CREATE TABLE caja_registros (
     saldo_inicial numeric(12,2),
     saldo_final numeric(12,2),
     estado text,
+    ubicacion_id bigint,
+    usuario text,
+    usuario_id uuid REFERENCES usuarios(id) ON DELETE SET NULL,
     creado_en timestamptz NOT NULL DEFAULT now()
 );
 

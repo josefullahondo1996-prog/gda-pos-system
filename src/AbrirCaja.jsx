@@ -36,10 +36,11 @@ const AbrirCaja = ({ onCajaAbierta, perfilUsuario }) => {
     setCargando(true);
     try {
       const nombreUsuarioActual = [perfilUsuario?.nombre, perfilUsuario?.apellido].filter(Boolean).join(' ') || perfilUsuario?.nombre_usuario || perfilUsuario?.email || 'Usuario sin nombre';
+      const usuarioId = perfilUsuario?.auth_user_id || null;
 
       const query = supabase
         .from('caja_registros')
-        .select('id, empresa_id, saldo_inicial, estado, fecha_apertura, ubicacion_id, usuario')
+        .select('id, empresa_id, saldo_inicial, estado, fecha_apertura, ubicacion_id, usuario, usuario_id')
         .eq('empresa_id', empresaId)
         .eq('estado', 'Abierta')
         .order('fecha_apertura', { ascending: false });
@@ -48,10 +49,12 @@ const AbrirCaja = ({ onCajaAbierta, perfilUsuario }) => {
       if (errorConsulta && errorConsulta.code !== '42P01') throw errorConsulta;
 
       const cajaExistente = (cajasAbiertas || []).find((caja) => {
-        const mismoUsuario = !caja.usuario || caja.usuario === nombreUsuarioActual || caja.usuario === perfilUsuario?.nombre_usuario;
-        const mismaUbicacion = Number(caja.ubicacion_id) === Number(ubicacionElegida);
-        if (usuarioVeTodas) return mismoUsuario && mismaUbicacion;
-        return mismaUbicacion && (mismoUsuario || !caja.usuario);
+        const mismoUsuario = usuarioId
+          ? caja.usuario_id === usuarioId
+            || (!caja.usuario_id && (caja.usuario === nombreUsuarioActual || caja.usuario === perfilUsuario?.nombre_usuario))
+          : caja.usuario === nombreUsuarioActual || caja.usuario === perfilUsuario?.nombre_usuario;
+        const mismaUbicacion = String(caja.ubicacion_id) === String(ubicacionElegida);
+        return mismoUsuario && mismaUbicacion;
       });
 
       if (cajaExistente) {
@@ -67,6 +70,7 @@ const AbrirCaja = ({ onCajaAbierta, perfilUsuario }) => {
         fecha_apertura: new Date().toISOString(),
         ubicacion_id: ubicacionElegida,
         usuario: nombreUsuarioActual,
+        usuario_id: usuarioId,
       };
 
       const { data, error } = await supabase
@@ -85,7 +89,7 @@ const AbrirCaja = ({ onCajaAbierta, perfilUsuario }) => {
     } catch (error) {
       sonidoError();
       console.error("Error al abrir la caja:", error.message);
-      alert('Hubo un error al registrar la caja. Revisá la consola.');
+      alert(`Hubo un error al registrar la caja: ${error.message || 'Error desconocido'}`);
     } finally {
       setCargando(false);
     }

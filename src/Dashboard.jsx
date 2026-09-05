@@ -134,6 +134,7 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
 
       const nombreUsuario = [perfilUsuario?.nombre, perfilUsuario?.apellido].filter(Boolean).join(' ').trim()
         || perfilUsuario?.nombre_usuario || perfilUsuario?.email || '';
+      const usuarioId = perfilUsuario?.auth_user_id || null;
       let consulta = supabase
         .from('caja_registros')
         .select('*')
@@ -152,11 +153,15 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
         console.error('Error al recuperar la caja abierta:', error.message);
       } else {
         const cajaDelUsuario = (data || []).find((caja) => {
-          const mismaUbicacion = !ubicacionUsuarioId || Number(caja.ubicacion_id) === Number(ubicacionUsuarioId);
-          const mismoUsuario = !caja.usuario || caja.usuario === nombreUsuario || caja.usuario === perfilUsuario?.nombre_usuario;
+          const mismaUbicacion = String(caja.ubicacion_id) === String(ubicacionUsuarioId)
+            || (usuarioVeTodas && !!caja.ubicacion_id);
+          const mismoUsuario = usuarioId
+            ? caja.usuario_id === usuarioId
+              || (!caja.usuario_id && (caja.usuario === nombreUsuario || caja.usuario === perfilUsuario?.nombre_usuario))
+            : caja.usuario === nombreUsuario || caja.usuario === perfilUsuario?.nombre_usuario;
           return mismaUbicacion && mismoUsuario;
         });
-        setCajaActual(cajaDelUsuario || (data && data[0]) || null);
+        setCajaActual(cajaDelUsuario || null);
       }
       setCargandoCaja(false);
     };
