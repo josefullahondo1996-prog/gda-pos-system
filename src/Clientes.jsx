@@ -627,8 +627,9 @@ export default function Clientes() {
         const detalle = duplicadoEncontrado.documento_nro
           ? `Documento: ${duplicadoEncontrado.documento_nro}`
           : `Nombre: ${duplicadoEncontrado.nombre}`;
-        alert(
-          `⚠️ Contacto ya registrado\n\n"${duplicadoEncontrado.nombre}" ya existe en el sistema (${detalle}).\n\nNo se cambió el tipo de contacto para evitar duplicarlo.`
+        notificar.aviso(
+          `"${duplicadoEncontrado.nombre}" ya existe en el sistema.\n${detalle}.\n\nNo se cambió el tipo de contacto para evitar duplicarlo.`,
+          { titulo: 'Contacto ya registrado' }
         );
         return;
       }

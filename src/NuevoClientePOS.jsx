@@ -2,9 +2,11 @@ import React, { useState } from 'react';
 import { supabase } from './supabaseClient';
 import { sonidoExito } from './utils/sonido';
 import { useEmpresaInfo } from './utils/useEmpresa';
+import { useNotificacion } from './NotificacionContext';
 
 const NuevoClientePOS = ({ onGuardado, onCerrar }) => {
     const { id: empresaId, nombre: nombreDelNegocio } = useEmpresaInfo();
+    const { notificar } = useNotificacion();
     const [esEmpresa, setEsEmpresa] = useState(false);
     const [tipoDoc, setTipoDoc] = useState('RUC');
     const [nroDoc, setNroDoc] = useState('');
@@ -247,8 +249,9 @@ const NuevoClientePOS = ({ onGuardado, onCerrar }) => {
                 const detalle = duplicadoEncontrado.documento_nro
                     ? `Documento: ${duplicadoEncontrado.documento_nro}`
                     : `Nombre: ${duplicadoEncontrado.nombre}`;
-                alert(
-                    `⚠️ Cliente ya registrado\n\n"${duplicadoEncontrado.nombre}" ya existe en el sistema (${detalle}).`
+                notificar.aviso(
+                    `"${duplicadoEncontrado.nombre}" ya existe en el sistema.\n${detalle}.\n\nNo se registró el cliente para evitar duplicarlo.`,
+                    { titulo: 'Cliente ya registrado' }
                 );
                 setGuardando(false);
                 return;
