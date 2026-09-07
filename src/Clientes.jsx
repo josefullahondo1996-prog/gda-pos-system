@@ -71,7 +71,14 @@ export default function Clientes() {
   const [libroMayorDesde, setLibroMayorDesde] = useState('');
   const [libroMayorHasta, setLibroMayorHasta] = useState('');
   const [libroMayorFormato, setLibroMayorFormato] = useState('Format 1');
+  const [libroMayorUbicacion, setLibroMayorUbicacion] = useState('Todas');
   const [fotoAmpliada, setFotoAmpliada] = useState(null);
+  const [pagoSeleccionado, setPagoSeleccionado] = useState(null);
+  const [pagoAccion, setPagoAccion] = useState(null);
+  const [editandoPago, setEditandoPago] = useState(false);
+  const [pagoEditandoMetodo, setPagoEditandoMetodo] = useState('Efectivo');
+  const [pagoEditandoNota, setPagoEditandoNota] = useState('');
+  const [pagoEditandoFecha, setPagoEditandoFecha] = useState('');
 
   // Controles de la pestaña "Ventas" dentro del modal (clon de app.micdepos.com)
   const [ventasFiltroEstado, setVentasFiltroEstado] = useState('Todos');
@@ -229,6 +236,57 @@ export default function Clientes() {
     if (empresaId) query = query.eq('empresa_id', empresaId);
     const { data, error } = await query;
     if (!error && data) setPagosRaw(data);
+  };
+
+  const abrirDetallePagoLibroMayor = (pago) => {
+    setPagoSeleccionado(pago);
+    setPagoAccion('ver');
+    setEditandoPago(false);
+  };
+
+  const abrirEdicionPagoLibroMayor = (pago) => {
+    setPagoSeleccionado(pago);
+    setPagoAccion('editar');
+    setEditandoPago(true);
+    setPagoEditandoMetodo(pago.metodo_pago || 'Efectivo');
+    setPagoEditandoNota(pago.nota || '');
+    setPagoEditandoFecha(pago.fecha ? new Date(pago.fecha).toISOString().slice(0, 10) : '');
+  };
+
+  const cerrarAccionPago = () => {
+    setPagoSeleccionado(null);
+    setPagoAccion(null);
+    setEditandoPago(false);
+  };
+
+  const guardarEdicionPagoLibroMayor = async () => {
+    if (!pagoSeleccionado) return;
+    const { error } = await supabase
+      .from('pagos_clientes')
+      .update({
+        metodo_pago: pagoEditandoMetodo,
+        nota: pagoEditandoNota || null,
+        fecha: pagoEditandoFecha ? new Date(pagoEditandoFecha).toISOString() : pagoSeleccionado.fecha,
+      })
+      .eq('id', pagoSeleccionado.id)
+      .eq('empresa_id', empresaId);
+    if (error) return alert('Error al editar el pago: ' + error.message);
+    sonidoExito();
+    cerrarAccionPago();
+    await cargarPagos();
+  };
+
+  const borrarPagoLibroMayor = async (pago) => {
+    if (!window.confirm(`¿Borrar el pago de ${formatGs(pago.monto)}?`)) return;
+    const { error } = await supabase
+      .from('pagos_clientes')
+      .delete()
+      .eq('id', pago.id)
+      .eq('empresa_id', empresaId);
+    if (error) return alert('Error al borrar el pago: ' + error.message);
+    sonidoExito();
+    cerrarAccionPago();
+    await cargarPagos();
   };
 
   const cargarDetalleVenta = async (venta) => {
@@ -1177,6 +1235,7 @@ export default function Clientes() {
                                   setVentasFiltroEstado('Todos');
                                   setVentasBusqueda('');
                                   setVentasPaginaActual(1);
+                                  setLibroMayorUbicacion('Todas');
                                   setClienteLibroMayor(cliente);
                                 }}
                                 className="w-full text-left px-3 py-2 hover:bg-gray-100 text-gray-700 flex items-center gap-2"
@@ -1723,7 +1782,7 @@ export default function Clientes() {
         </div>
       )}
 
-      {/* MODAL: Libro mayor (clon de la vista "Ver contacto" de CDEpos) */}
+      {/* PANTALLA COMPLETA: Libro mayor (clon de la vista "Ver contacto" de CDEpos) */}
       {clienteLibroMayor && (() => {
         const cliente = clienteLibroMayor;
         const iniciales = (cliente.nombre || '?').trim().split(/\s+/).slice(0, 2).map((p) => p[0]).join('').toUpperCase();
@@ -1732,29 +1791,47 @@ export default function Clientes() {
         const movimientos = [
           ...cliente.ventasDelCliente.map((v) => ({
             fecha: v.fecha,
-            referencia: v.id ? `#${String(v.id).slice(0, 8).toUpperCase()}` : '—',
+            referencia: v.id ? String(v.id).slice(-4) : '—',
             tipo: 'Ventas',
-            ubicacion: nombreDelNegocio || '—',
+            ubicacionId: v.ubicacion_id || null,
+            ubicacion: (v.ubicacion_id && ubicacionesMap[v.ubicacion_id]) || nombreDelNegocio || '—',
             estadoPago: v.estado_pago || '—',
             debito: Number(v.total) || 0,
             credito: 0,
+            pagadoInicial: Number(v.monto_pagado) || 0,
             metodoPago: v.metodo_pago || '—',
-            otros: '',
           })),
           ...cliente.pagosManuales.map((p) => ({
             fecha: p.fecha,
-            referencia: '—',
+            referencia: p.id ? `SP${new Date(p.fecha || Date.now()).getFullYear()}/${String(p.id).slice(-4)}` : '—',
             tipo: 'Pago',
+            ubicacionId: null,
             ubicacion: nombreDelNegocio || '—',
             estadoPago: '—',
             debito: 0,
             credito: Number(p.monto) || 0,
+            pagadoInicial: 0,
             metodoPago: p.metodo_pago || '—',
-            otros: p.nota ? `Nota: ${p.nota}` : '',
           })),
         ].sort((a, b) => new Date(a.fecha || 0) - new Date(b.fecha || 0));
 
-        const movimientosFiltrados = movimientos.filter((m) => {
+        const movimientosPorUbicacion = movimientos.filter((m) => (
+          libroMayorUbicacion === 'Todas'
+          || m.tipo === 'Pago'
+          || m.ubicacionId === libroMayorUbicacion
+        ));
+
+        const movimientosAntesDelRango = movimientosPorUbicacion.filter((m) => {
+          if (!m.fecha || !libroMayorDesde) return false;
+          return new Date(m.fecha).toISOString().slice(0, 10) < libroMayorDesde;
+        });
+
+        const saldoInicialRango = movimientosAntesDelRango.reduce(
+          (saldo, m) => saldo + m.debito - m.credito,
+          0
+        );
+
+        const movimientosFiltrados = movimientosPorUbicacion.filter((m) => {
           if (!m.fecha) return true;
           const f = new Date(m.fecha).toISOString().slice(0, 10);
           if (libroMayorDesde && f < libroMayorDesde) return false;
@@ -1762,191 +1839,370 @@ export default function Clientes() {
           return true;
         });
 
-        let saldoAcumulado = 0;
+        let saldoAcumulado = saldoInicialRango;
         const filasConSaldo = movimientosFiltrados.map((m) => {
           saldoAcumulado += m.debito - m.credito;
           return { ...m, saldo: saldoAcumulado };
         });
 
-        return (
-          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[9999] p-4" onClick={() => setClienteLibroMayor(null)}>
-            <div className="bg-white rounded-xl shadow-2xl w-full max-w-5xl overflow-hidden max-h-[92vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
+        const totalFacturaRango = movimientosFiltrados.reduce((total, m) => total + m.debito, 0);
+        const totalCreditoRango = movimientosFiltrados.reduce((total, m) => total + m.credito, 0);
+        const totalPagadoRango = movimientosFiltrados.reduce(
+          (total, m) => total + m.pagadoInicial + m.credito,
+          0
+        );
+        const saldoAdeudadoRango = saldoAcumulado;
+        const creditoAFavorRango = Math.max(0, -saldoAdeudadoRango);
 
-              {/* Encabezado */}
-              <div className="bg-[#004284] px-5 py-4 flex justify-between items-center flex-shrink-0">
-                <h3 className="text-white font-bold text-lg">Ver contacto</h3>
-                <button onClick={() => setClienteLibroMayor(null)} className="text-white/80 hover:text-white text-xl leading-none">✕</button>
+        const exportarLibroMayorPDF = () => {
+          const doc = new jsPDF('landscape');
+          doc.text(`Libro mayor - ${cliente.nombre}`, 14, 12);
+          doc.setFontSize(8);
+          doc.text(`Período: ${libroMayorDesde || 'Inicio'} a ${libroMayorHasta || 'Actual'}`, 14, 18);
+          autoTable(doc, {
+            startY: 23,
+            head: [['Fecha', 'Referencia', 'Tipo', 'Ubicación', 'Estado', 'Débito', 'Crédito', 'Saldo', 'Método']],
+            body: filasConSaldo.map((m) => [
+              m.fecha ? new Date(m.fecha).toLocaleString('es-PY') : '—',
+              m.referencia,
+              m.tipo,
+              m.ubicacion,
+              m.estadoPago,
+              formatGs(m.debito),
+              formatGs(m.credito),
+              formatGs(Math.abs(m.saldo)),
+              m.metodoPago,
+            ]),
+            styles: { fontSize: 7 },
+            headStyles: { fillColor: [249, 115, 22] },
+          });
+          doc.save(`libro_mayor_${cliente.codigo_cliente || cliente.id}.pdf`);
+        };
+
+        return (
+          <div className="libro-mayor-scroll absolute inset-x-0 top-14 md:top-16 bottom-16 md:bottom-0 bg-white z-[9999] overflow-y-auto overflow-x-hidden flex flex-col">
+
+              {/* Encabezado con nombre y código del cliente */}
+              <div className="sticky top-0 z-20 bg-white border-b border-gray-200 px-4 md:px-6 py-3 flex justify-between items-center flex-shrink-0">
+                <h3 className="text-[#1f2937] font-bold text-lg">Ver contacto</h3>
+                <div className="flex items-center gap-3">
+                  <div className="border border-gray-200 rounded-md bg-white px-3 py-2 min-w-[220px] text-sm text-gray-700 shadow-sm">
+                    {cliente.nombre} - ({cliente.codigo_cliente || `CO${String(cliente.id).padStart(4, '0')}`})
+                  </div>
+                  <button onClick={() => setClienteLibroMayor(null)} aria-label="Cerrar Libro mayor" className="text-gray-400 hover:text-gray-700 text-xl leading-none px-1">✕</button>
+                </div>
               </div>
 
-              <div className="overflow-y-auto p-5">
-                {/* Tarjeta del contacto */}
-                <div className="border rounded-lg p-4 flex flex-wrap justify-between items-center gap-4 mb-4">
-                  <div className="flex items-center gap-4">
-                    {cliente.foto_url ? (
-                      <img
-                        src={cliente.foto_url}
-                        alt={cliente.nombre}
-                        className="w-16 h-16 rounded-full object-cover flex-shrink-0 border-2 border-[#004284] cursor-zoom-in hover:opacity-90 transition-opacity"
-                        onClick={() => setFotoAmpliada(cliente.foto_url)}
-                        title="Clic para ampliar foto"
-                        onError={(e) => { e.target.onerror = null; e.target.style.display = 'none'; e.target.nextSibling.style.display = 'flex'; }}
-                      />
-                    ) : null}
-                    <div
-                      className="w-16 h-16 rounded-full bg-[#004284] text-white flex items-center justify-center font-bold text-xl flex-shrink-0"
-                      style={{ display: cliente.foto_url ? 'none' : 'flex' }}
-                    >
-                      {iniciales}
-                    </div>
-                    <div>
-                      <p className="font-bold text-gray-800 text-base">{cliente.nombre}</p>
-                      <p className="text-xs text-gray-500">{cliente.tipo_contacto || 'Cliente'}</p>
-                      <p className="text-xs text-gray-500">{cliente.direccion || 'SIN DIRECCIÓN'}</p>
+              <div className="p-4 md:p-6 max-w-[1400px] w-full mx-auto">
+                {/* Avatar independiente y tarjeta de datos del contacto */}
+                <div className="flex items-center gap-4 md:gap-6 mb-5">
+                  <div className="relative flex-shrink-0 flex flex-col items-center">
+                      {cliente.imagen_url ? (
+                        <img
+                          src={cliente.imagen_url}
+                          alt={cliente.nombre}
+                          className="w-20 h-20 md:w-24 md:h-24 rounded-full object-cover border-2 border-gray-200 shadow-sm cursor-zoom-in hover:opacity-90 transition-opacity"
+                          onClick={() => setFotoAmpliada(cliente.imagen_url)}
+                          title="Clic para ampliar foto"
+                          onError={(e) => { e.target.onerror = null; e.target.style.display = 'none'; e.target.nextSibling.style.display = 'flex'; }}
+                        />
+                      ) : null}
+                      <div
+                        className="w-20 h-20 md:w-24 md:h-24 rounded-full bg-gray-200 text-gray-500 flex items-center justify-center font-bold text-2xl shadow-sm"
+                        style={{ display: cliente.imagen_url ? 'none' : 'flex' }}
+                      >
+                        {iniciales}
+                      </div>
+                      <span className="mt-1 bg-orange-500 text-white text-[9px] font-bold px-2 py-0.5 rounded-full whitespace-nowrap shadow-sm">
+                        {cliente.tipo_contacto || 'Cliente'}
+                      </span>
+                  </div>
+                  <div className="border border-gray-200 rounded-lg p-4 md:p-5 flex flex-1 flex-wrap justify-between items-start gap-4 shadow-sm bg-white min-h-[104px]">
+                    {/* Info del contacto */}
+                    <div className="pt-1">
+                      <h4 className="font-bold text-gray-900 text-lg leading-tight">{cliente.nombre} <span className="font-normal text-xs text-gray-500">{cliente.tipo_contacto || 'Cliente'}</span></h4>
+                      <p className="text-xs text-gray-500 mt-0.5">
+                        <span className="inline-block w-2 h-2 rounded-full bg-orange-400 mr-1"></span>
+                        {cliente.nombre}
+                      </p>
+                      <p className="text-xs text-gray-500">{cliente.direccion || 'SIN DIRECCION'},</p>
+                      <p className="text-xs text-gray-500">{cliente.departamento || 'Paraguay'},</p>
+                      <p className="text-xs text-gray-500">{cliente.cod_postal || '0000'}</p>
                       {cliente.celular && (
-                        <p className="text-xs text-gray-600 flex items-center gap-1 mt-1">📱 {cliente.celular}</p>
+                        <p className="text-xs text-gray-600 flex items-center gap-1 mt-1">
+                          <span className="inline-block w-3 h-3 bg-red-500 rounded-sm"></span> {cliente.celular}
+                        </p>
                       )}
                     </div>
+                    {/* Botón Add Discount */}
+                  <button className="bg-orange-500 hover:bg-orange-600 text-white text-xs font-bold px-4 py-2 rounded-md transition-colors shadow-sm">
+                    Add Discount
+                  </button>
                   </div>
-                  <span className="text-xs font-bold text-gray-500">{cliente.codigo_cliente}</span>
                 </div>
 
-                {/* Pestañas */}
-                <div className="flex gap-6 border-b mb-4 text-sm font-bold text-gray-500 flex-wrap">
+                {/* Pestañas - estilo CDEpos con iconos */}
+                <div className="flex gap-0 border-b border-gray-200 mb-4 text-sm font-bold text-gray-500 overflow-x-auto">
                   <button
                     onClick={() => setLibroMayorTab('libro')}
-                    className={`pb-2 px-1 ${libroMayorTab === 'libro' ? 'text-[#004284] border-b-2 border-[#004284]' : 'hover:text-gray-700'}`}
+                    className={`whitespace-nowrap pb-3 px-4 flex items-center gap-2 transition-colors ${libroMayorTab === 'libro' ? 'text-[#004284] border-b-3 border-[#004284]' : 'hover:text-gray-700'}`}
+                    style={libroMayorTab === 'libro' ? { borderBottomWidth: '3px' } : {}}
                   >
                     📒 Libro mayor
                   </button>
                   <button
                     onClick={() => setLibroMayorTab('ventas')}
-                    className={`pb-2 px-1 ${libroMayorTab === 'ventas' ? 'text-[#004284] border-b-2 border-[#004284]' : 'hover:text-gray-700'}`}
+                    className={`whitespace-nowrap pb-3 px-4 flex items-center gap-2 transition-colors ${libroMayorTab === 'ventas' ? 'text-[#004284] border-b-3 border-[#004284]' : 'hover:text-gray-700'}`}
+                    style={libroMayorTab === 'ventas' ? { borderBottomWidth: '3px' } : {}}
                   >
-                    🧾 Ventas
+                    💰 Ventas
                   </button>
                   <button
                     onClick={() => { setClienteLibroMayor(null); abrirDocumentosNotas(cliente); }}
-                    className="pb-2 px-1 hover:text-gray-700"
+                    className="whitespace-nowrap pb-3 px-4 flex items-center gap-2 hover:text-gray-700 transition-colors"
                   >
-                    📎 Documentos y notas
+                    ✏️ Documentos y notas
                   </button>
                   <button
                     onClick={() => setLibroMayorTab('pagos')}
-                    className={`pb-2 px-1 ${libroMayorTab === 'pagos' ? 'text-[#004284] border-b-2 border-[#004284]' : 'hover:text-gray-700'}`}
+                    className={`whitespace-nowrap pb-3 px-4 flex items-center gap-2 transition-colors ${libroMayorTab === 'pagos' ? 'text-[#004284] border-b-3 border-[#004284]' : 'hover:text-gray-700'}`}
+                    style={libroMayorTab === 'pagos' ? { borderBottomWidth: '3px' } : {}}
                   >
                     💳 Pagos
+                  </button>
+                  <button
+                    onClick={() => setLibroMayorTab('ocupaciones')}
+                    className={`whitespace-nowrap pb-3 px-4 flex items-center gap-2 transition-colors ${libroMayorTab === 'ocupaciones' ? 'text-[#004284] border-b-3 border-[#004284]' : 'hover:text-gray-700'}`}
+                    style={libroMayorTab === 'ocupaciones' ? { borderBottomWidth: '3px' } : {}}
+                  >
+                    📋 Ocupaciones
                   </button>
                 </div>
 
                 {libroMayorTab === 'libro' && (
                   <>
-                    {/* Controles: rango de fechas / formato / ubicación */}
-                    <div className="flex flex-wrap gap-6 mb-5">
-                      <div>
-                        <p className="text-xs font-bold text-gray-600 mb-1">Rango de fechas:</p>
-                        <div className="flex items-center gap-2">
-                          <input type="date" value={libroMayorDesde} onChange={(e) => setLibroMayorDesde(e.target.value)} className="border rounded px-2 py-1 text-xs" />
-                          <span className="text-xs text-gray-400">-</span>
-                          <input type="date" value={libroMayorHasta} onChange={(e) => setLibroMayorHasta(e.target.value)} className="border rounded px-2 py-1 text-xs" />
+                    {/* Controles: rango de fechas / formato / ubicación + acciones */}
+                    <div className="bg-white border border-gray-200 rounded-lg p-3 md:p-4 flex flex-col xl:flex-row xl:items-end justify-between gap-4 mb-4 shadow-sm">
+                      <div className="flex flex-wrap gap-4 items-end">
+                        <div>
+                          <p className="text-xs font-bold text-gray-600 mb-1">Rango de fechas:</p>
+                          <div className="bg-gray-50 border rounded-lg px-3 py-2 flex items-center gap-2">
+                            <input type="date" value={libroMayorDesde} onChange={(e) => setLibroMayorDesde(e.target.value)} className="bg-transparent text-xs outline-none" />
+                            <span className="text-xs text-gray-400">-</span>
+                            <input type="date" value={libroMayorHasta} onChange={(e) => setLibroMayorHasta(e.target.value)} className="bg-transparent text-xs outline-none" />
+                          </div>
+                        </div>
+                        <div>
+                          <p className="text-xs font-bold text-gray-600 mb-1">Formato del libro</p>
+                          <div className="flex border rounded-lg overflow-hidden">
+                            {['Format 1', 'Format 2'].map((f) => (
+                              <button
+                                key={f}
+                                onClick={() => setLibroMayorFormato(f)}
+                                className={`px-4 py-2 text-xs font-bold transition-colors ${libroMayorFormato === f ? 'bg-gray-200 text-gray-800' : 'bg-white text-gray-500 hover:bg-gray-50'}`}
+                              >
+                                {f}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                        <div>
+                          <p className="text-xs font-bold text-gray-600 mb-1">Ubicación de la empresa:</p>
+                          <select
+                            className="border rounded-lg px-3 py-2 text-xs bg-white"
+                            value={libroMayorUbicacion}
+                            onChange={(e) => setLibroMayorUbicacion(e.target.value)}
+                          >
+                            <option value="Todas">Todas las localizaciones</option>
+                            {Object.entries(ubicacionesMap).map(([id, nombre]) => (
+                              <option key={id} value={id}>{nombre}</option>
+                            ))}
+                          </select>
                         </div>
                       </div>
-                      <div>
-                        <p className="text-xs font-bold text-gray-600 mb-1">Ledger format</p>
-                        <div className="flex border rounded overflow-hidden">
-                          {['Format 1', 'Format 2'].map((f) => (
-                            <button
-                              key={f}
-                              onClick={() => setLibroMayorFormato(f)}
-                              className={`px-3 py-1 text-xs font-bold ${libroMayorFormato === f ? 'bg-gray-200 text-gray-800' : 'bg-white text-gray-500 hover:bg-gray-50'}`}
-                            >
-                              {f}
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-                      <div>
-                        <p className="text-xs font-bold text-gray-600 mb-1">Ubicación de la empresa:</p>
-                        <select className="border rounded px-2 py-1 text-xs" defaultValue="Todas">
-                          <option value="Todas">Todas las localizaciones</option>
-                        </select>
+                      {/* Iconos de impresión y email */}
+                      <div className="flex items-center gap-2">
+                        <button
+                          className="w-9 h-9 border rounded-lg flex items-center justify-center text-gray-500 hover:bg-gray-50 hover:text-gray-700 transition-colors"
+                          title="Imprimir"
+                          onClick={() => window.print()}
+                        >
+                          🖨️
+                        </button>
+                        <button
+                          className="w-9 h-9 border rounded-lg flex items-center justify-center text-gray-500 hover:bg-gray-50 hover:text-gray-700 transition-colors"
+                          title="Exportar Libro mayor a PDF"
+                          aria-label="Exportar Libro mayor a PDF"
+                          onClick={exportarLibroMayorPDF}
+                        >
+                          📄
+                        </button>
+                        <button
+                          className="w-9 h-9 border rounded-lg flex items-center justify-center text-gray-500 hover:bg-gray-50 hover:text-gray-700 transition-colors"
+                          title="Enviar por email"
+                          aria-label="Enviar Libro mayor por email"
+                          onClick={() => {
+                            if (!cliente.email) {
+                              alert('Este contacto no tiene un email registrado.');
+                              return;
+                            }
+                            const asunto = `Libro mayor - ${cliente.nombre}`;
+                            window.location.href = `mailto:${cliente.email}?subject=${encodeURIComponent(asunto)}`;
+                          }}
+                        >
+                          ✉️
+                        </button>
                       </div>
                     </div>
 
-                    {/* Datos de empresa / cliente */}
-                    <div className="flex flex-wrap justify-between gap-4 mb-4 text-xs">
-                      <div>
-                        <div className="bg-[#004284] text-white font-bold px-3 py-1 w-fit mb-2">A:</div>
-                        <p className="font-bold text-gray-800">{cliente.nombre}</p>
-                        <p className="text-gray-600">{cliente.direccion || 'SIN DIRECCIÓN'}</p>
-                        {cliente.celular && <p className="text-gray-600">Celular: {cliente.celular}</p>}
+                    {/* Datos de empresa (derecha) */}
+                    <div className="flex justify-end mb-1">
+                      <div className="text-right text-xs">
+                        <p className="font-bold text-gray-900">{nombreDelNegocio || 'Tu negocio'}</p>
+                        {direccionEmpresa && <p className="text-gray-600">{direccionEmpresa}</p>}
+                        {telefonoEmpresa && <p className="text-gray-600">{telefonoEmpresa}</p>}
+                      </div>
+                    </div>
+
+                    {/* Datos del cliente (izquierda) + Resumen de la cuenta (derecha) */}
+                    <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_minmax(300px,400px)] items-start gap-6 mb-5">
+                      {/* Cliente destinatario */}
+                      <div className="text-xs">
+                        <div className="bg-orange-500 text-white font-bold px-3 py-1 w-fit mb-2 rounded-sm text-sm">A:</div>
+                        <p className="font-bold text-gray-900 text-sm">{cliente.nombre}</p>
+                        <p className="text-gray-600">{cliente.nombre},</p>
+                        <p className="text-gray-600">{cliente.direccion || 'SIN DIRECCION'}, {cliente.departamento || 'Paraguay'},</p>
+                        <p className="text-gray-600">{cliente.cod_postal || '0000'}</p>
+                        {cliente.celular && <p className="text-gray-600 mt-1">Celular: {cliente.celular}</p>}
                         {cliente.documento_nro && <p className="text-gray-600">Documento N.°: {cliente.documento_nro}</p>}
                       </div>
-                      <div className="text-right">
-                        <p className="font-bold text-gray-800">{nombreDelNegocio || 'Tu negocio'}</p>
-                        {direccionEmpresa && <p className="text-gray-600">{direccionEmpresa}</p>}
-                        {telefonoEmpresa && <p className="text-gray-600">Tel: {telefonoEmpresa}</p>}
+
+                      {/* Resumen de la cuenta - estilo CDEpos con naranja */}
+                      <div className="border rounded-lg overflow-hidden min-w-[300px] max-w-[400px] flex-1">
+                        <div className="bg-orange-500 text-white font-bold text-sm py-1.5 px-3 flex justify-between items-center">
+                          <span>Resumen de la cuenta</span>
+                          <span className="text-[10px] font-normal text-white/80">{libroMayorDesde} A {libroMayorHasta}</span>
+                        </div>
+                        <div className="divide-y text-sm">
+                          <div className="flex justify-between px-3 py-1.5">
+                            <span className="text-gray-600">Crédito a favor</span>
+                            <span className="font-bold text-gray-800">{formatGs(creditoAFavorRango)}</span>
+                          </div>
+                          <div className="flex justify-between px-3 py-1.5">
+                            <span className="text-gray-600">Total de la factura</span>
+                            <span className="font-bold text-gray-800">{formatGs(totalFacturaRango)}</span>
+                          </div>
+                          <div className="flex justify-between px-3 py-1.5">
+                            <span className="text-gray-600">Total pagado</span>
+                            <span className="font-bold text-gray-800">{formatGs(totalPagadoRango)}</span>
+                          </div>
+                          <div className="flex justify-between px-3 py-1.5">
+                            <span className="text-gray-600">Pago Realizado</span>
+                            <span className="font-bold text-gray-800">{formatGs(totalCreditoRango)}</span>
+                          </div>
+                          <div className="flex justify-between px-3 py-1.5 bg-gray-50">
+                            <span className="font-bold text-gray-900">Saldo adeudado</span>
+                            <span className="font-bold text-gray-900">{formatGs(Math.max(0, saldoAdeudadoRango))}</span>
+                          </div>
+                        </div>
                       </div>
                     </div>
 
-                    {/* Resumen de la cuenta */}
-                    <div className="border rounded-lg overflow-hidden mb-5">
-                      <div className="bg-[#004284] text-white font-bold text-sm text-center py-2">
-                        Resumen de la cuenta
-                        <p className="text-[10px] font-normal text-white/70">{libroMayorDesde} a {libroMayorHasta}</p>
-                      </div>
-                      <div className="divide-y text-sm">
-                        <div className="flex justify-between px-4 py-2"><span className="text-gray-600">Crédito a favor</span><span className="font-bold text-gray-800">{formatGs(cliente.creditoAFavor)}</span></div>
-                        <div className="flex justify-between px-4 py-2"><span className="text-gray-600">Total de la factura</span><span className="font-bold text-gray-800">{formatGs(cliente.totalFacturado)}</span></div>
-                        <div className="flex justify-between px-4 py-2"><span className="text-gray-600">Total pagado</span><span className="font-bold text-gray-800">{formatGs(cliente.pagoRealizado)}</span></div>
-                        <div className="flex justify-between px-4 py-2"><span className="text-gray-600">Pago Realizado</span><span className="font-bold text-gray-800">{formatGs(cliente.pagoRealizadoManual)}</span></div>
-                        <div className="flex justify-between px-4 py-2 bg-gray-50"><span className="font-bold text-gray-800">Saldo adeudado</span><span className="font-bold text-gray-800">{formatGs(cliente.creditoOtorgado)}</span></div>
-                      </div>
-                    </div>
-
-                    <p className="text-xs font-bold text-gray-700 mb-2">
+                    <p className="text-xs font-bold text-gray-700 mb-3 text-center border-y border-gray-100 py-2">
                       Mostrando todas las facturas y pagos entre {libroMayorDesde} y {libroMayorHasta}
                     </p>
 
-                    {/* Tabla de movimientos */}
-                    <div className="overflow-x-auto border rounded">
-                      <table className="w-full text-[11px] border-collapse whitespace-nowrap">
+                    {/* Tabla de movimientos - estilo CDEpos */}
+                    <div className="overflow-x-auto border border-gray-200 rounded-lg shadow-sm mt-2">
+                      <table className="min-w-[900px] w-full text-[11px] border-collapse whitespace-nowrap">
                         <thead>
-                          <tr className="bg-gray-50 text-gray-500 font-bold uppercase border-b">
-                            <th className="p-2 text-left">Fecha</th>
-                            <th className="p-2 text-left">Numero de Referencia</th>
-                            <th className="p-2 text-left">Tipo</th>
-                            <th className="p-2 text-left">Ubicación</th>
-                            <th className="p-2 text-left">Estado de Pago</th>
-                            <th className="p-2 text-right">Débito</th>
-                            <th className="p-2 text-right">Crédito</th>
-                            <th className="p-2 text-right">Saldo</th>
-                            <th className="p-2 text-left">Método de Pago</th>
-                            <th className="p-2 text-left">Otros</th>
+                          <tr className="bg-gray-100 text-gray-500 font-bold uppercase border-b text-[10px]">
+                            <th className="p-2.5 text-left">Fecha</th>
+                            <th className="p-2.5 text-left">Numero de Referencia</th>
+                            <th className="p-2.5 text-left">Tipo</th>
+                            <th className="p-2.5 text-left">Ubicación</th>
+                            <th className="p-2.5 text-center">Estado de Pago</th>
+                            <th className="p-2.5 text-right">Débito</th>
+                            <th className="p-2.5 text-right">Crédito</th>
+                            <th className="p-2.5 text-right">Saldo</th>
+                            <th className="p-2.5 text-left">Método de Pago</th>
                           </tr>
                         </thead>
                         <tbody>
-                          {filasConSaldo.length === 0 ? (
-                            <tr><td colSpan="10" className="text-center py-6 text-gray-400">No hay movimientos en el rango seleccionado.</td></tr>
+                          {/* Fila especial: Crédito a favor */}
+                          {cliente.creditoAFavor > 0 && (
+                            <tr className="border-b bg-orange-50/50 text-gray-700">
+                              <td className="p-2.5 text-gray-500">{libroMayorDesde}<br/><span className="text-[10px] text-gray-400">12:00 AM</span></td>
+                              <td className="p-2.5"></td>
+                              <td className="p-2.5 font-medium text-orange-600">Crédito a favor</td>
+                              <td className="p-2.5"></td>
+                              <td className="p-2.5 text-center"></td>
+                              <td className="p-2.5 text-right">{formatGs(0)}</td>
+                              <td className="p-2.5 text-right"></td>
+                              <td className="p-2.5 text-right font-bold">0</td>
+                              <td className="p-2.5"></td>
+                            </tr>
+                          )}
+                          {filasConSaldo.length === 0 && cliente.creditoAFavor <= 0 ? (
+                            <tr><td colSpan="9" className="text-center py-8 text-gray-400">No hay movimientos en el rango seleccionado.</td></tr>
                           ) : (
                             filasConSaldo.map((m, i) => (
-                              <tr key={i} className="border-b hover:bg-gray-50 text-gray-700">
-                                <td className="p-2">{m.fecha ? new Date(m.fecha).toLocaleString('es-PY') : '—'}</td>
-                                <td className="p-2">{m.referencia}</td>
-                                <td className="p-2">{m.tipo}</td>
-                                <td className="p-2">{m.ubicacion}</td>
-                                <td className="p-2">{m.estadoPago}</td>
-                                <td className="p-2 text-right">{m.debito ? formatGs(m.debito) : '—'}</td>
-                                <td className="p-2 text-right">{m.credito ? formatGs(m.credito) : '—'}</td>
-                                <td className="p-2 text-right font-bold">{formatGs(m.saldo)}</td>
-                                <td className="p-2">{m.metodoPago}</td>
-                                <td className="p-2">{m.otros || '—'}</td>
+                              <tr key={i} className="border-b hover:bg-gray-50/80 text-gray-700 transition-colors">
+                                <td className="p-2.5">
+                                  {m.fecha ? (
+                                    <>
+                                      {new Date(m.fecha).toLocaleDateString('es-PY', { day: '2-digit', month: '2-digit', year: 'numeric' })}
+                                      <br/>
+                                      <span className="text-[10px] text-gray-400">{new Date(m.fecha).toLocaleTimeString('es-PY', { hour: '2-digit', minute: '2-digit', hour12: true })}</span>
+                                    </>
+                                  ) : '—'}
+                                </td>
+                                <td className="p-2.5 font-medium">{m.referencia}</td>
+                                <td className="p-2.5">{m.tipo}</td>
+                                <td className="p-2.5 text-[10px]">{m.ubicacion}</td>
+                                <td className="p-2.5 text-center">
+                                  {m.estadoPago && m.estadoPago !== '—' && (
+                                    <span className={`inline-block px-2.5 py-1 rounded-full text-[10px] font-bold ${
+                                      m.estadoPago === 'Pagado' ? 'bg-green-100 text-green-700' :
+                                      m.estadoPago === 'Pago Parcial' ? 'bg-yellow-100 text-yellow-700' :
+                                      ['Pendiente', 'Credito'].includes(m.estadoPago) ? 'bg-red-100 text-red-700' :
+                                      'bg-gray-100 text-gray-600'
+                                    }`}>
+                                      {m.estadoPago}
+                                    </span>
+                                  )}
+                                </td>
+                                <td className="p-2.5 text-right">{m.debito ? formatGs(m.debito) : ''}</td>
+                                <td className="p-2.5 text-right">{m.credito ? formatGs(m.credito) : ''}</td>
+                                <td className="p-2.5 text-right font-bold">{formatGs(Math.abs(m.saldo))} {m.saldo < 0 ? 'CR' : m.saldo > 0 ? 'DR' : ''}</td>
+                                <td className="p-2.5">{m.metodoPago !== '—' ? m.metodoPago : ''}</td>
                               </tr>
                             ))
                           )}
                         </tbody>
+                        {filasConSaldo.length > 0 && (
+                          <tfoot>
+                            <tr className="bg-gray-100 border-t-2 border-gray-200 font-bold text-gray-800">
+                              <td className="p-2.5" colSpan="5">Totales del período</td>
+                              <td className="p-2.5 text-right">{formatGs(totalFacturaRango)}</td>
+                              <td className="p-2.5 text-right">{formatGs(totalCreditoRango)}</td>
+                              <td className="p-2.5 text-right">{formatGs(Math.abs(saldoAdeudadoRango))}</td>
+                              <td className="p-2.5" />
+                            </tr>
+                          </tfoot>
+                        )}
                       </table>
                     </div>
                   </>
+                )}
+
+                {/* Pestaña Ocupaciones */}
+                {libroMayorTab === 'ocupaciones' && (
+                  <div className="flex flex-col items-center justify-center py-16 text-gray-400">
+                    <span className="text-5xl mb-4">📋</span>
+                    <p className="text-sm font-medium">No hay ocupaciones registradas para este contacto.</p>
+                    <p className="text-xs mt-1">Las ocupaciones aparecerán aquí cuando se asignen.</p>
+                  </div>
                 )}
 
                 {libroMayorTab === 'ventas' && (() => {
@@ -2322,30 +2578,121 @@ export default function Clientes() {
 
                 {libroMayorTab === 'pagos' && (
                   cliente.pagosManuales.length === 0 ? (
-                    <p className="text-gray-400 text-xs">Este cliente todavía no tiene pagos registrados.</p>
+                    <div className="border border-gray-200 rounded-lg bg-white py-12 text-center text-gray-400 text-sm">
+                      Este cliente todavía no tiene pagos registrados.
+                    </div>
                   ) : (
-                    <table className="w-full text-xs border-collapse">
-                      <thead>
-                        <tr className="text-gray-500 border-b"><th className="text-left py-1">Fecha</th><th className="text-left py-1">Método</th><th className="text-left py-1">Nota</th><th className="text-right py-1">Monto</th></tr>
-                      </thead>
-                      <tbody>
-                        {cliente.pagosManuales.map((p) => (
-                          <tr key={p.id} className="border-b border-gray-50">
-                            <td className="py-1">{p.fecha ? new Date(p.fecha).toLocaleDateString('es-PY') : '—'}</td>
-                            <td className="py-1">{p.metodo_pago || '—'}</td>
-                            <td className="py-1">{p.nota || '—'}</td>
-                            <td className="py-1 text-right">{formatGs(p.monto)}</td>
+                    <div className="overflow-x-auto border border-gray-200 rounded-lg shadow-sm">
+                      <table className="min-w-[820px] w-full text-[11px] border-collapse">
+                        <thead>
+                          <tr className="bg-gray-100 text-gray-500 font-bold uppercase border-b text-[10px]">
+                            <th className="p-3 text-left">Pagado el</th>
+                            <th className="p-3 text-left">Número de referencia</th>
+                            <th className="p-3 text-right">Cantidad</th>
+                            <th className="p-3 text-left">Método de pago</th>
+                            <th className="p-3 text-left">Pago por</th>
+                            <th className="p-3 text-center">Acción</th>
                           </tr>
-                        ))}
-                      </tbody>
-                    </table>
+                        </thead>
+                        <tbody>
+                          {cliente.pagosManuales.map((pago) => (
+                            <tr key={pago.id} className="border-b border-gray-100 hover:bg-gray-50 text-gray-700">
+                              <td className="p-3">{pago.fecha ? new Date(pago.fecha).toLocaleString('es-PY') : '—'}</td>
+                              <td className="p-3 font-mono">{pago.id ? `SP${new Date(pago.fecha || Date.now()).getFullYear()}/${String(pago.id).slice(-4)}` : '—'}</td>
+                              <td className="p-3 text-right font-bold">{formatGs(pago.monto)}</td>
+                              <td className="p-3">{pago.metodo_pago || '—'}</td>
+                              <td className="p-3">{pago.cuenta_pago || nombreDelNegocio || '—'}</td>
+                              <td className="p-3">
+                                <div className="flex justify-center gap-1.5">
+                                  <button
+                                    type="button"
+                                    onClick={() => abrirDetallePagoLibroMayor(pago)}
+                                    className="bg-orange-500 hover:bg-orange-600 text-white px-2.5 py-1 rounded text-[10px] font-bold"
+                                  >
+                                    Ver
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => abrirEdicionPagoLibroMayor(pago)}
+                                    className="bg-cyan-500 hover:bg-cyan-600 text-white px-2.5 py-1 rounded text-[10px] font-bold"
+                                  >
+                                    Editar
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => borrarPagoLibroMayor(pago)}
+                                    className="bg-red-500 hover:bg-red-600 text-white px-2.5 py-1 rounded text-[10px] font-bold"
+                                  >
+                                    Borrar
+                                  </button>
+                                </div>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
                   )
                 )}
               </div>
-            </div>
           </div>
         );
       })()}
+
+      {pagoSeleccionado && pagoAccion && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[10000] p-4" onClick={cerrarAccionPago}>
+          <div className="bg-white rounded-lg shadow-2xl w-full max-w-md overflow-hidden" onClick={(e) => e.stopPropagation()}>
+            <div className="bg-[#004284] px-5 py-4 flex justify-between items-center">
+              <h3 className="text-white font-bold text-base">
+                {pagoAccion === 'ver' ? 'Detalle del pago' : 'Editar pago'}
+              </h3>
+              <button type="button" onClick={cerrarAccionPago} className="text-white/80 hover:text-white text-xl leading-none" aria-label="Cerrar">✕</button>
+            </div>
+
+            {pagoAccion === 'ver' ? (
+              <div className="p-5 text-sm flex flex-col gap-2">
+                <p><span className="font-bold text-gray-600">Pagado el:</span> {pagoSeleccionado.fecha ? new Date(pagoSeleccionado.fecha).toLocaleString('es-PY') : '—'}</p>
+                <p><span className="font-bold text-gray-600">Número de referencia:</span> {pagoSeleccionado.id ? String(pagoSeleccionado.id) : '—'}</p>
+                <p><span className="font-bold text-gray-600">Cantidad:</span> {formatGs(pagoSeleccionado.monto)}</p>
+                <p><span className="font-bold text-gray-600">Método de pago:</span> {pagoSeleccionado.metodo_pago || '—'}</p>
+                <p><span className="font-bold text-gray-600">Pago por:</span> {pagoSeleccionado.cuenta_pago || nombreDelNegocio || '—'}</p>
+                <p><span className="font-bold text-gray-600">Nota:</span> {pagoSeleccionado.nota || '—'}</p>
+                <div className="flex justify-end pt-3 border-t mt-2">
+                  <button type="button" onClick={cerrarAccionPago} className="border border-gray-300 text-gray-600 font-bold text-xs px-4 py-2 rounded hover:bg-gray-50">Cerrar</button>
+                </div>
+              </div>
+            ) : (
+              <div className="p-5 flex flex-col gap-4 text-sm">
+                <div className="bg-gray-50 border border-gray-100 rounded p-3 text-xs">
+                  <span className="font-bold text-gray-600">Cantidad:</span> {formatGs(pagoSeleccionado.monto)}
+                  <p className="text-gray-400 mt-1">El monto no se edita aquí porque ya fue aplicado a las ventas del cliente.</p>
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-gray-700 mb-1">Pagado el:</label>
+                  <input type="date" value={pagoEditandoFecha} onChange={(e) => setPagoEditandoFecha(e.target.value)} className="w-full border border-gray-300 rounded p-2.5 text-sm" />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-gray-700 mb-1">Método de pago:</label>
+                  <select value={pagoEditandoMetodo} onChange={(e) => setPagoEditandoMetodo(e.target.value)} className="w-full border border-gray-300 rounded p-2.5 text-sm bg-white">
+                    <option>Efectivo</option>
+                    <option>Transferencia</option>
+                    <option>Tarjeta</option>
+                    <option>Cheque</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-gray-700 mb-1">Nota:</label>
+                  <textarea value={pagoEditandoNota} onChange={(e) => setPagoEditandoNota(e.target.value)} rows={3} className="w-full border border-gray-300 rounded p-2.5 text-sm" />
+                </div>
+                <div className="flex justify-end gap-2 pt-3 border-t">
+                  <button type="button" onClick={cerrarAccionPago} className="border border-gray-300 text-gray-600 font-bold text-xs px-4 py-2 rounded hover:bg-gray-50">Cancelar</button>
+                  <button type="button" onClick={guardarEdicionPagoLibroMayor} className="bg-cyan-500 hover:bg-cyan-600 text-white font-bold text-xs px-4 py-2 rounded">Guardar cambios</button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* MODAL: Pago de venta desde Libro Mayor */}
       {ventaPagar && (
