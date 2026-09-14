@@ -27,7 +27,7 @@ const CATEGORIAS_PERMISOS = [
     },
     {
         key: 'ventas_pos', titulo: 'Ventas / Punto de venta',
-        permisos: ['Acceder al Punto de Venta', 'Solo Punto de Venta (bloquea todo lo demás)', 'Aplicar descuentos', 'Registrar venta a crédito', 'Editar precio manualmente', 'Ver ventas de otros usuarios'],
+        permisos: ['Acceder al Punto de Venta', 'Solo Punto de Venta (bloquea todo lo demás)', 'Aplicar descuentos', 'Registrar venta a crédito', 'Editar precio manualmente', 'Ver ventas de otros usuarios', 'Anular venta', 'Devolver venta'],
     },
     {
         key: 'caja', titulo: 'Caja',

@@ -42,6 +42,14 @@ function App() {
         return;
       }
 
+      if (data.activo === false || data.permitir_acceso === false) {
+        setPerfilUsuario(null);
+        setSession(null);
+        await supabase.auth.signOut();
+        setErrorAcceso('Tu usuario está desactivado o no tiene permiso de acceso. Contactá al administrador del negocio.');
+        return;
+      }
+
       setErrorAcceso('');
       setPerfilUsuario(data);
     } catch (err) {

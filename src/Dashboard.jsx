@@ -348,7 +348,7 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
         return <UbicacionesComerciales />;
 
       case 'todas_ventas':
-        return <ListaVentas />;
+        return <ListaVentas perfilUsuario={perfilUsuario} />;
 
       case 'pos':
         // Validación exclusiva: Si la caja está cerrada, obliga a abrirla antes del POS

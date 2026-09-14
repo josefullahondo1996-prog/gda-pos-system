@@ -4,9 +4,12 @@ import { useEmpresaInfo } from './utils/useEmpresa';
 import { generateReceipt } from './utils/generateReceipt';
 import { useNotificacion } from './NotificacionContext';
 
-export default function ListaVentas() {
+export default function ListaVentas({ perfilUsuario }) {
   const { id: empresaId, nombre: nombreEmpresa, direccion: direccionEmpresa, telefono: telefonoEmpresa, ruc: rucEmpresa } = useEmpresaInfo();
   const { confirmar, notificar } = useNotificacion();
+  const esAdmin = (perfilUsuario?.roles?.nombre || '').toLowerCase().includes('admin');
+  const permisosVentas = perfilUsuario?.roles?.permisos?.ventas_pos || {};
+  const puedeBorrarVenta = esAdmin || permisosVentas['Borrar venta'];
   const [ventas, setVentas] = useState([]);
   const [ubicaciones, setUbicaciones] = useState([]);
   const [cargando, setCargando] = useState(false);
@@ -58,18 +61,10 @@ export default function ListaVentas() {
       notificar.exito('Venta eliminada y stock devuelto correctamente.');
     setCargando(true);
     try {
-      if ((venta.estado_pago || venta.estado) !== 'Anulada') {
-        const { error: errorReversion } = await supabase.rpc('anular_venta', {
-          p_venta_id: venta.id,
-          p_empresa_id: empresaId,
-          p_motivo: 'Eliminación manual de venta',
-        });
-        if (errorReversion) throw errorReversion;
-      }
-      await supabase.from('detalle_ventas').delete().eq('venta_id', venta.id);
-      await supabase.from('pagos_clientes').delete().eq('venta_id', venta.id);
-      
-      const { error } = await supabase.from('ventas').delete().eq('id', venta.id).eq('empresa_id', empresaId);
+      const { error } = await supabase.rpc('eliminar_venta', {
+        p_venta_id: venta.id,
+        p_empresa_id: empresaId,
+      });
       if (error) throw error;
       
       alert(`Venta eliminada y stock devuelto correctamente.`);
@@ -292,12 +287,14 @@ export default function ListaVentas() {
                     >
                       🖨️ Imprimir
                     </button>
-                    <button 
-                      onClick={() => borrarVenta(venta)}
-                      className="bg-red-50 text-red-600 border border-red-200 px-3 py-1 rounded text-xs font-bold hover:bg-red-100 flex items-center gap-1 transition shadow-sm"
-                    >
-                      🗑️ Borrar
-                    </button>
+                    {puedeBorrarVenta && (
+                      <button
+                        onClick={() => borrarVenta(venta)}
+                        className="bg-red-50 text-red-600 border border-red-200 px-3 py-1 rounded text-xs font-bold hover:bg-red-100 flex items-center gap-1 transition shadow-sm"
+                      >
+                        🗑️ Borrar
+                      </button>
+                    )}
                   </td>
                 </tr>
               ))
