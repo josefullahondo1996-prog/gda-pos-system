@@ -19,6 +19,7 @@ import Inicio from './Inicio';
 import GraficosDashboard from './GraficosDashboard';
 import PuntoDeVenta from './PuntoDeVenta';
 import ListaProductos from './ListaProductos';
+import HistorialExistencias from './HistorialExistencias';
 import Catalogo from './Catalogo';
 import AgregarProducto from './AgregarProducto';
 import Marcas from './Marcas';
@@ -67,7 +68,7 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
       ot: 'ot', config_empresa: 'configuraciones', config_factura: 'configuraciones',
       ubicaciones_comerciales: 'ubicaciones', clientes: 'clientes_proveedores',
       proveedores: 'clientes_proveedores', grupos_clientes: 'clientes_proveedores',
-      catalogo: 'productos', agregar_producto: 'productos', marcas: 'productos',
+      catalogo: 'productos', stock_history: 'productos', agregar_producto: 'productos', marcas: 'productos',
       categorias: 'productos', unidades: 'productos', compras: 'compras',
       agregar_compra: 'compras', devoluciones_compra: 'compras', gastos: 'gastos',
       agregar_gasto: 'gastos', categorias_gastos: 'gastos', todas_ventas: 'ventas_pos',
@@ -195,6 +196,11 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
       return;
     }
 
+    if (path.startsWith('/stock-history/')) {
+      setVistaActiva('stock_history');
+      return;
+    }
+
     switch (path) {
       case '/':
         setVistaActiva('inicio');
@@ -257,6 +263,9 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
         break;
       case '/catalogo':
         setVistaActiva('catalogo');
+        break;
+      case '/stock-history':
+        setVistaActiva('stock_history');
         break;
       case '/agregar_producto':
         setVistaActiva('agregar_producto');
@@ -381,6 +390,9 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
 
       case 'catalogo':
         return <ListaProductos />;
+
+      case 'stock_history':
+        return <HistorialExistencias key={refreshKey} />;
 
       case 'agregar_producto':
         return (
@@ -866,6 +878,7 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
                 {vistaActiva === 'devoluciones_compra' && t('purchaseReturns')}
                 {vistaActiva === 'cobros' && t('pendingOrders')}
                 {vistaActiva === 'catalogo' && t('products')}
+                {vistaActiva === 'stock_history' && 'Historial de existencias'}
                 {vistaActiva === 'agregar_producto' && t('addProduct')}
                 {vistaActiva === 'marcas' && t('brands')}
                 {vistaActiva === 'unidades' && t('units')}

@@ -21,7 +21,7 @@ const crearFilaVacia = (producto) => ({
     nota: '',
 });
 
-const AperturaStock = ({ producto, onGuardado, onCancelar, ubicacionId: ubicacionIdProp }) => {
+const AperturaStock = ({ producto, onGuardado, onCancelar, ubicacionId: ubicacionIdProp, compacto = false }) => {
     const { id: empresaId, nombre: nombreEmpresa } = useEmpresaInfo();
     const { id: ubicacionUsuarioId, nombre: nombreUbicacionUsuario, codigo: codigoUbicacionUsuario } = useUbicacionUsuario();
     const ubicacionId = ubicacionIdProp || ubicacionUsuarioId;
@@ -96,26 +96,27 @@ const AperturaStock = ({ producto, onGuardado, onCancelar, ubicacionId: ubicacio
     };
 
     return (
-        <div className="bg-transparent text-sm text-gray-700">
-            <div className="flex items-center justify-between mb-4">
+        <div className={`bg-transparent text-sm text-gray-700 ${compacto ? '' : 'p-1'}`}>
+            {!compacto && <div className="flex items-center justify-between mb-4">
                 <p className="text-xs font-bold text-gray-500">
                     <span className="text-blue-600">CDEpos</span> / Productos / <span className="text-gray-700">Añadir Stock de apertura</span>
                 </p>
                 <button onClick={() => onCancelar && onCancelar()} className="text-xs font-bold text-gray-500 hover:text-gray-800">
                     ← Volver a la lista
                 </button>
-            </div>
+            </div>}
 
-            <div className="bg-white rounded-lg shadow-sm border-t-2 border-[#004284]">
-                <div className="p-5 border-b border-gray-100">
+            <div className={`bg-white ${compacto ? '' : 'rounded-lg shadow-sm border-t-2 border-[#004284]'}`}>
+                {!compacto && <div className="p-5 border-b border-gray-100">
                     <h2 className="font-bold text-gray-800 text-lg mb-1">Añadir Stock de apertura</h2>
                     <p className="text-xs text-gray-500">Ubicación: <span className="font-bold text-gray-700">{nombreUbicacionUsuario || nombreEmpresa}{codigoUbicacionUsuario ? ` (${codigoUbicacionUsuario})` : ''}</span></p>
-                </div>
+                </div>}
+                {compacto && <div className="px-4 py-3 border border-slate-200 rounded-t-md bg-[#f8fafc] text-xs font-black text-[#263b63]">Ubicación: {nombreUbicacionUsuario || nombreEmpresa}{codigoUbicacionUsuario ? ` (${codigoUbicacionUsuario})` : ''}</div>}
 
-                <div className="overflow-x-auto p-4">
+                <div className={`overflow-x-auto ${compacto ? 'p-3' : 'p-4'}`}>
                     <table className="w-full text-xs border-collapse">
                         <thead>
-                            <tr className="text-gray-400 font-bold uppercase text-[11px] border-b border-gray-200">
+                            <tr className="text-gray-400 font-bold uppercase text-[10px] border-b border-gray-200 bg-[#f8fafc]">
                                 <th className="text-left py-2 pr-3">Nombre del producto</th>
                                 <th className="text-left py-2 pr-3">Cantidad restante</th>
                                 <th className="text-left py-2 pr-3">Costo unitario (con IVA)</th>
@@ -129,15 +130,15 @@ const AperturaStock = ({ producto, onGuardado, onCancelar, ubicacionId: ubicacio
                         <tbody>
                             {filas.map((f) => (
                                 <tr key={f.id} className="border-b border-gray-50 align-top">
-                                    <td className="py-3 pr-3 font-bold text-gray-800 min-w-[160px]">
+                                    <td className="py-2 pr-3 font-bold text-gray-800 min-w-[150px]">
                                         {f.nombre || <span className="text-gray-300 font-normal">(sin producto)</span>}
                                     </td>
-                                    <td className="py-3 pr-3">
+                                    <td className="py-2 pr-3">
                                         <div className="flex items-center gap-1">
                                             <input
                                                 type="number"
                                                 min="0"
-                                                className="w-16 border border-gray-300 rounded p-1.5"
+                                                className="w-16 border border-gray-300 rounded p-1.5 text-xs"
                                                 value={cantidadVisible(f.cantidad, f.unidad)}
                                                 onChange={(e) => actualizarFila(f.id, 'cantidad', cantidadInterna(e.target.value, f.unidad))}
                                             />
@@ -146,31 +147,31 @@ const AperturaStock = ({ producto, onGuardado, onCancelar, ubicacionId: ubicacio
                                             </span>
                                         </div>
                                     </td>
-                                    <td className="py-3 pr-3">
+                                    <td className="py-2 pr-3">
                                         <input
                                             type="number"
-                                            className="w-28 border border-gray-300 rounded p-1.5"
+                                            className="w-28 border border-gray-300 rounded p-1.5 text-xs"
                                             value={f.costoUnitarioConIva}
                                             onChange={(e) => actualizarFila(f.id, 'costoUnitarioConIva', e.target.value)}
                                         />
                                     </td>
-                                    <td className="py-3 pr-3">
+                                    <td className="py-2 pr-3">
                                         <input
                                             type="date"
-                                            className="border border-gray-200 bg-gray-50 rounded p-1.5 w-32"
+                                            className="border border-gray-200 bg-gray-50 rounded p-1.5 w-32 text-xs"
                                             value={f.expDate}
                                             onChange={(e) => actualizarFila(f.id, 'expDate', e.target.value)}
                                         />
                                     </td>
-                                    <td className="py-3 pr-3 text-right font-bold text-gray-700">
+                                    <td className="py-2 pr-3 text-right font-bold text-gray-700">
                                         {formatGs((Number(f.cantidad) || 0) * (Number(f.costoUnitarioConIva) || 0))}
                                     </td>
-                                    <td className="py-3 pr-3 text-gray-400 whitespace-nowrap">
+                                    <td className="py-2 pr-3 text-gray-400 whitespace-nowrap text-xs">
                                         {new Date().toLocaleString('es-PY', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
                                     </td>
-                                    <td className="py-3 pr-3">
+                                    <td className="py-2 pr-3">
                                         <textarea
-                                            className="border border-gray-300 rounded p-1.5 w-40 h-14 resize-none"
+                                            className="border border-gray-300 rounded p-1.5 w-40 h-14 resize-none text-xs"
                                             value={f.nota}
                                             onChange={(e) => actualizarFila(f.id, 'nota', e.target.value)}
                                         />
@@ -202,11 +203,12 @@ const AperturaStock = ({ producto, onGuardado, onCancelar, ubicacionId: ubicacio
                     </button>
                 </div>
 
-                <div className="flex justify-end p-5 border-t border-gray-100">
+                <div className={`flex justify-end gap-2 ${compacto ? 'p-4 bg-[#f8fafc]' : 'p-5 border-t border-gray-100'}`}>
+                    {compacto && <button onClick={() => onCancelar && onCancelar()} className="bg-white border border-gray-300 text-gray-600 font-bold px-5 py-2 rounded text-xs hover:bg-gray-50">Cerrar</button>}
                     <button
                         onClick={guardar}
                         disabled={guardando}
-                        className="bg-orange-500 hover:bg-orange-600 text-white font-bold px-6 py-2.5 rounded disabled:opacity-60"
+                        className="bg-orange-500 hover:bg-orange-600 text-white font-bold px-6 py-2 rounded text-xs disabled:opacity-60"
                     >
                         {guardando ? 'Guardando...' : 'Guardar'}
                     </button>

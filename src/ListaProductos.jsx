@@ -2,6 +2,7 @@ import AgregarProducto from './AgregarProducto';
 import AperturaStock from './AperturaStock';
 import DetalleProducto from './utils/DetalleProducto';
 import { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { createPortal } from 'react-dom';
 import { jsPDF } from 'jspdf';
 import { supabase } from './supabaseClient';
@@ -14,6 +15,7 @@ import { formatearStock } from './utils/cantidadProducto';
 import { useLanguage } from './LanguageContext';
 
 export default function ListaProductos() {
+  const navigate = useNavigate();
   const { t } = useLanguage();
   const { id: empresaId, nombre: nombreEmpresa } = useEmpresaInfo();
   const { confirmar } = useNotificacion();
@@ -53,6 +55,7 @@ export default function ListaProductos() {
   const [productoHistorial, setProductoHistorial] = useState(null);
   const [historialMovimientos, setHistorialMovimientos] = useState([]);
   const [cargandoHistorial, setCargandoHistorial] = useState(false);
+  const [errorHistorial, setErrorHistorial] = useState('');
   const [paginaActual, setPaginaActual] = useState(1);
   const [porPagina, setPorPagina] = useState(25);
   const [mostrarFormularioNuevo, setMostrarFormularioNuevo] = useState(false);
@@ -219,20 +222,7 @@ export default function ListaProductos() {
 
   const abrirHistorialExistencias = async (prod) => {
     setAccionAbierta(null);
-    setProductoHistorial(prod);
-    setCargandoHistorial(true);
-    const [rVentas, rCompras] = await Promise.all([
-      supabase.from('detalle_ventas').select('cantidad, subtotal, ventas(fecha)').eq('producto_id', prod.id),
-      supabase.from('detalle_compras').select('cantidad, costo_unitario, compras(fecha)').eq('producto_id', prod.id),
-    ]);
-    const movimientos = [
-      ...(rVentas.data || []).map((v) => ({ tipo: 'Venta (salida)', fecha: v.ventas?.fecha, cantidad: -Number(v.cantidad || 0) })),
-      ...(rCompras.data || []).map((c) => ({ tipo: 'Compra (entrada)', fecha: c.compras?.fecha, cantidad: Number(c.cantidad || 0) })),
-    ]
-      .filter((m) => m.fecha)
-      .sort((a, b) => new Date(b.fecha) - new Date(a.fecha));
-    setHistorialMovimientos(movimientos);
-    setCargandoHistorial(false);
+    navigate(`/stock-history/${prod.id}`);
   };
 
   const eliminarSeleccionados = async () => {
@@ -702,16 +692,17 @@ export default function ListaProductos() {
 
       {/* Modal: Agregar o editar stock inicial de un producto puntual */}
       {productoStockInicial && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[9999] p-4" onClick={() => setProductoStockInicial(null)}>
-          <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl overflow-hidden max-h-[90vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
-            <div className="bg-[#004284] px-5 py-4 flex justify-between items-center">
-              <h3 className="text-white font-bold text-lg">{t('initialStock')} — {productoStockInicial.nombre}</h3>
-                  <button onClick={() => setProductoStockInicial(null)} className="text-white/80 hover:text-white text-xl leading-none">✕</button>
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[9999] p-4" onClick={() => setProductoStockInicial(null)}>
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-[1220px] overflow-hidden max-h-[90vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
+            <div className="bg-gradient-to-r from-[#4338b8] to-[#4f46d0] px-5 py-3.5 flex justify-between items-center">
+              <h3 className="text-white font-bold text-sm md:text-base">{t('initialStock')}</h3>
+                  <button onClick={() => setProductoStockInicial(null)} className="text-white/70 hover:text-white text-xl leading-none">✕</button>
             </div>
-            <div className="overflow-y-auto p-4">
+            <div className="overflow-y-auto bg-white">
               <AperturaStock
                 producto={productoStockInicial}
                 ubicacionId={sucursalActiva}
+                compacto
                 onGuardado={async () => {
                   setProductoStockInicial(null);
                   await cargarProductos();
@@ -735,6 +726,8 @@ export default function ListaProductos() {
             <div className="p-5 overflow-y-auto text-sm">
               {cargandoHistorial ? (
                 <p className="text-gray-400 text-center py-6">Cargando...</p>
+              ) : errorHistorial ? (
+                <p className="text-red-600 text-center py-6">{errorHistorial}</p>
               ) : historialMovimientos.length === 0 ? (
                 <p className="text-gray-400 text-center py-6">{t('noProductMovements')}</p>
               ) : (
