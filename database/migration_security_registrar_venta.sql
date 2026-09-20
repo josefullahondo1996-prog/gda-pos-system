@@ -180,18 +180,27 @@ BEGIN
             FOR UPDATE;
 
             IF v_fila_ubicacion_id IS NULL THEN
-                RAISE EXCEPTION 'El producto no está asignado a la ubicación seleccionada';
+                INSERT INTO producto_stock_ubicacion (
+                    empresa_id,
+                    producto_id,
+                    ubicacion_id,
+                    cantidad,
+                    actualizado_en
+                )
+                VALUES (
+                    v_empresa_id,
+                    v_producto_id,
+                    p_ubicacion_id,
+                    GREATEST(0, COALESCE(v_stock_actual, 0) - v_cantidad),
+                    now()
+                );
+            ELSE
+                UPDATE producto_stock_ubicacion
+                SET cantidad = GREATEST(0, v_cantidad_ubicacion - v_cantidad),
+                    actualizado_en = now()
+                WHERE id = v_fila_ubicacion_id
+                  AND empresa_id = v_empresa_id;
             END IF;
-
-            IF v_cantidad_ubicacion < v_cantidad THEN
-                RAISE EXCEPTION 'Stock insuficiente en la ubicación para el producto %', v_item->>'nombre_producto';
-            END IF;
-
-            UPDATE producto_stock_ubicacion
-            SET cantidad = v_cantidad_ubicacion - v_cantidad,
-                actualizado_en = now()
-            WHERE id = v_fila_ubicacion_id
-              AND empresa_id = v_empresa_id;
         END IF;
     END LOOP;
 

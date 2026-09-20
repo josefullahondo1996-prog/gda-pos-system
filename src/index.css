@@ -14,6 +14,20 @@ input, textarea {
   user-select: text; /* Estos sí dejan */
 }
 
+/* Permitir seleccionar y copiar texto en el chatbot */
+.n8n-chat,
+.n8n-chat *,
+[class*="n8n-chat"],
+[class*="n8n-chat"] *,
+[class*="chat-message"],
+[class*="chat-message"] * {
+  user-select: text !important;
+  -webkit-user-select: text !important;
+  -moz-user-select: text !important;
+  -ms-user-select: text !important;
+  cursor: text;
+}
+
 body {
   margin: 0;
   min-height: 100vh;
@@ -161,3 +175,113 @@ textarea {
 .libro-mayor-scroll::-webkit-scrollbar-thumb:hover {
   background: #94a3b8;
 }
+
+/* ============================================================
+   ESTILOS PREMIUM / PRO PARA EL CHATBOT DE N8N CON AVATAR 3D
+   ============================================================ */
+
+:root {
+  --chat--color-primary: #f97316;
+  --chat--color-primary-shade-50: #ea580c;
+  --chat--color-primary-shade-100: #c2410c;
+  --chat--color-secondary: #0f172a;
+  --chat--color-white: #ffffff;
+  --chat--color-light: #f8fafc;
+  --chat--color-light-shade-50: #f1f5f9;
+  --chat--color-light-shade-100: #e2e8f0;
+  --chat--color-medium: #94a3b8;
+  --chat--color-dark: #0f172a;
+  --chat--color-disabled: #cbd5e1;
+  --chat--color-typing: #f97316;
+  --chat--border-radius: 20px;
+  --chat--window--width: 420px;
+  --chat--window--height: 620px;
+  --chat--header--background: linear-gradient(135deg, #090d16 0%, #1e293b 60%, #ea580c 100%);
+  --chat--header--color: #ffffff;
+  --chat--toggle--size: 66px;
+}
+
+/* Botón flotante Pro con efecto 3D Avatar */
+.chat-window-toggle,
+button[class*="chat-window-toggle"],
+.chat-toggle,
+button[class*="toggle"]:has(svg) {
+  width: 66px !important;
+  height: 66px !important;
+  border-radius: 50% !important;
+  box-shadow: 0 10px 25px rgba(249, 115, 22, 0.4), 0 0 15px rgba(6, 182, 212, 0.35) !important;
+  background-image: url('/bot-avatar.jpg') !important;
+  background-size: cover !important;
+  background-position: center !important;
+  background-repeat: no-repeat !important;
+  border: 3px solid #ffffff !important;
+  transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275) !important;
+  animation: chatbot-pulse-glow 2.5s infinite, chatbot-float 4s ease-in-out infinite !important;
+  cursor: pointer !important;
+}
+
+.chat-window-toggle:hover,
+button[class*="chat-window-toggle"]:hover {
+  transform: scale(1.12) translateY(-4px) !important;
+  box-shadow: 0 15px 35px rgba(249, 115, 22, 0.6), 0 0 25px rgba(6, 182, 212, 0.5) !important;
+}
+
+/* Cuando el botón está cerrado, ocultar el svg por defecto para ver el avatar 3D limpio */
+.chat-window-toggle:not([aria-expanded="true"]) svg,
+button[class*="chat-window-toggle"]:not([aria-expanded="true"]) svg {
+  opacity: 0 !important;
+}
+
+/* Cuando el botón está abierto para cerrar el chat (X) */
+.chat-window-toggle[aria-expanded="true"],
+button[class*="chat-window-toggle"][aria-expanded="true"],
+.chat-window-toggle:has(svg[class*="close"]),
+.chat-window-toggle:has(svg[class*="x"]),
+button[class*="chat-window-toggle"]:has(svg[class*="close"]),
+button[class*="chat-window-toggle"]:has(svg[class*="x"]) {
+  background-image: linear-gradient(135deg, #0f172a 0%, #ea580c 100%) !important;
+  animation: none !important;
+}
+
+.chat-window-toggle[aria-expanded="true"] svg,
+button[class*="chat-window-toggle"][aria-expanded="true"] svg,
+.chat-window-toggle:has(svg[class*="close"]) svg,
+.chat-window-toggle:has(svg[class*="x"]) svg {
+  opacity: 1 !important;
+  color: #ffffff !important;
+  stroke: #ffffff !important;
+  display: block !important;
+}
+
+/* Ventana de chat redondeada con sombra suave */
+.chat-window,
+[class*="chat-window"] {
+  border-radius: 22px !important;
+  overflow: hidden !important;
+  box-shadow: 0 25px 50px -12px rgba(15, 23, 42, 0.25), 0 0 0 1px rgba(226, 232, 240, 0.8) !important;
+}
+
+/* Cabecera Pro del Chat */
+.chat-header,
+[class*="chat-header"] {
+  background: linear-gradient(135deg, #090d16 0%, #1e293b 60%, #c2410c 100%) !important;
+  padding: 16px 20px !important;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1) !important;
+  display: flex !important;
+  align-items: center !important;
+}
+
+.chat-header::before {
+  content: '';
+  display: inline-block;
+  width: 42px;
+  height: 42px;
+  min-width: 42px;
+  margin-right: 12px;
+  border-radius: 50%;
+  background-image: url('/bot-avatar.jpg');
+  background-size: cover;
+  background-position: center;
+  border: 2px solid #38bdf8;
+  box-shadow: 0 0 12px rgba(56, 189, 248, 0.6);
+}
