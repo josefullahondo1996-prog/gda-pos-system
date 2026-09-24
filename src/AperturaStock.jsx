@@ -15,7 +15,7 @@ const crearFilaVacia = (producto) => ({
     cantidad: 1,
     unidad: producto?.unidad || 'UNID',
     costoUnitarioConIva: producto?.precio_compra
-        ? Math.round(Number(producto.precio_compra) * (1 + (parseInt(producto.iva) || 10) / 100))
+        ? Number(producto.precio_compra)
         : '',
     expDate: '',
     nota: '',
@@ -58,14 +58,13 @@ const AperturaStock = ({ producto, onGuardado, onCancelar, ubicacionId: ubicacio
                 if (errorLectura) throw errorLectura;
 
                 const ivaPct = parseInt(prodActual.iva) || 10;
-                const costoSinIva = Number(fila.costoUnitarioConIva) / (1 + ivaPct / 100);
                 const nuevoStock = (Number(prodActual.stock_actual) || 0) + Number(fila.cantidad);
 
                 const { error: errorUpdate } = await supabase
                     .from('productos')
                     .update({
                         stock_actual: nuevoStock,
-                        precio_compra: costoSinIva || undefined,
+                        precio_compra: Number(fila.costoUnitarioConIva) || undefined,
                     })
                     .eq('id', fila.productoId)
                     .eq('empresa_id', empresaId);

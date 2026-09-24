@@ -1,0 +1,78 @@
+{
+  "name": "Alerta en Tiempo Real de Venta Registrada (GDA POS)",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "venta-registrada",
+        "options": {}
+      },
+      "id": "webhook-trigger",
+      "name": "Webhook Venta Registrada",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        260,
+        300
+      ],
+      "webhookId": "pos-venta-webhook"
+    },
+    {
+      "parameters": {
+        "jsCode": "const body = $json.body || $json;\n\nconst cliente = body.cliente || 'Cliente General';\nconst total = Number(body.total || 0).toLocaleString('es-CL');\nconst metodoPago = body.metodo_pago || 'No especificado';\nconst articulos = body.articulos || 1;\nconst usuario = body.usuario_nombre || 'Cajero';\n\nconst mensaje = `⚡ <b>¡NUEVA VENTA REGISTRADA!</b>\\n\\n` +\n`👤 <b>Cliente:</b> ${cliente}\\n` +\n`💵 <b>Total:</b> $${total}\\n` +\n`💳 <b>Medio de Pago:</b> ${metodoPago}\\n` +\n`📦 <b>Artículos:</b> ${articulos}\\n` +\n`🧑‍💼 <b>Atendido por:</b> ${usuario}\\n` +\n`🕒 <i>${new Date().toLocaleTimeString('es-ES')}</i>`;\n\nreturn [{ json: { mensaje } }];"
+      },
+      "id": "format-webhook-message",
+      "name": "Formatear Alerta",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        500,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $json.telegram_chat_id || 'TU_CHAT_ID' }}",
+        "text": "={{ $json.mensaje }}",
+        "additionalFields": {
+          "parse_mode": "HTML"
+        }
+      },
+      "id": "send-telegram-webhook",
+      "name": "Enviar a Telegram",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        740,
+        300
+      ]
+    }
+  ],
+  "connections": {
+    "Webhook Venta Registrada": {
+      "main": [
+        [
+          {
+            "node": "Formatear Alerta",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Formatear Alerta": {
+      "main": [
+        [
+          {
+            "node": "Enviar a Telegram",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  }
+}

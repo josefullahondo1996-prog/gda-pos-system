@@ -106,10 +106,11 @@ const AgregarProducto = ({ onGuardado, onCancelar, productoEditar, ubicacionId }
         const ivaGuardado = productoEditar.iva ? parseInt(productoEditar.iva.replace(/\D/g, '')) || 0 : 10;
         setIvaPct(ivaGuardado);
 
-        const compraSinIva = Number(productoEditar.precio_compra) || 0;
+        const compraConIva = Number(productoEditar.precio_compra) || 0;
+        const compraSinIva = precioSinIva(compraConIva, ivaGuardado);
         const ventaConIva = Number(productoEditar.precio_venta) || 0;
-        setPrecioCompraSinIva(compraSinIva || '');
-        setPrecioCompraConIva(compraSinIva ? precioConIva(compraSinIva, ivaGuardado).toFixed(0) : '');
+        setPrecioCompraSinIva(compraSinIva ? compraSinIva.toFixed(0) : '');
+        setPrecioCompraConIva(compraConIva || '');
         setPrecioVentaConIva(ventaConIva || '');
 
         if (compraSinIva > 0 && ventaConIva > 0) {
@@ -297,7 +298,7 @@ const AgregarProducto = ({ onGuardado, onCancelar, productoEditar, ubicacionId }
                 expira_cantidad: expiraCantidad ? Number(expiraCantidad) : null,
                 expira_unidad: expiraUnidad,
                 imagen_url: imagenPreview || null,
-                precio_compra: Number(precioCompraSinIva) || 0,
+                precio_compra: Number(precioCompraConIva) || 0,
                 precio_venta: Math.round(Number(precioVentaConIva)) || 0,
                 iva: `IVA ${ivaPct}%`,
                 tipo_impuesto: tipoImpuestoPrecio,

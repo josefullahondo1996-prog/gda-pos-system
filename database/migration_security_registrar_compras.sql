@@ -71,7 +71,8 @@ BEGIN
             RAISE EXCEPTION 'Ítem de compra inválido';
         END IF;
 
-        PERFORM 1 FROM productos
+        PERFORM 1
+        FROM productos
         WHERE id = v_producto_id AND empresa_id = v_empresa_id
         FOR UPDATE;
         IF NOT FOUND THEN
@@ -215,7 +216,8 @@ BEGIN
             RAISE EXCEPTION 'Ítem de compra inválido';
         END IF;
 
-        PERFORM 1 FROM productos
+        PERFORM 1
+        FROM productos
         WHERE id = v_producto_id AND empresa_id = v_empresa_id
         FOR UPDATE;
         IF NOT FOUND THEN
@@ -230,6 +232,10 @@ BEGIN
             v_item->>'nombre_producto', v_item->>'codigo_sku',
             v_cantidad, v_costo, v_cantidad * v_costo
         );
+
+        UPDATE productos
+        SET precio_compra = v_costo
+        WHERE id = v_producto_id AND empresa_id = v_empresa_id;
 
         v_ajustes := jsonb_set(
             v_ajustes,

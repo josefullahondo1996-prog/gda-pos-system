@@ -39,7 +39,8 @@ import Usuarios from './Usuarios';
 import Roles from './Roles';
 import ListaCajas from './Listacajas';
 import InformeCajaPago from './InformeCajaPago';
-import VentasPorProducto from './VentasPorProducto';
+import VentasPorProducto from './VentasPorProductoClonado';
+import ComprasPorProducto from './ComprasPorProductoDetalle';
 import CobroDeVentas from './CobroDeVentas';
 import GruposClientes from './GruposClientes';
 import Gastos from './Gastos';
@@ -74,7 +75,7 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
       agregar_gasto: 'gastos', categorias_gastos: 'gastos', todas_ventas: 'ventas_pos',
       pos: 'ventas_pos', cobros: 'ventas_pos', cajas: 'caja', informe_caja_pago: 'caja',
       caja_registradora: 'informes', ganancias_perdidas: 'informes',
-      ventas_por_producto: 'informes', cobro_de_ventas: 'informes', vendedores_comisiones: 'informes', usuarios: 'usuarios', roles: 'roles',
+      ventas_por_producto: 'informes', compras_por_producto: 'informes', cobro_de_ventas: 'informes', vendedores_comisiones: 'informes', usuarios: 'usuarios', roles: 'roles',
     };
     const categoria = categoriaPorVista[vista];
     return !categoria || tieneCategoria(categoria);
@@ -301,6 +302,10 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
       case '/ventas_por_producto':
         setVistaActiva('ventas_por_producto');
         break;
+      case '/compras-por-producto':
+      case '/compras_por_producto':
+        setVistaActiva('compras_por_producto');
+        break;
       case '/cobro-de-ventas':
       case '/cobro_de_ventas':
         setVistaActiva('cobro_de_ventas');
@@ -461,6 +466,9 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
 
       case 'ventas_por_producto':
         return <VentasPorProducto perfilUsuario={perfilUsuario} />;
+
+      case 'compras_por_producto':
+        return <ComprasPorProducto />;
 
       case 'cobro_de_ventas':
         return <CobroDeVentas perfilUsuario={perfilUsuario} />;
@@ -799,6 +807,7 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
                   <div className="bg-transparent py-1 flex flex-col border-l border-slate-200 ml-5">
                     <Link to="/ganancias_perdidas" onClick={() => irA('ganancias_perdidas', '/ganancias_perdidas')} className={estiloSubItem('ganancias_perdidas')}>🠖 {t('profitLoss')}</Link>
                     <Link to="/ventas-por-producto" onClick={() => irA('ventas_por_producto', '/ventas-por-producto')} className={estiloSubItem('ventas_por_producto')}>🠖 {t('salesByProduct')}</Link>
+                    <Link to="/compras-por-producto" onClick={() => irA('compras_por_producto', '/compras-por-producto')} className={estiloSubItem('comprasByProduct')}>🠖 {t('purchasesByProduct')}</Link>
                     <Link to="/cobro-de-ventas" onClick={() => irA('cobro_de_ventas', '/cobro-de-ventas')} className={estiloSubItem('cobro_de_ventas')}>🠖 {t('salesCollections')}</Link>
                     <Link to="/caja_registradora" onClick={() => irA('caja_registradora', '/caja_registradora')} className={estiloSubItem('caja_registradora')}>🠖 {t('cashRegister')}</Link>
                     <Link to="/vendedores-comisiones" onClick={() => irA('vendedores_comisiones', '/vendedores-comisiones')} className={estiloSubItem('vendedores_comisiones')}>🠖 {t('sellersCommissions')}</Link>

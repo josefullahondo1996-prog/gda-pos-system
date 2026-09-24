@@ -1,0 +1,167 @@
+{
+  "name": "Reporte Diario de Ventas, Gastos y Stock Bajo (GDA POS)",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 22 * * *"
+            }
+          ]
+        }
+      },
+      "id": "schedule-trigger",
+      "name": "Disparador Diario (22:00)",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        240,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT \n  COUNT(id) AS total_operaciones,\n  COALESCE(SUM(total), 0) AS total_vendido,\n  COALESCE(SUM(CASE WHEN LOWER(metodo_pago) LIKE '%efectivo%' THEN total ELSE 0 END), 0) AS total_efectivo,\n  COALESCE(SUM(CASE WHEN LOWER(metodo_pago) LIKE '%transferencia%' THEN total ELSE 0 END), 0) AS total_transferencia,\n  COALESCE(SUM(CASE WHEN LOWER(metodo_pago) LIKE '%tarjeta%' THEN total ELSE 0 END), 0) AS total_tarjeta,\n  COALESCE(SUM(CASE WHEN LOWER(metodo_pago) NOT LIKE '%efectivo%' AND LOWER(metodo_pago) NOT LIKE '%transferencia%' AND LOWER(metodo_pago) NOT LIKE '%tarjeta%' THEN total ELSE 0 END), 0) AS total_otros\nFROM ventas\nWHERE creado_en >= CURRENT_DATE AND creado_en < CURRENT_DATE + INTERVAL '1 day';"
+      },
+      "id": "query-ventas",
+      "name": "Consultar Ventas del Día",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        480,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT \n  COUNT(id) AS cantidad_gastos,\n  COALESCE(SUM(monto), 0) AS total_gastos\nFROM gastos\nWHERE creado_en >= CURRENT_DATE AND creado_en < CURRENT_DATE + INTERVAL '1 day';"
+      },
+      "id": "query-gastos",
+      "name": "Consultar Gastos del Día",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        480,
+        380
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT \n  codigo,\n  nombre,\n  stock_actual,\n  precio_venta\nFROM productos\nWHERE stock_actual <= 5\nORDER BY stock_actual ASC\nLIMIT 10;"
+      },
+      "id": "query-stock",
+      "name": "Consultar Stock Bajo",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        480,
+        560
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Extraer resultados de las 3 consultas\nconst ventas = $('Consultar Ventas del Día').first().json;\nconst gastos = $('Consultar Gastos del Día').first().json;\nconst stockItems = $('Consultar Stock Bajo').all().map(item => item.json);\n\nconst fechaHoy = new Date().toLocaleDateString('es-ES', {\n  weekday: 'long',\n  year: 'numeric',\n  month: 'long',\n  day: 'numeric'\n});\n\nconst formatearDinero = (monto) => {\n  return Number(monto || 0).toLocaleString('es-CL', { minimumFractionDigits: 0, maximumFractionDigits: 2 });\n};\n\nlet stockTexto = \"\";\nif (stockItems.length === 0 || !stockItems[0].nombre) {\n  stockTexto = \"✅ ¡Todo el inventario está en niveles óptimos!\\n\";\n} else {\n  stockTexto = stockItems.map(p => `• <b>${p.nombre}</b> (Cód: <code>${p.codigo || 'S/C'}</code>) ➡️ <b>${p.stock_actual}</b> un.`\n  ).join(\"\\n\") + \"\\n\";\n}\n\nconst totalVentas = Number(ventas.total_vendido || 0);\nconst totalGastos = Number(gastos.total_gastos || 0);\nconst balanceNeto = totalVentas - totalGastos;\n\nconst mensaje = `📊 <b>REPORTE DIARIO DE CIERRE - GDA POS</b>\\n` +\n`📅 <i>${fechaHoy}</i>\\n\\n` +\n`━━━━━━━━━━━━━━━━━━\\n` +\n`💰 <b>RESUMEN FINANCIERO</b>\\n` +\n`• <b>Total Ventas:</b> $${formatearDinero(totalVentas)} (${ventas.total_operaciones || 0} tickets)\\n` +\n`• <b>Total Gastos:</b> -$${formatearDinero(totalGastos)} (${gastos.cantidad_gastos || 0} registros)\\n` +\n`• <b>Balance Neto:</b> <b>$${formatearDinero(balanceNeto)}</b>\\n\\n` +\n`💳 <b>DESGLOSE DE MEDIOS DE PAGO</b>\\n` +\n`💵 Efectivo: $${formatearDinero(ventas.total_efectivo)}\\n` +\n`💳 Tarjetas: $${formatearDinero(ventas.total_tarjeta)}\\n` +\n`📲 Transferencias: $${formatearDinero(ventas.total_transferencia)}\\n` +\n(Number(ventas.total_otros) > 0 ? `🔄 Otros: $${formatearDinero(ventas.total_otros)}\\n` : '') +\n`\\n━━━━━━━━━━━━━━━━━━\\n` +\n`⚠️ <b>PRODUCTOS CON STOCK CRÍTICO (≤ 5 un.)</b>\\n` +\nstockTexto +\n`━━━━━━━━━━━━━━━━━━\\n` +\n`🤖 <i>Generado automáticamente por n8n & GDA POS</i>`;\n\nreturn [{ json: { mensaje, fecha: fechaHoy } }];"
+      },
+      "id": "format-message",
+      "name": "Formatear Mensaje HTML",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        740,
+        380
+      ]
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $json.telegram_chat_id || 'TU_CHAT_ID' }}",
+        "text": "={{ $json.mensaje }}",
+        "additionalFields": {
+          "parse_mode": "HTML"
+        }
+      },
+      "id": "send-telegram",
+      "name": "Enviar a Telegram",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        980,
+        380
+      ]
+    }
+  ],
+  "connections": {
+    "Disparador Diario (22:00)": {
+      "main": [
+        [
+          {
+            "node": "Consultar Ventas del Día",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Consultar Gastos del Día",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Consultar Stock Bajo",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Consultar Ventas del Día": {
+      "main": [
+        [
+          {
+            "node": "Formatear Mensaje HTML",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Consultar Gastos del Día": {
+      "main": [
+        [
+          {
+            "node": "Formatear Mensaje HTML",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Consultar Stock Bajo": {
+      "main": [
+        [
+          {
+            "node": "Formatear Mensaje HTML",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Formatear Mensaje HTML": {
+      "main": [
+        [
+          {
+            "node": "Enviar a Telegram",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  }
+}

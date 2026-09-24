@@ -204,8 +204,13 @@ export default function GestorCompras({ vistaInicial = 'lista' }) {
 
   const cargarCatalogo = async () => {
     if (!empresaId) return;
-    const { data } = await supabase.from('productos').select('*').eq('empresa_id', empresaId).order('nombre');
-    if (data) setProductos(data);
+    const { data, error } = await supabase.from('productos').select('*').eq('empresa_id', empresaId).order('nombre');
+    if (error) {
+      console.error('Error al cargar productos para compras:', error);
+      notificar.error(`No se pudieron cargar los productos: ${error.message}`);
+      return;
+    }
+    setProductos(data || []);
   };
 
   const cargarTodasLasCompras = async () => {
@@ -224,14 +229,14 @@ export default function GestorCompras({ vistaInicial = 'lista' }) {
     setBusquedaProd(texto);
     if (texto.trim() === '') return setFiltrados([]);
     const query = texto.toLowerCase();
-    setFiltrados(productos.filter(p => p.nombre.toLowerCase().includes(query) || (p.codigo && p.codigo.toLowerCase().includes(query))).slice(0, 5));
+    setFiltrados(productos.filter(p => String(p.nombre || '').toLowerCase().includes(query) || String(p.codigo || '').toLowerCase().includes(query)).slice(0, 5));
   };
 
   const seleccionarProducto = (producto) => {
     if (itemsCompra.find(item => item.id === producto.id)) { notificar.info('Producto ya agregado.'); return; }
     const ivaPct = parseIvaPct(producto.iva);
-    const costoFactura = producto.precio_compra ? precioConIva(Number(producto.precio_compra), ivaPct) : 0;
-    setItemsCompra([...itemsCompra, { 
+    const costoFactura = Number(producto.precio_compra) || 0;
+    setItemsCompra((itemsActuales) => [...itemsActuales, { 
       id: producto.id, 
       nombre: producto.nombre, 
       codigo: producto.codigo || 'S/N', 
@@ -469,9 +474,24 @@ export default function GestorCompras({ vistaInicial = 'lista' }) {
 
     setGuardandoProducto(true);
     try {
+      const codigoNuevo = skuProdNuevo.trim() || null;
+      if (codigoNuevo) {
+        const { data: productoExistente, error: errorCodigo } = await supabase
+          .from('productos')
+          .select('id, nombre, codigo')
+          .eq('empresa_id', empresaId)
+          .eq('codigo', codigoNuevo)
+          .maybeSingle();
+        if (errorCodigo) throw errorCodigo;
+        if (productoExistente) {
+          notificar.info(`El código/SKU ${codigoNuevo} ya pertenece a "${productoExistente.nombre}". Buscalo en el selector de productos para agregarlo a la compra.`);
+          return;
+        }
+      }
+
       const nuevoProducto = {
         nombre: nombreProdNuevo.trim(),
-        codigo: skuProdNuevo || null,
+        codigo: codigoNuevo,
         unidad: unidadProdNuevo,
         marca: marcaProdNuevo || null,
         categoria: categoriaProdNuevo || null,
@@ -481,7 +501,7 @@ export default function GestorCompras({ vistaInicial = 'lista' }) {
         peso: pesoProdNuevo ? Number(pesoProdNuevo) : null,
         administra_stock: administraStockProdNuevo,
         alerta_stock_bajo: cantidadAlertaProdNuevo ? Number(cantidadAlertaProdNuevo) : 5,
-        precio_compra: Number(precioCompraSinIvaProdNuevo) || 0,
+        precio_compra: Number(precioCompraConIvaProdNuevo) || 0,
         precio_venta: Math.round(Number(precioVentaConIvaProdNuevo)) || 0,
         stock_actual: 0,
         iva: `IVA ${ivaPctProdNuevo}%`,
@@ -516,7 +536,11 @@ export default function GestorCompras({ vistaInicial = 'lista' }) {
       limpiarFormProductoNuevo();
       setMostrarModalProducto(false);
     } catch (error) {
-      notificar.error('Error al guardar el producto: ' + error.message);
+      if (error.code === '23505' || error.status === 409) {
+        notificar.error('No se puede guardar: ya existe un producto con ese código/SKU o con un dato único repetido.');
+      } else {
+        notificar.error('Error al guardar el producto: ' + error.message);
+      }
     } finally {
       setGuardandoProducto(false);
     }

@@ -1,5 +1,6 @@
 import React from 'react';
 import { useNombreEmpresa } from './useEmpresa';
+import { precioSinIva } from './preciosIva';
 
 const formatGs = (v) => `${Number(v || 0).toLocaleString('es-PY')} Gs`;
 
@@ -8,8 +9,8 @@ const DetalleProducto = ({ producto, onClose }) => {
     const nombreEmpresa = useNombreEmpresa();
 
     const ivaPct = producto.iva ? parseInt(producto.iva.replace(/\D/g, '')) || 0 : 0;
-    const precioCompraSinIva = Number(producto.precio_compra) || 0;
-    const precioCompraConIva = precioCompraSinIva * (1 + ivaPct / 100);
+    const precioCompraConIva = Number(producto.precio_compra) || 0;
+    const precioCompraSinIva = precioSinIva(precioCompraConIva, ivaPct);
     const precioVentaConIva = Number(producto.precio_venta) || 0;
     const precioVentaSinIva = ivaPct ? precioVentaConIva / (1 + ivaPct / 100) : precioVentaConIva;
     const margen = precioCompraSinIva > 0 ? ((precioVentaSinIva - precioCompraSinIva) / precioCompraSinIva) * 100 : 0;

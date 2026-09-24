@@ -89,7 +89,7 @@ const AgregarCompra = () => {
             nombre: producto.nombre,
             codigo: producto.codigo || 'S/N',
             cantidad: 1,
-            iva: 'IVA 10%',
+            iva: producto.iva || 'IVA 10%',
             costo: producto.precio_compra || 0,
             subtotal: producto.precio_compra || 0,
             margen: 25,
