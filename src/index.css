@@ -445,6 +445,67 @@ button[class*="chat-window-toggle"][aria-expanded="true"] svg,
   border-color: #e2e8f0;
 }
 
+/* Fondo de acceso: una atmósfera de punto de venta sin competir con el formulario. */
+.login-page {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  background:
+    linear-gradient(115deg, rgba(8, 18, 42, 0.92), rgba(21, 48, 96, 0.78)),
+    url('/login-store.jpg') center / cover no-repeat;
+}
+
+.login-page::before,
+.login-page::after {
+  content: '';
+  position: absolute;
+  z-index: -1;
+  pointer-events: none;
+}
+
+.login-page::before {
+  inset: 0;
+  opacity: 0.22;
+  background-image:
+    linear-gradient(rgba(255, 255, 255, 0.12) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.12) 1px, transparent 1px);
+  background-size: 42px 42px;
+  mask-image: linear-gradient(135deg, black, transparent 72%);
+}
+
+.login-page::after {
+  width: 520px;
+  height: 520px;
+  right: -170px;
+  top: -180px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 42% 58% 65% 35%;
+  transform: rotate(24deg);
+  box-shadow: 0 0 0 34px rgba(255, 255, 255, 0.035), 0 0 0 68px rgba(255, 255, 255, 0.025);
+}
+
+.login-language {
+  position: relative;
+  z-index: 1;
+}
+
+.login-card {
+  position: relative;
+  z-index: 1;
+  border-color: rgba(255, 255, 255, 0.7);
+  box-shadow: 0 28px 80px rgba(2, 6, 23, 0.34), 0 0 0 1px rgba(255, 255, 255, 0.16);
+}
+
+@media (max-width: 640px) {
+  .login-page {
+    padding: 16px;
+  }
+
+  .login-card {
+    padding: 24px;
+  }
+}
+
 @media (max-width: 640px) {
   .pos-client-modal-backdrop {
     align-items: flex-end;

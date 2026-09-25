@@ -37,9 +37,9 @@ const Login = ({ setSession, onCrearNegocio, errorExterno }) => {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 flex flex-col justify-center items-center p-4">
-      <div className="w-full max-w-md flex justify-end mb-3"><LanguageSelector /></div>
-      <div className="bg-white p-8 rounded-2xl shadow-lg w-full max-w-md text-center border border-gray-100">
+    <div className="login-page min-h-screen flex flex-col justify-center items-center p-4">
+      <div className="login-language w-full max-w-md flex justify-end mb-3"><LanguageSelector /></div>
+      <div className="login-card bg-white p-8 rounded-2xl shadow-lg w-full max-w-md text-center border border-gray-100">
         
         <div className="flex justify-center items-center mb-6">
           <LogoPyPos size={52} />
