@@ -301,10 +301,10 @@ const NuevoClientePOS = ({ onGuardado, onCerrar }) => {
     };
 
     return (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-[99999] p-4">
-            <div className="bg-white w-full max-w-3xl rounded-2xl shadow-[0_20px_60px_rgba(0,0,0,0.25)] overflow-hidden flex flex-col max-h-[92vh]">
+        <div className="pos-client-modal-backdrop fixed inset-0 flex items-center justify-center z-[99999] p-4">
+            <div className="pos-client-modal-shell bg-white w-full max-w-3xl overflow-hidden flex flex-col max-h-[92vh]">
 
-                <div className="px-6 py-5 bg-gradient-to-r from-[#1f2937] via-[#1d2434] to-[#111827] text-white flex justify-between items-center">
+                <div className="pos-client-modal-header px-6 py-5 text-white flex justify-between items-center">
                     <h3 className="text-xl font-bold flex items-center gap-3">
                         <span className="text-2xl">👤</span>
                         <span>Nuevo cliente</span>
@@ -312,7 +312,7 @@ const NuevoClientePOS = ({ onGuardado, onCerrar }) => {
                     <button onClick={onCerrar} className="text-white/70 hover:text-white hover:bg-white/10 w-9 h-9 rounded-full text-2xl font-bold leading-none transition-colors flex items-center justify-center">×</button>
                 </div>
 
-                <div className="p-6 overflow-y-auto bg-gradient-to-b from-[#f8fafc] via-[#f5f7fa] to-[#f1f3f7] flex-1 text-xs">
+                <div className="pos-client-modal-content p-6 overflow-y-auto flex-1 text-xs">
                     <form id="form-cliente-pos" onSubmit={guardarCliente}>
 
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-5 items-end">
@@ -486,7 +486,7 @@ const NuevoClientePOS = ({ onGuardado, onCerrar }) => {
                     </form>
                 </div>
 
-                <div className="px-6 py-4 border-t bg-gradient-to-r from-slate-50 via-slate-100 to-slate-50 flex justify-end gap-3">
+                <div className="pos-client-modal-footer px-6 py-4 border-t flex justify-end gap-3">
                     <button type="button" onClick={onCerrar} className="border border-slate-300 text-slate-700 px-6 py-2.5 rounded-xl font-bold hover:bg-slate-100 transition-all shadow-sm">Cerrar</button>
                     <button type="submit" form="form-cliente-pos" disabled={guardando} className="bg-gradient-to-r from-[#f59e0b] to-[#f97316] hover:from-[#ea8c13] hover:to-[#f07c00] text-white px-8 py-2.5 rounded-xl font-bold shadow-md hover:shadow-lg transition-all disabled:opacity-60">
                         {guardando ? 'Guardando...' : '💾 Guardar'}

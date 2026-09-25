@@ -1540,14 +1540,14 @@ export default function GestorCompras({ vistaInicial = 'lista' }) {
       {/* MODAL SOBREPUESTO: REGISTRAR NUEVO PROVEEDOR EN VIVO                    */}
       {/* ======================================================================= */}
       {mostrarModalProveedor && (
-        <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-[99999] p-4">
-          <div className="bg-white w-full max-w-5xl rounded-lg shadow-2xl overflow-hidden flex flex-col max-h-[95vh]">
-            <div className="px-6 py-4 border-b flex justify-between items-center text-gray-800">
-              <h3 className="text-lg font-bold flex items-center gap-2"><span className="text-[#004284]"></span> NUEVO PROVEEDOR</h3>
-              <button onClick={() => setMostrarModalProveedor(false)} className="text-gray-400 hover:text-gray-600 text-2xl font-bold">×</button>
+        <div className="provider-modal-backdrop fixed inset-0 flex items-center justify-center z-[99999] p-4">
+          <div className="provider-modal-shell bg-white w-full max-w-5xl rounded-lg overflow-hidden flex flex-col max-h-[95vh]">
+            <div className="provider-modal-header px-6 py-4 border-b flex justify-between items-center text-gray-800">
+              <h3 className="text-lg font-bold flex items-center gap-2"><span className="provider-modal-icon">+</span> NUEVO PROVEEDOR</h3>
+              <button onClick={() => setMostrarModalProveedor(false)} aria-label="Cerrar" className="provider-modal-close text-gray-400 hover:text-gray-600 text-2xl font-bold">×</button>
             </div>
             
-            <div className="p-6 overflow-y-auto bg-gray-50 flex-1 text-xs">
+            <div className="provider-modal-content p-6 overflow-y-auto bg-gray-50 flex-1 text-xs">
               <form id="form-prov-rapido" onSubmit={handleGuardarProveedorRapido}>
                 
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6 items-end">
@@ -1663,7 +1663,7 @@ export default function GestorCompras({ vistaInicial = 'lista' }) {
               </form>
             </div>
 
-            <div className="px-6 py-4 border-t bg-gray-50 flex justify-end gap-3">
+            <div className="provider-modal-footer px-6 py-4 border-t bg-gray-50 flex justify-end gap-3">
               <button type="button" onClick={() => setMostrarModalProveedor(false)} className="bg-white border px-5 py-2 rounded font-bold">Cerrar</button>
               <button type="submit" form="form-prov-rapido" className="bg-[#fd7e14] text-white px-6 py-2 rounded font-bold hover:bg-[#e86e04]">✔ Guardar</button>
             </div>

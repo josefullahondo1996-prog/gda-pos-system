@@ -1,7 +1,14 @@
 @import "tailwindcss";
 
 :root {
-  font-family: Inter, system-ui, sans-serif;
+  font-family: Aptos, "Segoe UI Variable", "Segoe UI", system-ui, sans-serif;
+  color: #172033;
+  background: #f8fafc;
+  --ui-text: #172033;
+  --ui-muted: #64748b;
+  --ui-border: #d9e2ec;
+  --ui-focus: #2563eb;
+  --ui-surface: #ffffff;
 }
 
 /* Estilo para que parezca app nativa */
@@ -37,6 +44,26 @@ body {
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  outline: 2px solid var(--ui-focus);
+  outline-offset: 2px;
+}
+
+::selection {
+  color: #ffffff;
+  background: #2563eb;
 }
 
 /* El texto no debe duplicarse ni aplicar sombras/outline artificiales globales. */
@@ -284,4 +311,155 @@ button[class*="chat-window-toggle"][aria-expanded="true"] svg,
   background-position: center;
   border: 2px solid #38bdf8;
   box-shadow: 0 0 12px rgba(56, 189, 248, 0.6);
-}
+}
+
+/* Modal de alta rápida de proveedores: comparte el lenguaje visual del registro de clientes. */
+.provider-modal-backdrop {
+  background: rgba(15, 23, 42, 0.48);
+  backdrop-filter: blur(4px);
+}
+
+.provider-modal-shell {
+  border: 1px solid rgba(226, 232, 240, 0.9);
+  border-radius: 18px;
+  box-shadow: 0 24px 70px rgba(15, 23, 42, 0.28), 0 0 0 1px rgba(255, 255, 255, 0.4);
+}
+
+.provider-modal-header {
+  color: #ffffff;
+  background: linear-gradient(115deg, #1f2937, #172033 62%, #0f172a);
+  border-color: rgba(255, 255, 255, 0.1);
+}
+
+.provider-modal-icon {
+  width: 30px;
+  height: 30px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  border-radius: 9px;
+  color: #fbbf24;
+  font-size: 22px;
+  line-height: 1;
+}
+
+.provider-modal-close {
+  width: 36px;
+  height: 36px;
+  border-radius: 999px;
+  color: rgba(255, 255, 255, 0.68);
+}
+
+.provider-modal-close:hover {
+  color: #ffffff;
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.provider-modal-content {
+  background: linear-gradient(180deg, #f8fafc 0%, #f1f5f9 100%);
+}
+
+.provider-modal-content .bg-white.border.rounded-lg {
+  border-color: #dbe4ee;
+  border-radius: 14px;
+  box-shadow: 0 2px 10px rgba(15, 23, 42, 0.05);
+}
+
+.provider-modal-content .bg-white.border.rounded-lg > .p-3 {
+  padding: 14px 16px;
+  background: linear-gradient(90deg, #eff6ff, #f8fafc);
+  border-color: #dbeafe;
+}
+
+.provider-modal-content input,
+.provider-modal-content select {
+  border-color: #cbd5e1;
+  border-radius: 10px;
+  min-height: 42px;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease, background-color 0.15s ease;
+}
+
+.provider-modal-content input:focus,
+.provider-modal-content select:focus {
+  border-color: #f59e0b;
+  box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.16);
+}
+
+.provider-modal-footer {
+  background: rgba(248, 250, 252, 0.96);
+  border-color: #e2e8f0;
+}
+
+@media (max-width: 640px) {
+  .provider-modal-backdrop {
+    align-items: flex-end;
+    padding: 0;
+  }
+
+  .provider-modal-shell {
+    max-height: 96vh;
+    border-radius: 18px 18px 0 0;
+  }
+
+  .provider-modal-header,
+  .provider-modal-footer,
+  .provider-modal-content {
+    padding-left: 16px;
+    padding-right: 16px;
+  }
+}
+
+/* El registro de clientes del POS usa la misma paleta que el alta de proveedores. */
+.pos-client-modal-backdrop {
+  background: rgba(15, 23, 42, 0.48);
+  backdrop-filter: blur(4px);
+}
+
+.pos-client-modal-shell {
+  border: 1px solid rgba(226, 232, 240, 0.9);
+  border-radius: 18px;
+  box-shadow: 0 24px 70px rgba(15, 23, 42, 0.28), 0 0 0 1px rgba(255, 255, 255, 0.4);
+}
+
+.pos-client-modal-header {
+  background: linear-gradient(115deg, #1f2937, #172033 62%, #0f172a);
+}
+
+.pos-client-modal-content {
+  background: linear-gradient(180deg, #f8fafc 0%, #f1f5f9 100%);
+}
+
+.pos-client-modal-content .bg-white.border-slate-200 {
+  border-color: #dbe4ee;
+  box-shadow: 0 2px 10px rgba(15, 23, 42, 0.05);
+}
+
+.pos-client-modal-content input,
+.pos-client-modal-content select {
+  min-height: 42px;
+}
+
+.pos-client-modal-footer {
+  background: rgba(248, 250, 252, 0.96);
+  border-color: #e2e8f0;
+}
+
+@media (max-width: 640px) {
+  .pos-client-modal-backdrop {
+    align-items: flex-end;
+    padding: 0;
+  }
+
+  .pos-client-modal-shell {
+    max-height: 96vh;
+    border-radius: 18px 18px 0 0;
+  }
+
+  .pos-client-modal-header,
+  .pos-client-modal-footer,
+  .pos-client-modal-content {
+    padding-left: 16px;
+    padding-right: 16px;
+  }
+}
