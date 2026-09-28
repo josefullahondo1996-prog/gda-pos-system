@@ -282,6 +282,13 @@ const AgregarProducto = ({ onGuardado, onCancelar, productoEditar, ubicacionId }
         if (!nombre.trim()) return alert('El nombre del producto es obligatorio.');
         if (!unidad) return alert('Seleccioná la unidad.');
 
+        if (!productoEditar && empresaId) {
+            const { data: limites } = await supabase.rpc('consultar_limites_empresa', { p_empresa_id: empresaId });
+            if (limites?.productos >= limites?.limite_productos) {
+                alert(`Aviso: tu plan ${limites.plan || ''} alcanzó el límite de ${limites.limite_productos} productos. Podés continuar, pero conviene actualizar el plan.`);
+            }
+        }
+
         setGuardando(true);
         try {
             const datosProducto = {

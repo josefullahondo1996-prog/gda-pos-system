@@ -26,19 +26,38 @@ function App() {
     try {
       const { data, error } = await supabase
         .from('usuarios')
-        .select('*, roles(nombre, permisos), empresas(id, nombre, ruc, direccion, telefono, logo_url)')
+        .select('*, roles(nombre, permisos), empresas(id, nombre, ruc, direccion, telefono, logo_url, estado)')
         .eq('auth_user_id', session.user.id)
         .maybeSingle();
 
       if (error) throw error;
 
       if (!data || !data.empresas) {
+        const { data: esDesarrollador } = await supabase.rpc('admin_es_desarrollador');
+        if (esDesarrollador === true) {
+          setErrorAcceso('');
+          setPerfilUsuario({
+            es_desarrollador: true,
+            roles: { nombre: 'Desarrollador', permisos: null },
+            empresas: { nombre: 'Administración del sistema' },
+          });
+          return;
+        }
+
         // La cuenta de Auth existe, pero ya no tiene una ficha de usuario o empresa activa
         // (por ejemplo, si se borró la empresa directamente desde Supabase). No la dejamos entrar.
         setPerfilUsuario(null);
         setSession(null);
         supabase.auth.signOut();
         setErrorAcceso('Esta cuenta no está asociada a ningún negocio activo. Si tu negocio ya no existe, podés crear uno nuevo.');
+        return;
+      }
+
+      if (data.empresas.estado === 'suspendida') {
+        setPerfilUsuario(null);
+        setSession(null);
+        await supabase.auth.signOut();
+        setErrorAcceso('Este negocio está suspendido. Contactá al soporte del sistema.');
         return;
       }
 

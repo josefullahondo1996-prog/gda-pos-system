@@ -16,7 +16,7 @@ Deno.serve(async (req) => {
     const { user, error: authError } = await getAuthenticatedUser(req);
     if (!user) return unauthorized(authError || 'No autorizado.', corsHeaders);
 
-    const { auth_user_id, usuario_id, empresa_id } = await req.json();
+    const { usuario_id, empresa_id } = await req.json();
 
     if (!usuario_id || !empresa_id) {
       return new Response(JSON.stringify({ error: 'Falta usuario_id o empresa_id.' }), {
@@ -41,13 +41,33 @@ Deno.serve(async (req) => {
       return unauthorized('No tenés permisos para eliminar usuarios.', corsHeaders);
     }
 
-    // 1) Borramos la ficha de la tabla "usuarios", limitado siempre a su propia
-    // empresa: aunque esto corre con la clave de servicio (que salta RLS),
-    // este WHERE explícito evita que una empresa pueda borrar la ficha de otra.
+    // Leer la ficha dentro de la empresa autorizada y usar su auth_user_id real.
+    // No confiar en un auth_user_id enviado por el cliente: podría apuntar a otra cuenta.
+    const { data: fichaObjetivo, error: errorLectura } = await supabaseAdmin
+      .from('usuarios')
+      .select('id, auth_user_id')
+      .eq('id', usuario_id)
+      .eq('empresa_id', empresa_id)
+      .maybeSingle();
+    if (errorLectura) throw errorLectura;
+    if (!fichaObjetivo) {
+      return new Response(JSON.stringify({ error: 'No se encontró ese usuario en tu empresa (o ya estaba borrado).' }), {
+        status: 404,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    // Si la ficha tenía acceso al sistema, borrar solo la cuenta enlazada en la base.
+    if (fichaObjetivo.auth_user_id) {
+      const { error: errorAuth } = await supabaseAdmin.auth.admin.deleteUser(fichaObjetivo.auth_user_id);
+      if (errorAuth && errorAuth.status !== 404) throw errorAuth;
+    }
+
+    // Borrar la ficha dentro de la misma empresa, aunque la clave de servicio salte RLS.
     const { error: errorFicha, data: filaBorrada } = await supabaseAdmin
       .from('usuarios')
       .delete()
-      .eq('id', usuario_id)
+      .eq('id', fichaObjetivo.id)
       .eq('empresa_id', empresa_id)
       .select();
     if (errorFicha) throw errorFicha;
@@ -56,14 +76,6 @@ Deno.serve(async (req) => {
         status: 404,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
-    }
-
-    // 2) Si además tenía acceso al sistema (login), borramos también su cuenta de Auth
-    if (auth_user_id) {
-      const { error: errorAuth } = await supabaseAdmin.auth.admin.deleteUser(auth_user_id);
-      // Si la cuenta de Auth ya no existía, no lo tratamos como un error fatal:
-      // la ficha ya se borró, que es lo que más le importa al usuario.
-      if (errorAuth && errorAuth.status !== 404) throw errorAuth;
     }
 
     return new Response(JSON.stringify({ success: true }), {

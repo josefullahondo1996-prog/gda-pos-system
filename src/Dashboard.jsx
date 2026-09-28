@@ -1,52 +1,55 @@
-import { useEffect, useState } from 'react';
+import { lazy, Suspense, useEffect, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { supabase } from './supabaseClient';
 import {
   LayoutDashboard, Users, Contact, Package, Factory, Wrench,
   ArrowDownToLine, ArrowUpFromLine, BarChart3, ShoppingCart, LogOut, Settings,
   MapPin, FileText, Barcode, Printer, Percent, ClipboardList, CreditCard,
-  Menu, X, DollarSign, BookOpen, Truck, ShoppingBag, Clock3, Building2, CircleHelp, CalendarDays
+  Menu, X, DollarSign, BookOpen, Truck, ShoppingBag, Clock3, Building2, CircleHelp, CalendarDays, ShieldCheck
 } from 'lucide-react';
-import ConfiguracionEmpresa from './ConfiguracionEmpresa';
-import ConfiguracionFacturaElectronica from './ConfiguracionFacturaElectronica';
-import OT from './OT';
-import UbicacionesComerciales from './UbicacionesComerciales';
-import ListaVentas from './ListaVentas';
 import { LanguageSelector, useLanguage } from './LanguageContext';
 
-// 1. IMPORTACIÓN DE TODOS LOS MÓDULOS DEL ERP
-import Inicio from './Inicio';
-import GraficosDashboard from './GraficosDashboard';
-import PuntoDeVenta from './PuntoDeVenta';
-import ListaProductos from './ListaProductos';
-import HistorialExistencias from './HistorialExistencias';
-import Catalogo from './Catalogo';
-import AgregarProducto from './AgregarProducto';
-import Marcas from './Marcas';
-import Categorias from './Categorias';
-import Unidades from './Unidades';
-import GestorCompras from './GestorCompras';
-import CuentasPorCobrar from './CuentasPorCobrar';
-import Clientes from './Clientes';
-import AbrirCaja from './AbrirCaja';
-import AgregarCompra from './AgregarCompra';
-import Proveedores from './Proveedores';
-import NuevoGasto from './NuevoGasto';
-import ReporteCierreCaja from './ReporteCierreCaja';
-import CajaRegistradora from './CajaRegistradora';
-import GananciasPerdidas from './GananciasPerdidas';
-import Usuarios from './Usuarios';
-import Roles from './Roles';
-import ListaCajas from './Listacajas';
-import InformeCajaPago from './InformeCajaPago';
-import VentasPorProducto from './VentasPorProductoClonado';
-import ComprasPorProducto from './ComprasPorProductoDetalle';
-import CobroDeVentas from './CobroDeVentas';
-import GruposClientes from './GruposClientes';
-import Gastos from './Gastos';
-import CategoriasGastos from './CategoriasGastos';
-import VendedoresComisiones from './VendedoresComisiones';
 import { useUbicacionUsuario } from './utils/useUbicacion';
+
+// Las vistas del ERP se descargan al abrirlas para reducir el paquete inicial.
+const ConfiguracionEmpresa = lazy(() => import('./ConfiguracionEmpresa'));
+const ConfiguracionFacturaElectronica = lazy(() => import('./ConfiguracionFacturaElectronica'));
+const OT = lazy(() => import('./OT'));
+const UbicacionesComerciales = lazy(() => import('./UbicacionesComerciales'));
+const ListaVentas = lazy(() => import('./ListaVentas'));
+const Inicio = lazy(() => import('./Inicio'));
+const GraficosDashboard = lazy(() => import('./GraficosDashboard'));
+const PuntoDeVenta = lazy(() => import('./PuntoDeVenta'));
+const ListaProductos = lazy(() => import('./ListaProductos'));
+const HistorialExistencias = lazy(() => import('./HistorialExistencias'));
+const Catalogo = lazy(() => import('./Catalogo'));
+const AgregarProducto = lazy(() => import('./AgregarProducto'));
+const Marcas = lazy(() => import('./Marcas'));
+const Categorias = lazy(() => import('./Categorias'));
+const Unidades = lazy(() => import('./Unidades'));
+const GestorCompras = lazy(() => import('./GestorCompras'));
+const CuentasPorCobrar = lazy(() => import('./CuentasPorCobrar'));
+const Clientes = lazy(() => import('./Clientes'));
+const AbrirCaja = lazy(() => import('./AbrirCaja'));
+const AgregarCompra = lazy(() => import('./AgregarCompra'));
+const Proveedores = lazy(() => import('./Proveedores'));
+const NuevoGasto = lazy(() => import('./NuevoGasto'));
+const ReporteCierreCaja = lazy(() => import('./ReporteCierreCaja'));
+const CajaRegistradora = lazy(() => import('./CajaRegistradora'));
+const GananciasPerdidas = lazy(() => import('./GananciasPerdidas'));
+const Usuarios = lazy(() => import('./Usuarios'));
+const Roles = lazy(() => import('./Roles'));
+const ListaCajas = lazy(() => import('./Listacajas'));
+const InformeCajaPago = lazy(() => import('./InformeCajaPago'));
+const VentasPorProducto = lazy(() => import('./VentasPorProductoClonado'));
+const ComprasPorProducto = lazy(() => import('./ComprasPorProductoDetalle'));
+const CobroDeVentas = lazy(() => import('./CobroDeVentas'));
+const GruposClientes = lazy(() => import('./GruposClientes'));
+const Gastos = lazy(() => import('./Gastos'));
+const CategoriasGastos = lazy(() => import('./CategoriasGastos'));
+const VendedoresComisiones = lazy(() => import('./VendedoresComisiones'));
+const PanelDesarrollador = lazy(() => import('./PanelDesarrollador'));
+const VentasPorPersonal = lazy(() => import('./VentasPorPersonal'));
 
 export default function Dashboard({ session, perfilUsuario, initialView = 'inicio' }) {
   const { t, locale } = useLanguage();
@@ -54,6 +57,7 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
   const { id: ubicacionUsuarioId, ve_todas: usuarioVeTodas } = useUbicacionUsuario();
   const nombreRol = (perfilUsuario?.roles?.nombre || '').toLowerCase();
   const esAdmin = nombreRol.includes('admin');
+  const esDesarrollador = perfilUsuario?.es_desarrollador === true || nombreRol.includes('desarrollador') || nombreRol.includes('developer');
   const permisosRol = perfilUsuario?.roles?.permisos || null;
 
   const tieneCategoria = (categoriaKey) => {
@@ -66,7 +70,7 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
   const puedeVerVista = (vista) => {
     if (esAdmin || !permisosRol) return true;
     const categoriaPorVista = {
-      ot: 'ot', config_empresa: 'configuraciones', config_factura: 'configuraciones',
+      ot: 'ot', config_empresa: 'configuraciones', config_factura: 'configuraciones', admin_desarrollador: 'configuraciones',
       ubicaciones_comerciales: 'ubicaciones', clientes: 'clientes_proveedores',
       proveedores: 'clientes_proveedores', grupos_clientes: 'clientes_proveedores',
       catalogo: 'productos', stock_history: 'productos', agregar_producto: 'productos', marcas: 'productos',
@@ -75,7 +79,7 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
       agregar_gasto: 'gastos', categorias_gastos: 'gastos', todas_ventas: 'ventas_pos',
       pos: 'ventas_pos', cobros: 'ventas_pos', cajas: 'caja', informe_caja_pago: 'caja',
       caja_registradora: 'informes', ganancias_perdidas: 'informes',
-      ventas_por_producto: 'informes', compras_por_producto: 'informes', cobro_de_ventas: 'informes', vendedores_comisiones: 'informes', usuarios: 'usuarios', roles: 'roles',
+      ventas_por_producto: 'informes', compras_por_producto: 'informes', cobro_de_ventas: 'informes', vendedores_comisiones: 'informes', ventas_por_personal: 'informes', usuarios: 'usuarios', roles: 'roles',
     };
     const categoria = categoriaPorVista[vista];
     return !categoria || tieneCategoria(categoria);
@@ -197,6 +201,11 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
       return;
     }
 
+    if (esDesarrollador && (path === '/' || path === '')) {
+      setVistaActiva('admin_desarrollador');
+      return;
+    }
+
     if (path.startsWith('/stock-history/')) {
       setVistaActiva('stock_history');
       return;
@@ -216,6 +225,9 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
       case '/config_factura':
       case '/facturacion_electronica':
         setVistaActiva('config_factura');
+        break;
+      case '/admin-desarrollador':
+        setVistaActiva('admin_desarrollador');
         break;
       case '/ubicaciones':
       case '/ubicaciones_comerciales':
@@ -318,11 +330,15 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
       case '/vendedores_comisiones':
         setVistaActiva('vendedores_comisiones');
         break;
+      case '/ventas-por-personal':
+      case '/ventas_por_personal':
+        setVistaActiva('ventas_por_personal');
+        break;
       default:
         setVistaActiva(initialView);
         break;
     }
-  }, [location.pathname, initialView, soloPOS]);
+  }, [location.pathname, initialView, soloPOS, esDesarrollador]);
 
   // 2. ENRUTADOR DE VISTAS (Aquí se decide qué se dibuja a la derecha)
   const renderizarVista = () => {
@@ -348,6 +364,9 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
 
       case 'config_factura':
         return <ConfiguracionFacturaElectronica />;
+
+      case 'admin_desarrollador':
+        return <PanelDesarrollador />;
 
       case 'ubicaciones_comerciales':
         return <UbicacionesComerciales />;
@@ -475,6 +494,9 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
 
       case 'vendedores_comisiones':
         return <VendedoresComisiones />;
+
+      case 'ventas_por_personal':
+        return <VentasPorPersonal />;
 
       default:
         return <GraficosDashboard />;
@@ -811,6 +833,7 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
                     <Link to="/cobro-de-ventas" onClick={() => irA('cobro_de_ventas', '/cobro-de-ventas')} className={estiloSubItem('cobro_de_ventas')}>🠖 {t('salesCollections')}</Link>
                     <Link to="/caja_registradora" onClick={() => irA('caja_registradora', '/caja_registradora')} className={estiloSubItem('caja_registradora')}>🠖 {t('cashRegister')}</Link>
                     <Link to="/vendedores-comisiones" onClick={() => irA('vendedores_comisiones', '/vendedores-comisiones')} className={estiloSubItem('vendedores_comisiones')}>🠖 {t('sellersCommissions')}</Link>
+                    <Link to="/ventas-por-personal" onClick={() => irA('ventas_por_personal', '/ventas-por-personal')} className={estiloSubItem('ventas_por_personal')}>🠖 Ventas por personal</Link>
                   </div>
                 )}
               </>
@@ -835,6 +858,12 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
                   </div>
                 )}
               </>
+            )}
+
+            {esDesarrollador && (
+              <Link to="/admin-desarrollador" onClick={() => irA('admin_desarrollador', '/admin-desarrollador')} className={estiloBotonSimple('admin_desarrollador')} title="Panel de desarrollador">
+                <ShieldCheck size={18} strokeWidth={2} /> {!sidebarColapsado && 'Panel desarrollador'}
+              </Link>
             )}
           </nav>
 
@@ -905,6 +934,7 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
                 {vistaActiva === 'ventas_por_producto' && t('salesByProduct')}
                 {vistaActiva === 'cobro_de_ventas' && t('salesCollections')}
                 {vistaActiva === 'vendedores_comisiones' && t('sellersCommissions')}
+                {vistaActiva === 'ventas_por_personal' && 'Ventas por personal'}
               </h2>
             <div className="flex-1"></div>
             <div className="hidden md:flex items-center gap-2 lg:gap-3">
@@ -1009,7 +1039,9 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
         {/* Inyección de los Módulos Activos */}
         <main className={`flex-1 overflow-y-auto bg-[#f3f4f6] pb-16 md:pb-0 ${posPantallaCompleta ? '' : 'p-3 md:p-6'}`}>
           <div key={`${vistaActiva}-${refreshKey}`}>
-            {renderizarVista()}
+            <Suspense fallback={<div className="p-10 text-center text-gray-500">{t('loading')}</div>}>
+              {renderizarVista()}
+            </Suspense>
           </div>
         </main>
 

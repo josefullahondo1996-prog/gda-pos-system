@@ -11,13 +11,27 @@ Deno.serve(async (req) => {
     return new Response('ok', { headers: corsHeaders });
   }
 
+  if (req.method !== 'POST') {
+    return new Response(JSON.stringify({ error: 'Método no permitido.' }), {
+      status: 405,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    });
+  }
+
   try {
     const { nombreNegocio, nombreAdmin, email, password, claveAcceso } = await req.json();
 
     // Clave de acceso validada acá, del lado del servidor: aunque alguien mire el
     // código de la página en el navegador, esta clave nunca viaja al frontend.
-    const CLAVE_ACCESO = Deno.env.get('CLAVE_CREAR_NEGOCIO') ?? 'GDA2026';
-    if (claveAcceso !== CLAVE_ACCESO) {
+    const claveAccesoEsperada = Deno.env.get('CLAVE_CREAR_NEGOCIO');
+    if (!claveAccesoEsperada) {
+      return new Response(JSON.stringify({ error: 'La creación de negocios no está configurada.' }), {
+        status: 503,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    if (typeof claveAcceso !== 'string' || claveAcceso !== claveAccesoEsperada) {
       return new Response(JSON.stringify({ error: 'Clave de acceso incorrecta.' }), {
         status: 401,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },

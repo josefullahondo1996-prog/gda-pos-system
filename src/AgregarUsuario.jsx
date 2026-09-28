@@ -137,6 +137,13 @@ const AgregarUsuario = ({ usuarioEditar, onGuardado, onCancelar }) => {
         if (permitirAcceso && !rolId) return alert('Seleccioná un rol.');
         if (!todasLocalizaciones && !ubicacionId) return alert('Seleccioná la sucursal fija de este usuario.');
 
+        if (!usuarioEditar && empresaId) {
+            const { data: limites } = await supabase.rpc('consultar_limites_empresa', { p_empresa_id: empresaId });
+            if (limites?.usuarios >= limites?.limite_usuarios) {
+                alert(`Aviso: tu plan ${limites.plan || ''} alcanzó el límite de ${limites.limite_usuarios} usuarios. Podés continuar, pero conviene actualizar el plan.`);
+            }
+        }
+
         setGuardando(true);
         try {
             const datos = {
