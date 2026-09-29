@@ -19,7 +19,7 @@ const CATEGORIAS_PERMISOS = [
     },
     {
         key: 'productos', titulo: 'Productos',
-        permisos: ['Ver productos', 'Agregar producto', 'Editar producto', 'Borrar producto', 'Ver marcas', 'Ver unidades', 'Ver precios de compra'],
+        permisos: ['Ver productos', 'Agregar producto', 'Editar producto', 'Borrar producto', 'Transferir stock', 'Ajustar stock', 'Ver marcas', 'Ver unidades', 'Ver precios de compra'],
     },
     {
         key: 'compras', titulo: 'Compras',
@@ -60,7 +60,7 @@ const PERMISSION_KEYS = {
     'Ver proveedores': 'viewSuppliers', 'Agregar proveedor': 'addSupplier', 'Editar proveedor': 'editSupplier', 'Borrar proveedor': 'deleteSupplier',
     'Ver usuarios': 'viewUsers', 'Agregar usuario': 'addUserPermission', 'Editar usuario': 'editUserPermission', 'Borrar usuario': 'deleteUserPermission',
     'Ver roles': 'viewRoles', 'Agregar rol': 'addRolePermission', 'Editar rol': 'editRolePermission', 'Borrar rol': 'deleteRolePermission',
-    'Ver productos': 'viewProducts', 'Agregar producto': 'addProductPermission', 'Editar producto': 'editProductPermission', 'Borrar producto': 'deleteProductPermission',
+    'Ver productos': 'viewProducts', 'Agregar producto': 'addProductPermission', 'Editar producto': 'editProductPermission', 'Borrar producto': 'deleteProductPermission', 'Transferir stock': 'transferStock', 'Ajustar stock': 'adjustStock',
     'Ver marcas': 'viewBrands', 'Ver unidades': 'viewUnits', 'Ver precios de compra': 'viewPurchasePrices',
     'Ver compras': 'viewPurchases', 'Agregar compra': 'addPurchasePermission', 'Editar compra': 'editPurchasePermission', 'Borrar compra': 'deletePurchasePermission', 'Ver deudas a proveedores': 'viewSupplierDebts',
     'Acceder al Punto de Venta': 'accessPos', 'Solo Punto de Venta (bloquea todo lo demás)': 'posOnly', 'Aplicar descuentos': 'applyDiscounts', 'Registrar venta a crédito': 'registerCreditSale', 'Editar precio manualmente': 'editPrice', 'Ver ventas de otros usuarios': 'viewOtherSales',

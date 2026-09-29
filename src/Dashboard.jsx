@@ -50,6 +50,10 @@ const CategoriasGastos = lazy(() => import('./CategoriasGastos'));
 const VendedoresComisiones = lazy(() => import('./VendedoresComisiones'));
 const PanelDesarrollador = lazy(() => import('./PanelDesarrollador'));
 const VentasPorPersonal = lazy(() => import('./VentasPorPersonal'));
+const Pedidos = lazy(() => import('./Pedidos'));
+const InformesOperativos = lazy(() => import('./InformesOperativos'));
+const TransferenciasStock = lazy(() => import('./TransferenciasStock'));
+const AjustesStock = lazy(() => import('./AjustesStock'));
 
 export default function Dashboard({ session, perfilUsuario, initialView = 'inicio' }) {
   const { t, locale } = useLanguage();
@@ -80,8 +84,18 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
       pos: 'ventas_pos', cobros: 'ventas_pos', cajas: 'caja', informe_caja_pago: 'caja',
       caja_registradora: 'informes', ganancias_perdidas: 'informes',
       ventas_por_producto: 'informes', compras_por_producto: 'informes', cobro_de_ventas: 'informes', vendedores_comisiones: 'informes', ventas_por_personal: 'informes', usuarios: 'usuarios', roles: 'roles',
+      pedidos: 'ventas_pos',
+      informes_operativos: 'informes',
+      transferencias_stock: 'productos',
+      ajustes_stock: 'productos',
     };
     const categoria = categoriaPorVista[vista];
+    if (vista === 'transferencias_stock' && !esAdmin && permisosRol?.productos) {
+      return permisosRol.productos['Transferir stock'] === true;
+    }
+    if (vista === 'ajustes_stock' && !esAdmin && permisosRol?.productos) {
+      return permisosRol.productos['Ajustar stock'] === true;
+    }
     return !categoria || tieneCategoria(categoria);
   };
 
@@ -280,6 +294,12 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
       case '/stock-history':
         setVistaActiva('stock_history');
         break;
+      case '/transferencias-stock':
+        setVistaActiva('transferencias_stock');
+        break;
+      case '/ajustes-stock':
+        setVistaActiva('ajustes_stock');
+        break;
       case '/agregar_producto':
         setVistaActiva('agregar_producto');
         break;
@@ -333,6 +353,12 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
       case '/ventas-por-personal':
       case '/ventas_por_personal':
         setVistaActiva('ventas_por_personal');
+        break;
+      case '/pedidos':
+        setVistaActiva('pedidos');
+        break;
+      case '/informes-operativos':
+        setVistaActiva('informes_operativos');
         break;
       default:
         setVistaActiva(initialView);
@@ -497,6 +523,18 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
 
       case 'ventas_por_personal':
         return <VentasPorPersonal />;
+
+      case 'pedidos':
+        return <Pedidos />;
+
+      case 'informes_operativos':
+        return <InformesOperativos />;
+
+      case 'transferencias_stock':
+        return <TransferenciasStock />;
+
+      case 'ajustes_stock':
+        return <AjustesStock />;
 
       default:
         return <GraficosDashboard />;
@@ -714,6 +752,8 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
                     <Link to="/marcas" onClick={() => irA('marcas', '/marcas')} className={estiloSubItem('marcas')}>🠖 {t('brands')}</Link>
                     <Link to="/categorias" onClick={() => irA('categorias', '/categorias')} className={estiloSubItem('categorias')}>🠖 {t('categories')}</Link>
                     <Link to="/unidades" onClick={() => irA('unidades', '/unidades')} className={estiloSubItem('unidades')}>🠖 {t('units')}</Link>
+                    {(esAdmin || !permisosRol || permisosRol.productos?.['Transferir stock'] === true) && <Link to="/transferencias-stock" onClick={() => irA('transferencias_stock', '/transferencias-stock')} className={estiloSubItem('transferencias_stock')}>🠖 Transferencias de stock</Link>}
+                    {(esAdmin || !permisosRol || permisosRol.productos?.['Ajustar stock'] === true) && <Link to="/ajustes-stock" onClick={() => irA('ajustes_stock', '/ajustes-stock')} className={estiloSubItem('ajustes_stock')}>🠖 Ajustes de stock</Link>}
                   </div>
                 )}
               </>
@@ -777,6 +817,7 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
                     <Link to="/todas_ventas" onClick={() => irA('todas_ventas', '/todas_ventas')} className={estiloSubItem('todas_ventas')}>🠖 {t('allSales')}</Link>
                     <Link to="/pos" onClick={() => irA('pos', '/pos')} className={estiloSubItem('pos')}>🠖 {t('pos')}</Link>
                     <Link to="/cobros" onClick={() => irA('cobros', '/cobros')} className={estiloSubItem('cobros')}>🠖 {t('pendingOrders')}</Link>
+                    <Link to="/pedidos" onClick={() => irA('pedidos', '/pedidos')} className={estiloSubItem('pedidos')}>🠖 Pedidos</Link>
                   </div>
                 )}
               </>
@@ -834,6 +875,7 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
                     <Link to="/caja_registradora" onClick={() => irA('caja_registradora', '/caja_registradora')} className={estiloSubItem('caja_registradora')}>🠖 {t('cashRegister')}</Link>
                     <Link to="/vendedores-comisiones" onClick={() => irA('vendedores_comisiones', '/vendedores-comisiones')} className={estiloSubItem('vendedores_comisiones')}>🠖 {t('sellersCommissions')}</Link>
                     <Link to="/ventas-por-personal" onClick={() => irA('ventas_por_personal', '/ventas-por-personal')} className={estiloSubItem('ventas_por_personal')}>🠖 Ventas por personal</Link>
+                    <Link to="/informes-operativos" onClick={() => irA('informes_operativos', '/informes-operativos')} className={estiloSubItem('informes_operativos')}>🠖 Stock, deudas e IVA</Link>
                   </div>
                 )}
               </>
@@ -917,6 +959,8 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
                 {vistaActiva === 'cobros' && t('pendingOrders')}
                 {vistaActiva === 'catalogo' && t('products')}
                 {vistaActiva === 'stock_history' && 'Historial de existencias'}
+                {vistaActiva === 'transferencias_stock' && 'Transferencias de stock'}
+                {vistaActiva === 'ajustes_stock' && 'Ajustes de stock'}
                 {vistaActiva === 'agregar_producto' && t('addProduct')}
                 {vistaActiva === 'marcas' && t('brands')}
                 {vistaActiva === 'unidades' && t('units')}
@@ -935,6 +979,8 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
                 {vistaActiva === 'cobro_de_ventas' && t('salesCollections')}
                 {vistaActiva === 'vendedores_comisiones' && t('sellersCommissions')}
                 {vistaActiva === 'ventas_por_personal' && 'Ventas por personal'}
+                {vistaActiva === 'pedidos' && 'Pedidos'}
+                {vistaActiva === 'informes_operativos' && 'Informes operativos'}
               </h2>
             <div className="flex-1"></div>
             <div className="hidden md:flex items-center gap-2 lg:gap-3">

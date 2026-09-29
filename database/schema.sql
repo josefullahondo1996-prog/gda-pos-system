@@ -7,9 +7,12 @@ CREATE EXTENSION IF NOT EXISTS "pgcrypto";
 CREATE TABLE empresas (
     id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
     nombre text NOT NULL,
+    ruc text,
     direccion text,
     email text,
     telefono text,
+    logo_url text,
+    configuracion jsonb NOT NULL DEFAULT '{}'::jsonb,
     creado_en timestamptz NOT NULL DEFAULT now()
 );
 
@@ -212,6 +215,58 @@ CREATE TABLE detalle_ventas (
     creado_en timestamptz NOT NULL DEFAULT now()
 );
 
+-- Pedidos de preparación: no afectan ventas, caja ni stock hasta que se registre
+-- una venta real desde el punto de venta.
+CREATE TABLE IF NOT EXISTS pedidos (
+    id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    empresa_id uuid NOT NULL REFERENCES empresas(id) ON DELETE CASCADE,
+    numero_pedido text NOT NULL,
+    cliente_id text,
+    cliente_nombre text NOT NULL,
+    cliente_telefono text,
+    fecha_entrega date,
+    estado text NOT NULL DEFAULT 'pendiente'
+        CHECK (estado IN ('pendiente', 'en_preparacion', 'completado', 'cancelado')),
+    items jsonb NOT NULL DEFAULT '[]'::jsonb CHECK (jsonb_typeof(items) = 'array'),
+    total numeric(14, 2) NOT NULL DEFAULT 0 CHECK (total >= 0),
+    nota text,
+    creado_en timestamptz NOT NULL DEFAULT now(),
+    actualizado_en timestamptz NOT NULL DEFAULT now(),
+    UNIQUE (empresa_id, numero_pedido)
+);
+
+-- Encabezado y líneas JSON de transferencias ejecutadas de forma atómica
+-- por database/migration_transferencias_stock.sql.
+CREATE TABLE IF NOT EXISTS transferencias_stock (
+    id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    empresa_id uuid NOT NULL REFERENCES empresas(id) ON DELETE CASCADE,
+    origen_ubicacion_id uuid NOT NULL,
+    destino_ubicacion_id uuid NOT NULL,
+    usuario_id text,
+    items jsonb NOT NULL CHECK (jsonb_typeof(items) = 'array'),
+    notas text,
+    created_at timestamptz NOT NULL DEFAULT now(),
+    CHECK (origen_ubicacion_id <> destino_ubicacion_id)
+);
+CREATE INDEX IF NOT EXISTS transferencias_stock_empresa_fecha_idx
+    ON transferencias_stock (empresa_id, created_at DESC);
+ALTER TABLE transferencias_stock ENABLE ROW LEVEL SECURITY;
+GRANT SELECT ON transferencias_stock TO authenticated;
+
+CREATE TABLE IF NOT EXISTS ajustes_stock (
+    id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    empresa_id uuid NOT NULL REFERENCES empresas(id) ON DELETE CASCADE,
+    ubicacion_id uuid NOT NULL,
+    usuario_id text,
+    motivo text NOT NULL,
+    items jsonb NOT NULL CHECK (jsonb_typeof(items) = 'array'),
+    created_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS ajustes_stock_empresa_fecha_idx
+    ON ajustes_stock (empresa_id, created_at DESC);
+ALTER TABLE ajustes_stock ENABLE ROW LEVEL SECURITY;
+GRANT SELECT ON ajustes_stock TO authenticated;
+
 CREATE TABLE caja_registros (
     id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
     empresa_id uuid NOT NULL REFERENCES empresas(id) ON DELETE CASCADE,
@@ -289,6 +344,8 @@ ALTER TABLE clientes ENABLE ROW LEVEL SECURITY;
 ALTER TABLE pagos_compras ENABLE ROW LEVEL SECURITY;
 ALTER TABLE categorias_gastos ENABLE ROW LEVEL SECURITY;
 ALTER TABLE tareas ENABLE ROW LEVEL SECURITY;
+ALTER TABLE pedidos ENABLE ROW LEVEL SECURITY;
+GRANT SELECT, INSERT, UPDATE ON pedidos TO authenticated;
 
 CREATE POLICY "categorias_gastos_select_own_company"
 ON categorias_gastos FOR SELECT
@@ -345,10 +402,87 @@ USING (
     id IN (SELECT empresa_id FROM usuarios WHERE auth_user_id = auth.uid())
 );
 
+CREATE POLICY "empresas_update_own_company"
+ON empresas
+FOR UPDATE
+USING (
+    id IN (SELECT empresa_id FROM usuarios WHERE auth_user_id = auth.uid())
+)
+WITH CHECK (
+    id IN (SELECT empresa_id FROM usuarios WHERE auth_user_id = auth.uid())
+);
+
 CREATE POLICY "usuarios_select_own_row"
 ON usuarios
 FOR SELECT
 USING (auth_user_id = auth.uid());
+
+DROP POLICY IF EXISTS transferencias_stock_ver_empresa ON transferencias_stock;
+CREATE POLICY transferencias_stock_ver_empresa
+ON transferencias_stock FOR SELECT TO authenticated
+USING (EXISTS (
+    SELECT 1 FROM usuarios u
+    WHERE u.auth_user_id = auth.uid()
+      AND u.empresa_id = transferencias_stock.empresa_id
+      AND u.activo = true
+      AND u.permitir_acceso = true
+      AND (
+        COALESCE(u.todas_localizaciones, false) = true
+        OR u.ubicacion_id = transferencias_stock.origen_ubicacion_id
+        OR u.ubicacion_id = transferencias_stock.destino_ubicacion_id
+      )
+));
+REVOKE INSERT, UPDATE, DELETE ON transferencias_stock FROM anon, authenticated;
+
+DROP POLICY IF EXISTS ajustes_stock_ver_empresa ON ajustes_stock;
+CREATE POLICY ajustes_stock_ver_empresa
+ON ajustes_stock FOR SELECT TO authenticated
+USING (EXISTS (
+    SELECT 1 FROM usuarios u
+    WHERE u.auth_user_id = auth.uid()
+      AND u.empresa_id = ajustes_stock.empresa_id
+      AND u.activo = true
+      AND u.permitir_acceso = true
+      AND (COALESCE(u.todas_localizaciones, false) = true OR u.ubicacion_id = ajustes_stock.ubicacion_id)
+));
+REVOKE INSERT, UPDATE, DELETE ON ajustes_stock FROM anon, authenticated;
+
+DROP POLICY IF EXISTS pedidos_select_empresa ON pedidos;
+CREATE POLICY pedidos_select_empresa ON pedidos FOR SELECT TO authenticated
+USING (EXISTS (
+    SELECT 1 FROM usuarios u
+    WHERE u.auth_user_id = auth.uid()
+      AND u.empresa_id = pedidos.empresa_id
+      AND u.activo = true
+      AND u.permitir_acceso = true
+));
+
+DROP POLICY IF EXISTS pedidos_insert_empresa ON pedidos;
+CREATE POLICY pedidos_insert_empresa ON pedidos FOR INSERT TO authenticated
+WITH CHECK (EXISTS (
+    SELECT 1 FROM usuarios u
+    WHERE u.auth_user_id = auth.uid()
+      AND u.empresa_id = pedidos.empresa_id
+      AND u.activo = true
+      AND u.permitir_acceso = true
+));
+
+DROP POLICY IF EXISTS pedidos_update_empresa ON pedidos;
+CREATE POLICY pedidos_update_empresa ON pedidos FOR UPDATE TO authenticated
+USING (EXISTS (
+    SELECT 1 FROM usuarios u
+    WHERE u.auth_user_id = auth.uid()
+      AND u.empresa_id = pedidos.empresa_id
+      AND u.activo = true
+      AND u.permitir_acceso = true
+))
+WITH CHECK (EXISTS (
+    SELECT 1 FROM usuarios u
+    WHERE u.auth_user_id = auth.uid()
+      AND u.empresa_id = pedidos.empresa_id
+      AND u.activo = true
+      AND u.permitir_acceso = true
+));
 
 CREATE POLICY "clientes_select_own_company"
 ON clientes
