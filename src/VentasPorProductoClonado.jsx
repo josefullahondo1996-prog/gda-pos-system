@@ -8,7 +8,12 @@ import { useSucursalActiva } from './utils/SucursalContext';
 import FiltroFecha from './FiltroFecha';
 
 const money = (value) => `${Number(value || 0).toLocaleString('es-PY')} Gs`;
-const dateLabel = (value) => value ? new Date(value).toLocaleDateString('es-PY') : '-';
+const fechaLocal = (value) => {
+  if (!value) return null;
+  const soloFecha = String(value).match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  return soloFecha ? new Date(Number(soloFecha[1]), Number(soloFecha[2]) - 1, Number(soloFecha[3])) : new Date(value);
+};
+const dateLabel = (value) => value ? fechaLocal(value).toLocaleDateString('es-PY') : '-';
 const quote = (value) => String(value ?? '').replaceAll('"', '""');
 const todayStart = new Date(); todayStart.setHours(0, 0, 0, 0);
 const todayEnd = new Date(); todayEnd.setHours(23, 59, 59, 999);
@@ -40,11 +45,13 @@ export default function VentasPorProductoClonado() {
 
   const detallado = useMemo(() => {
     const ventasMap = new Map(ventas.map((item) => [item.id, item])); const texto = `${producto} ${busqueda}`.trim().toLowerCase();
+    const subtotalPorVenta = new Map();
+    detalles.forEach((detalle) => subtotalPorVenta.set(String(detalle.venta_id), (subtotalPorVenta.get(String(detalle.venta_id)) || 0) + Number(detalle.subtotal || 0)));
     return detalles.map((detalle) => {
-      const venta = ventasMap.get(detalle.venta_id); const prod = productoMap.get(detalle.producto_id); const fecha = venta?.fecha ? new Date(venta.fecha) : null; const nombre = prod?.nombre || detalle.nombre_producto || 'Producto sin nombre'; const codigo = prod?.codigo || ''; const cantidad = Number(detalle.cantidad) || 0; const precio = Number(detalle.precio_unitario) || 0; const descuento = Number(detalle.descuento) || 0; const impuesto = Number(detalle.impuesto) || 0; const subtotal = Number(detalle.subtotal) || cantidad * precio; const total = subtotal - descuento + impuesto; const costoUnitario = Number(detalle.precio_costo || prod?.precio_compra) || 0; const ganancia = total - costoUnitario * cantidad;
+      const venta = ventasMap.get(detalle.venta_id); const prod = productoMap.get(detalle.producto_id); const fecha = venta?.fecha ? fechaLocal(venta.fecha) : null; const nombre = prod?.nombre || detalle.nombre_producto || 'Producto sin nombre'; const codigo = prod?.codigo || ''; const cantidad = Number(detalle.cantidad) || 0; const precio = Number(detalle.precio_unitario) || 0; const descuentoLinea = Number(detalle.descuento) || 0; const impuesto = Number(detalle.impuesto) || 0; const subtotal = Number(detalle.subtotal) || cantidad * precio; const subtotalDocumento = subtotalPorVenta.get(String(detalle.venta_id)) || 0; const descuentoDocumento = Number(venta?.descuento || 0) * (subtotalDocumento ? subtotal / subtotalDocumento : 0); const descuento = descuentoLinea + descuentoDocumento; const total = Math.max(0, subtotal - descuento + impuesto); const costoUnitario = Number(detalle.precio_costo || prod?.precio_compra) || 0; const ganancia = total - costoUnitario * cantidad;
       return { ...detalle, venta, prod, fecha, nombre, codigo, cantidad, precio, descuento, impuesto, total, costo: costoUnitario * cantidad, ganancia, margen: total ? (ganancia / total) * 100 : 0, marca: prod?.marca || prod?.marca_nombre || '' };
     }).filter((item) => {
-      if (!item.venta || !item.fecha || Number.isNaN(item.fecha.getTime())) return false; if (rango.desde && item.fecha < rango.desde) return false; if (rango.hasta && item.fecha > rango.hasta) return false; const minutos = item.fecha.getHours() * 60 + item.fecha.getMinutes(); const desde = Number(horaDesde.slice(0, 2)) * 60 + Number(horaDesde.slice(3)); const hasta = Number(horaHasta.slice(0, 2)) * 60 + Number(horaHasta.slice(3)); if (minutos < desde || minutos > hasta) return false; if (sucursalActiva && item.venta.ubicacion_id !== sucursalActiva) return false; if (ubicacion && String(item.venta.ubicacion_id || '') !== ubicacion) return false; if (cliente && item.venta.cliente !== cliente) return false; if (grupo && (item.venta.grupo_clientes || item.venta.grupo_cliente) !== grupo) return false; if (categoria && item.prod?.categoria !== categoria) return false; if (marca && item.marca !== marca) return false; if (origen && (item.venta.origen || item.venta.canal || 'POS') !== origen) return false; if (texto && !`${item.nombre} ${item.codigo} ${item.venta.cliente || ''}`.toLowerCase().includes(texto)) return false; return true;
+      if (!item.venta || ['anulada', 'devuelta'].includes(String(item.venta.estado_pago || '').toLocaleLowerCase('es')) || !item.fecha || Number.isNaN(item.fecha.getTime())) return false; if (rango.desde && item.fecha < rango.desde) return false; if (rango.hasta && item.fecha > rango.hasta) return false; const minutos = item.fecha.getHours() * 60 + item.fecha.getMinutes(); const desde = Number(horaDesde.slice(0, 2)) * 60 + Number(horaDesde.slice(3)); const hasta = Number(horaHasta.slice(0, 2)) * 60 + Number(horaHasta.slice(3)); if (minutos < desde || minutos > hasta) return false; if (sucursalActiva && String(item.venta.ubicacion_id || '') !== String(sucursalActiva)) return false; if (ubicacion && String(item.venta.ubicacion_id || '') !== ubicacion) return false; if (cliente && item.venta.cliente !== cliente) return false; if (grupo && (item.venta.grupo_clientes || item.venta.grupo_cliente) !== grupo) return false; if (categoria && item.prod?.categoria !== categoria) return false; if (marca && item.marca !== marca) return false; if (origen && (item.venta.origen || item.venta.canal || 'POS') !== origen) return false; if (texto && !`${item.nombre} ${item.codigo} ${item.venta.cliente || ''}`.toLowerCase().includes(texto)) return false; return true;
     });
   }, [ventas, detalles, productoMap, rango, horaDesde, horaHasta, sucursalActiva, ubicacion, cliente, grupo, categoria, marca, origen, producto, busqueda]);
 

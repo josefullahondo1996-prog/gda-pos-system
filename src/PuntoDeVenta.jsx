@@ -49,13 +49,21 @@ const PuntoDeVenta = ({ cajaInfo, session, perfilUsuario, onVolver, onSolicitarC
   const [mostrarNuevoCliente, setMostrarNuevoCliente] = useState(false);
   const [mostrarPagoMultiple, setMostrarPagoMultiple] = useState(false);
   const [mostrarFormularioProducto, setMostrarFormularioProducto] = useState(false);
+  const [mostrarCalculadora, setMostrarCalculadora] = useState(false);
+  const [mostrarCambioPersonal, setMostrarCambioPersonal] = useState(false);
+  const [personalServicioCambio, setPersonalServicioCambio] = useState('');
+  const [calculadoraA, setCalculadoraA] = useState('');
+  const [calculadoraB, setCalculadoraB] = useState('');
+  const [operacionCalculadora, setOperacionCalculadora] = useState('+');
   const [cuentasCaja, setCuentasCaja] = useState([]);
   const [clientesDisponibles, setClientesDisponibles] = useState([]);
+  const [gruposClientes, setGruposClientes] = useState([]);
   const [personalServicio, setPersonalServicio] = useState('');
   const [usuariosServicio, setUsuariosServicio] = useState([]);
   // === ESTADOS PRINCIPALES ===
   const [productos, setProductos] = useState([]);
   const [carrito, setCarrito] = useState([]);
+  const [cotizacionCargada, setCotizacionCargada] = useState(false);
   const [busqueda, setBusqueda] = useState('');
   const [cargando, setCargando] = useState(true);
   const [categoriaActiva, setCategoriaActiva] = useState('Todas las categorías');
@@ -196,10 +204,13 @@ const PuntoDeVenta = ({ cajaInfo, session, perfilUsuario, onVolver, onSolicitarC
 
   useEffect(() => {
     const cargarClientes = async () => {
-      let query = supabase.from('clientes').select('*').order('nombre');
-      if (empresaId) query = query.eq('empresa_id', empresaId);
-      const { data } = await query;
-      if (data) setClientesDisponibles(data);
+      if (!empresaId) return;
+      const [clientesResult, gruposResult] = await Promise.all([
+        supabase.from('clientes').select('*').eq('empresa_id', empresaId).order('nombre'),
+        supabase.from('grupos_clientes').select('nombre, grupo_precios, activo').eq('empresa_id', empresaId).eq('activo', true),
+      ]);
+      if (!clientesResult.error && clientesResult.data) setClientesDisponibles(clientesResult.data);
+      if (!gruposResult.error && gruposResult.data) setGruposClientes(gruposResult.data);
     };
     if (empresaId) cargarClientes();
   }, [empresaId]);
@@ -254,6 +265,44 @@ const PuntoDeVenta = ({ cajaInfo, session, perfilUsuario, onVolver, onSolicitarC
   }, [empresaId]);
 
   useEffect(() => {
+    if (cargando || cotizacionCargada) return;
+    const pendiente = sessionStorage.getItem('pypos_cotizacion_pendiente');
+    if (!pendiente) {
+      setCotizacionCargada(true);
+      return;
+    }
+    try {
+      const cotizacion = JSON.parse(pendiente);
+      const filas = (cotizacion.items || []).map((linea) => {
+        const producto = productos.find((p) => String(p.id) === String(linea.id));
+        if (!producto) return null;
+        return {
+          ...producto,
+          precio_lista_base: Number(linea.precio_venta ?? linea.precio ?? producto.precio_venta) || 0,
+          precio_venta: Number(linea.precio_venta ?? linea.precio ?? producto.precio_venta) || 0,
+          precio: Number(linea.precio_venta ?? linea.precio ?? producto.precio_venta) || 0,
+          cotizacion_precio_fijo: true,
+          cantidad: Math.max(0.001, Number(linea.cantidad) || 1),
+        };
+      }).filter(Boolean);
+      if (!filas.length) {
+        notificar.error('No se pudo cargar la cotización: sus productos ya no están disponibles en el catálogo.');
+      } else {
+        setCarrito(filas);
+        setCliente(cotizacion.cliente || 'Cliente Ocasional');
+        setDescuento(String(Number(cotizacion.descuento) || ''));
+        setNotaVenta([cotizacion.referencia, cotizacion.notas].filter(Boolean).join(' · '));
+        if (filas.length !== (cotizacion.items || []).length) notificar.info('Se omitieron productos que ya no están en el catálogo.');
+        else notificar.info(`Cotización ${cotizacion.referencia} cargada. Revisa stock y confirma la venta.`);
+      }
+    } catch (error) {
+      console.error('No se pudo cargar la cotización al POS:', error);
+      notificar.error('No se pudo leer la cotización pendiente.');
+    }
+    setCotizacionCargada(true);
+  }, [cargando, cotizacionCargada, productos]);
+
+  useEffect(() => {
     const actualizarStock = () => {
       cargarProductos();
       if (empresaId) cargarMapaStockPorUbicacion(empresaId).then(setMapaStockUbicacion);
@@ -268,11 +317,50 @@ const PuntoDeVenta = ({ cajaInfo, session, perfilUsuario, onVolver, onSolicitarC
     }, [empresaId, productos.length]);
 
   const categorias = useMemo(() => {
-    const unicas = Array.from(new Set(productos.map((p) => p.categoria).filter(Boolean)));
+    const unicas = Array.from(new Set(productos.filter((p) => p.tipo_producto !== 'Variable').map((p) => p.categoria).filter(Boolean)));
     return ['Todas las categorías', ...unicas];
   }, [productos]);
 
+  const clienteSeleccionado = useMemo(() => clientesDisponibles.find(
+    (item) => (item.nombre_empresa || item.nombre) === cliente
+  ) || null, [cliente, clientesDisponibles]);
+  const grupoClienteSeleccionado = useMemo(() => gruposClientes.find(
+    (grupo) => grupo.nombre === clienteSeleccionado?.grupo_clientes
+  ) || null, [clienteSeleccionado, gruposClientes]);
+  const nombreGrupoPrecioActivo = grupoClienteSeleccionado?.grupo_precios?.trim() || '';
+
+  const precioDelGrupo = (producto, nombreGrupo = nombreGrupoPrecioActivo) => {
+    if (!nombreGrupo || !Array.isArray(producto?.grupos_precio)) return null;
+    const grupo = producto.grupos_precio.find((item) =>
+      String(item.nombre || '').trim().toLocaleLowerCase('es') === nombreGrupo.trim().toLocaleLowerCase('es')
+    );
+    const precio = Number(grupo?.precioVenta ?? grupo?.precio_venta);
+    return Number.isFinite(precio) && precio > 0 ? precio : null;
+  };
+
+  const precioParaCliente = (producto) => precioDelGrupo(producto) ?? (Number(producto?.precio_venta ?? producto?.precio) || 0);
+
+  useEffect(() => {
+    if (carrito.length === 0) return;
+    setCarrito((actual) => actual.map((item) => {
+      if (item.cotizacion_precio_fijo) return item;
+      const precioBase = Number(item.precio_lista_base ?? item.precio_venta ?? item.precio) || 0;
+      const precioGrupo = precioDelGrupo(item);
+      const precioAplicado = precioGrupo ?? precioBase;
+      return {
+        ...item,
+        precio_lista_base: precioBase,
+        precio_venta: precioAplicado,
+        precio: precioAplicado,
+        grupo_precio_aplicado: precioGrupo === null ? null : nombreGrupoPrecioActivo || null,
+      };
+    }));
+    // Se recalcula al cambiar el cliente o al cargar su grupo de precios.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [nombreGrupoPrecioActivo]);
+
   const agregarAlCarrito = (producto) => {
+    if (producto?.tipo_producto === 'Variable' || producto?.activo === false) return;
     const itemExistente = carrito.find((item) => item.id === producto.id);
     const incremento = pasoCantidad(producto.unidad);
     const cantidadActual = itemExistente ? Number(itemExistente.cantidad) : 0;
@@ -288,7 +376,17 @@ const PuntoDeVenta = ({ cajaInfo, session, perfilUsuario, onVolver, onSolicitarC
         item.id === producto.id ? { ...item, cantidad: Number((cantidadActual + incremento).toFixed(4)) } : item
       ));
     } else {
-      setCarrito([...carrito, { ...producto, cantidad: cantidadInicial(producto.unidad, stockDisponible) }]);
+      const precioBase = Number(producto.precio_venta ?? producto.precio) || 0;
+      const precioGrupo = precioDelGrupo(producto);
+      const precioAplicado = precioGrupo ?? precioBase;
+      setCarrito([...carrito, {
+        ...producto,
+        precio_lista_base: precioBase,
+        precio_venta: precioAplicado,
+        precio: precioAplicado,
+        grupo_precio_aplicado: precioGrupo === null ? null : nombreGrupoPrecioActivo || null,
+        cantidad: cantidadInicial(producto.unidad, stockDisponible),
+      }]);
     }
   };
 
@@ -340,6 +438,17 @@ const PuntoDeVenta = ({ cajaInfo, session, perfilUsuario, onVolver, onSolicitarC
 
   const subtotal = carrito.reduce((acc, item) => acc + (item.precio_venta || item.precio || 0) * item.cantidad, 0);
   const totalArticulos = carrito.reduce((acc, item) => acc + item.cantidad, 0);
+  const resultadoCalculadora = useMemo(() => {
+    const a = Number(calculadoraA);
+    const b = Number(calculadoraB);
+    if (calculadoraA === '' || calculadoraB === '' || !Number.isFinite(a) || !Number.isFinite(b)) return null;
+    if (operacionCalculadora === '/' && b === 0) return null;
+    const resultado = operacionCalculadora === '+' ? a + b
+      : operacionCalculadora === '-' ? a - b
+        : operacionCalculadora === '×' ? a * b
+          : a / b;
+    return Number.isFinite(resultado) ? resultado : null;
+  }, [calculadoraA, calculadoraB, operacionCalculadora]);
   const descuentoAplicado = Math.min(Math.max(0, Number(descuento) || 0), subtotal);
   const cargoEmbalajeAplicado = Math.max(0, Number(cargoEmbalaje) || 0);
   const totalConAjustes = Math.max(0, subtotal - descuentoAplicado + cargoEmbalajeAplicado);
@@ -420,6 +529,7 @@ const PuntoDeVenta = ({ cajaInfo, session, perfilUsuario, onVolver, onSolicitarC
       usuario_nombre: [perfilUsuario?.nombre, perfilUsuario?.apellido].filter(Boolean).join(' ').trim() || perfilUsuario?.nombre_usuario || null,
       personal_servicio: personalServicio || null,
       cliente,
+      grupo_precio: nombreGrupoPrecioActivo || null,
       total: totalConAjustes,
       metodo_pago: metodoPagoFinal,
       estado_pago: estadoPago,
@@ -459,6 +569,24 @@ const PuntoDeVenta = ({ cajaInfo, session, perfilUsuario, onVolver, onSolicitarC
         p_ubicacion_id: ubicacionActivaId || null,
       });
       if (error) throw error;
+
+      const cotizacionPendiente = sessionStorage.getItem('pypos_cotizacion_pendiente');
+      if (cotizacionPendiente) {
+        try {
+          const cotizacion = JSON.parse(cotizacionPendiente);
+          if (cotizacion.id) {
+            const { error: errorCotizacion } = await supabase.from('cotizaciones_ventas')
+              .update({ estado: 'Convertida', venta_id: String(ventaId), actualizado_en: new Date().toISOString() })
+              .eq('id', cotizacion.id).eq('empresa_id', empresaId).eq('estado', 'Pendiente');
+            if (errorCotizacion) notificar.error(`La venta quedó registrada, pero no se actualizó el estado del presupuesto: ${errorCotizacion.message}`);
+          }
+        } catch (errorCotizacion) {
+          console.error('No se pudo actualizar la cotización convertida:', errorCotizacion);
+          notificar.error('La venta quedó registrada, pero no se actualizó el estado del presupuesto.');
+        } finally {
+          sessionStorage.removeItem('pypos_cotizacion_pendiente');
+        }
+      }
 
       const itemsCombo = carrito.filter(
         (item) => item.tipo_producto === 'Combo' && Array.isArray(item.combo_productos) && item.combo_productos.length > 0
@@ -583,6 +711,7 @@ const PuntoDeVenta = ({ cajaInfo, session, perfilUsuario, onVolver, onSolicitarC
   };
 
   const productosFiltrados = productos.filter((p) => {
+    if (p.tipo_producto === 'Variable' || p.activo === false) return false;
     const coincideBusqueda =
       p.nombre?.toLowerCase().includes(busqueda.toLowerCase()) ||
       p.codigo?.toLowerCase().includes(busqueda.toLowerCase());
@@ -598,7 +727,7 @@ const PuntoDeVenta = ({ cajaInfo, session, perfilUsuario, onVolver, onSolicitarC
     if (!termino) return;
 
     // 1) Coincidencia exacta por código (así funciona como lector de código de barras)
-    const porCodigo = productos.find((p) => p.codigo && p.codigo.toLowerCase() === termino.toLowerCase());
+    const porCodigo = productos.find((p) => p.tipo_producto !== 'Variable' && p.activo !== false && p.codigo && p.codigo.toLowerCase() === termino.toLowerCase());
     if (porCodigo) {
       agregarAlCarrito(porCodigo);
       setBusqueda('');
@@ -606,7 +735,7 @@ const PuntoDeVenta = ({ cajaInfo, session, perfilUsuario, onVolver, onSolicitarC
     }
 
     // 2) Coincidencia exacta por nombre completo
-    const porNombre = productos.find((p) => p.nombre && p.nombre.toLowerCase() === termino.toLowerCase());
+    const porNombre = productos.find((p) => p.tipo_producto !== 'Variable' && p.activo !== false && p.nombre && p.nombre.toLowerCase() === termino.toLowerCase());
     if (porNombre) {
       agregarAlCarrito(porNombre);
       setBusqueda('');
@@ -649,7 +778,7 @@ const PuntoDeVenta = ({ cajaInfo, session, perfilUsuario, onVolver, onSolicitarC
           <button onClick={() => { setAbrirFormularioGasto(false); setMostrarGastos(true); }} className="bg-orange-50 text-orange-700 border border-orange-100 px-2.5 py-1.5 rounded hover:bg-orange-100 whitespace-nowrap">
             🧾 Gastos
           </button>
-          <button onClick={() => notificar.info('Calculadora disponible próximamente.')} className="bg-gray-50 text-gray-700 border border-gray-200 px-2.5 py-1.5 rounded hover:bg-gray-100 whitespace-nowrap">
+          <button onClick={() => setMostrarCalculadora(true)} className="bg-gray-50 text-gray-700 border border-gray-200 px-2.5 py-1.5 rounded hover:bg-gray-100 whitespace-nowrap">
             ▣ Calculadora
           </button>
           <button onClick={() => notificar.info('La devolución se gestiona desde Todas las ventas.')} className="bg-red-50 text-red-700 border border-red-100 px-2.5 py-1.5 rounded hover:bg-red-100 whitespace-nowrap">
@@ -661,7 +790,7 @@ const PuntoDeVenta = ({ cajaInfo, session, perfilUsuario, onVolver, onSolicitarC
           <button onClick={pantallaCompleta} className="bg-gray-50 text-gray-700 border border-gray-200 px-2.5 py-1.5 rounded hover:bg-gray-100 whitespace-nowrap">
             ⛶ Pantalla completa
           </button>
-          <button onClick={() => notificar.info('La sustitución de personal aún no está habilitada.')} className="bg-indigo-50 text-indigo-700 border border-indigo-100 px-2.5 py-1.5 rounded hover:bg-indigo-100 whitespace-nowrap">
+          <button onClick={() => { setPersonalServicioCambio(personalServicio); setMostrarCambioPersonal(true); }} className="bg-indigo-50 text-indigo-700 border border-indigo-100 px-2.5 py-1.5 rounded hover:bg-indigo-100 whitespace-nowrap">
             ♙ Sustitución de personal
           </button>
           <button onClick={() => { setAbrirFormularioGasto(true); setMostrarGastos(true); }} className="bg-red-50 text-red-700 border border-red-100 px-2.5 py-1.5 rounded hover:bg-red-100 whitespace-nowrap">
@@ -717,6 +846,12 @@ const PuntoDeVenta = ({ cajaInfo, session, perfilUsuario, onVolver, onSolicitarC
               className="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
             />
           </div>
+
+          {nombreGrupoPrecioActivo && (
+            <div className="px-3 py-1.5 border-b border-blue-100 bg-blue-50 text-[11px] text-blue-800">
+              Lista aplicada: <strong>{nombreGrupoPrecioActivo}</strong>{clienteSeleccionado?.grupo_clientes ? ` · ${clienteSeleccionado.grupo_clientes}` : ''}
+            </div>
+          )}
 
           <button
             onClick={() => setMostrarOpciones(!mostrarOpciones)}
@@ -993,7 +1128,7 @@ const PuntoDeVenta = ({ cajaInfo, session, perfilUsuario, onVolver, onSolicitarC
                       <p className="font-bold text-gray-800 text-sm leading-tight line-clamp-2">{prod.nombre}</p>
                       <div className="mt-1">
                         <p className="text-[11px] text-gray-400 mb-1">{prod.codigo || '—'} · Stock: {formatearStock(stockEnSucursal(prod), prod.unidad)}</p>
-                        <p className="text-orange-600 font-black">{formatMoneda(convertirDesdeGs(prod.precio_venta || prod.precio), monedaVenta)}</p>
+                        <p className="text-orange-600 font-black">{formatMoneda(convertirDesdeGs(precioParaCliente(prod)), monedaVenta)}</p>
                       </div>
                     </div>
                   </div>
@@ -1040,6 +1175,30 @@ const PuntoDeVenta = ({ cajaInfo, session, perfilUsuario, onVolver, onSolicitarC
               onCancelar={() => setMostrarFormularioProducto(false)}
             />
           </div>
+        </div>
+      )}
+      {mostrarCalculadora && (
+        <div className="fixed inset-0 z-[10000] flex items-center justify-center bg-black/50 p-4" onClick={() => setMostrarCalculadora(false)}>
+          <section role="dialog" aria-modal="true" aria-label="Calculadora" className="w-full max-w-sm rounded-2xl bg-white p-5 shadow-2xl" onClick={(eventClick) => eventClick.stopPropagation()}>
+            <div className="mb-4 flex items-center justify-between"><div><p className="text-xs font-bold uppercase text-orange-600">Herramienta</p><h2 className="text-lg font-black">Calculadora</h2></div><button onClick={() => setMostrarCalculadora(false)} className="rounded-lg px-3 py-1 text-xl text-slate-500 hover:bg-slate-100" aria-label="Cerrar">×</button></div>
+            <div className="grid grid-cols-[1fr_70px_1fr] items-end gap-2">
+              <label className="text-xs font-bold text-slate-600">Número 1<input type="number" value={calculadoraA} onChange={(eventChange) => setCalculadoraA(eventChange.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-base" autoFocus /></label>
+              <label className="text-xs font-bold text-slate-600">Operación<select value={operacionCalculadora} onChange={(eventChange) => setOperacionCalculadora(eventChange.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-2 py-2 text-base"><option>+</option><option>-</option><option>×</option><option>/</option></select></label>
+              <label className="text-xs font-bold text-slate-600">Número 2<input type="number" value={calculadoraB} onChange={(eventChange) => setCalculadoraB(eventChange.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-base" /></label>
+            </div>
+            <div className="mt-4 rounded-xl bg-slate-900 p-4 text-right"><p className="text-xs font-semibold text-slate-400">Resultado</p><p className="mt-1 min-h-8 text-2xl font-black text-white">{resultadoCalculadora === null ? '—' : resultadoCalculadora.toLocaleString('es-PY', { maximumFractionDigits: 6 })}</p></div>
+            <p className="mt-3 text-xs text-slate-400">Solo calcula valores; no modifica el total ni los precios de la venta.</p>
+          </section>
+        </div>
+      )}
+      {mostrarCambioPersonal && (
+        <div className="fixed inset-0 z-[10000] flex items-center justify-center bg-black/50 p-4" onClick={() => setMostrarCambioPersonal(false)}>
+          <section role="dialog" aria-modal="true" aria-label="Cambiar personal de servicio" className="w-full max-w-md rounded-2xl bg-white p-5 shadow-2xl" onClick={(eventClick) => eventClick.stopPropagation()}>
+            <div className="mb-4 flex items-center justify-between"><div><p className="text-xs font-bold uppercase text-indigo-600">Venta actual</p><h2 className="text-lg font-black">Cambiar personal de servicio</h2></div><button onClick={() => setMostrarCambioPersonal(false)} className="rounded-lg px-3 py-1 text-xl text-slate-500 hover:bg-slate-100" aria-label="Cerrar">×</button></div>
+            <label className="block text-xs font-bold text-slate-600">Vendedor / personal asignado<select value={personalServicioCambio} onChange={(eventChange) => setPersonalServicioCambio(eventChange.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm"><option value="">Sin asignar</option>{usuariosServicio.map((usuario) => { const nombreCompleto = [usuario.nombre, usuario.apellido].filter(Boolean).join(' ').trim(); return <option key={usuario.id} value={nombreCompleto}>{nombreCompleto}</option>; })}</select></label>
+            <p className="mt-3 text-xs text-slate-500">La persona elegida quedará asociada a la venta actual y a sus informes.</p>
+            <div className="mt-5 flex justify-end gap-2 border-t border-slate-100 pt-4"><button onClick={() => setMostrarCambioPersonal(false)} className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-bold text-slate-600">Cancelar</button><button onClick={() => { setPersonalServicio(personalServicioCambio); setMostrarCambioPersonal(false); }} className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-bold text-white hover:bg-indigo-700">Aplicar cambio</button></div>
+          </section>
         </div>
       )}
       {mostrarCierreCaja && (

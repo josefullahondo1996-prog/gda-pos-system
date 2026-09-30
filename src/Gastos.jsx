@@ -48,7 +48,8 @@ export default function Gastos({ vistaInicial = 'lista' }) {
   const [pagina, setPagina] = useState(1);
   const [form, setForm] = useState(FORM_VACIO);
   const [categoriasDisponibles, setCategoriasDisponibles] = useState(CATEGORIAS);
-  const [items, setItems] = useState([{ cantidad: 1, descripcion: '', iva: 'IVA 10%', costo: '' }]);
+  const [articulosGasto, setArticulosGasto] = useState([]);
+  const [items, setItems] = useState([{ cantidad: 1, descripcion: '', iva: 'IVA 10%', costo: '', articulo_id: '' }]);
   const [mostrarOpciones, setMostrarOpciones] = useState(false);
   const [esRecurrente, setEsRecurrente] = useState(false);
   const [intervaloRecurrente, setIntervaloRecurrente] = useState('Dias');
@@ -57,11 +58,12 @@ export default function Gastos({ vistaInicial = 'lista' }) {
   const cargarDatos = async () => {
     if (!empresaId) return;
     setCargando(true);
-    const [gastosResult, cajasResult, categoriasResult, contactosResult] = await Promise.all([
+    const [gastosResult, cajasResult, categoriasResult, contactosResult, articulosResult] = await Promise.all([
       supabase.from('gastos').select('*').eq('empresa_id', empresaId),
       supabase.from('cuentas_caja').select('id, nombre, saldo, moneda').eq('empresa_id', empresaId).eq('activo', true).order('nombre'),
       supabase.from('categorias_gastos').select('nombre').eq('empresa_id', empresaId).order('nombre'),
       supabase.from('clientes').select('id, nombre, nombre_empresa, tipo_contacto').eq('empresa_id', empresaId).in('tipo_contacto', ['Clientes', 'Proveedores', 'Ambos']).order('nombre'),
+      supabase.from('articulos_gasto').select('id,nombre,categoria,iva,costo_unitario').eq('empresa_id', empresaId).eq('activo', true).order('nombre'),
     ]);
     if (gastosResult.error) notificar.error('Error al cargar gastos: ' + gastosResult.error.message);
     if (cajasResult.error) notificar.error('Error al cargar cajas: ' + cajasResult.error.message);
@@ -73,6 +75,7 @@ export default function Gastos({ vistaInicial = 'lista' }) {
       });
       setContactos(contactosUnicos);
     }
+    if (!articulosResult.error) setArticulosGasto(articulosResult.data || []);
     const gastosOrdenados = [...(gastosResult.data || [])].sort((a, b) => {
       const fechaA = new Date(a.fecha || 0).getTime();
       const fechaB = new Date(b.fecha || 0).getTime();
@@ -95,7 +98,7 @@ export default function Gastos({ vistaInicial = 'lista' }) {
 
   const limpiarForm = () => {
     setForm({ ...FORM_VACIO, fecha: new Date().toISOString().slice(0, 10) });
-    setItems([{ cantidad: 1, descripcion: '', iva: 'IVA 10%', costo: '' }]);
+    setItems([{ cantidad: 1, descripcion: '', iva: 'IVA 10%', costo: '', articulo_id: '' }]);
     setMostrarOpciones(false);
     setEsRecurrente(false);
     setIntervaloRecurrente('Dias');
@@ -125,6 +128,7 @@ export default function Gastos({ vistaInicial = 'lista' }) {
         fecha: form.fecha || null,
         metodo_pago: form.metodoPago,
         cuenta_pago: caja.nombre,
+        items: items.map((item) => ({ ...item, cantidad: Number(item.cantidad) || 0, costo: Number(item.costo) || 0 })),
       }]);
       if (error) throw error;
 
@@ -171,7 +175,18 @@ export default function Gastos({ vistaInicial = 'lista' }) {
     setItems((actuales) => actuales.map((item, index) => index === indice ? { ...item, [campo]: valor } : item));
   };
 
-  const agregarItem = () => setItems((actuales) => [...actuales, { cantidad: 1, descripcion: '', iva: 'IVA 10%', costo: '' }]);
+  const agregarItem = () => setItems((actuales) => [...actuales, { cantidad: 1, descripcion: '', iva: 'IVA 10%', costo: '', articulo_id: '' }]);
+
+  const seleccionarArticulo = (indice, articuloId) => {
+    const articulo = articulosGasto.find((fila) => String(fila.id) === String(articuloId));
+    setItems((actuales) => actuales.map((item, index) => index === indice ? {
+      ...item,
+      articulo_id: articuloId,
+      descripcion: articulo?.nombre || item.descripcion,
+      iva: articulo?.iva || item.iva,
+      costo: articulo ? String(articulo.costo_unitario || 0) : item.costo,
+    } : item));
+  };
 
   const eliminarItem = (indice) => setItems((actuales) => actuales.length === 1 ? actuales : actuales.filter((_, index) => index !== indice));
 

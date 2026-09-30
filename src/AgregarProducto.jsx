@@ -7,6 +7,7 @@ import { useLanguage } from './LanguageContext';
 import { precioConIva, precioSinIva, precioVentaConIva as calcularPrecioVentaConIva, margenDesdeVentaConIva } from './utils/preciosIva';
 
 const GARANTIAS = ['Sin garantía', '30 días', '3 meses', '6 meses', '1 año'];
+const slugVariacion = (texto) => String(texto || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase().replace(/[^A-Z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 80);
 
 const GRUPOS_PRECIO_INICIALES = [
     { nombre: 'Base de Cambio', margen: 25 },
@@ -46,6 +47,12 @@ const AgregarProducto = ({ onGuardado, onCancelar, productoEditar, ubicacionId }
     const [ivaPct, setIvaPct] = useState(10);
     const [tipoImpuestoPrecio, setTipoImpuestoPrecio] = useState('Incluido');
     const [tipoProducto, setTipoProducto] = useState('Individual');
+    const [plantillasVariaciones, setPlantillasVariaciones] = useState([]);
+    const [variacionesSeleccionadas, setVariacionesSeleccionadas] = useState([]);
+    const [valoresVariacionSeleccionados, setValoresVariacionSeleccionados] = useState({});
+    const [variantesEditadas, setVariantesEditadas] = useState({});
+    const [variantesExistentes, setVariantesExistentes] = useState([]);
+    const [cargandoVariantes, setCargandoVariantes] = useState(false);
 
     // Estados para productos tipo Combo
     const [catalogoProductos, setCatalogoProductos] = useState([]);
@@ -69,16 +76,18 @@ const AgregarProducto = ({ onGuardado, onCancelar, productoEditar, ubicacionId }
     useEffect(() => {
         const cargarListas = async () => {
             if (!empresaId) return;
-            const [resMarcas, resUnidades, resCategorias, resProductos] = await Promise.all([
+            const [resMarcas, resUnidades, resCategorias, resProductos, resVariaciones] = await Promise.all([
                 supabase.from('marcas').select('*').eq('empresa_id', empresaId).order('nombre', { ascending: true }),
                 supabase.from('unidades').select('*').eq('empresa_id', empresaId).order('nombre', { ascending: true }),
                 supabase.from('categorias_productos').select('*').eq('empresa_id', empresaId).order('nombre', { ascending: true }),
                 supabase.from('productos').select('*').eq('empresa_id', empresaId).order('nombre', { ascending: true }),
+                supabase.from('plantillas_variaciones').select('id,nombre,valores,activo').eq('empresa_id', empresaId).order('nombre', { ascending: true }),
             ]);
             if (!resMarcas.error && resMarcas.data) setMarcasDisponibles(resMarcas.data);
             if (!resUnidades.error && resUnidades.data) setUnidadesDisponibles(resUnidades.data);
             if (!resCategorias.error && resCategorias.data) setCategoriasDisponibles(resCategorias.data);
             if (!resProductos.error && resProductos.data) setCatalogoProductos(resProductos.data);
+            if (!resVariaciones.error && resVariaciones.data) setPlantillasVariaciones(resVariaciones.data);
         };
         cargarListas();
     }, [empresaId]);
@@ -101,6 +110,7 @@ const AgregarProducto = ({ onGuardado, onCancelar, productoEditar, ubicacionId }
         setImagenPreview(productoEditar.imagen_url || null);
         setTipoImpuestoPrecio(productoEditar.tipo_impuesto || 'Incluido');
         setTipoProducto(productoEditar.tipo_producto || 'Individual');
+        if (productoEditar.tipo_producto === 'Variable') setAdministraStock(false);
         setComboProductos(productoEditar.combo_productos || []);
 
         const ivaGuardado = productoEditar.iva ? parseInt(productoEditar.iva.replace(/\D/g, '')) || 0 : 10;
@@ -117,8 +127,49 @@ const AgregarProducto = ({ onGuardado, onCancelar, productoEditar, ubicacionId }
             const margenCalculado = margenDesdeVentaConIva(compraSinIva, ventaConIva, ivaGuardado);
             setMargenPct(margenCalculado.toFixed(1));
         }
+        const gruposGuardados = Array.isArray(productoEditar.grupos_precio) ? productoEditar.grupos_precio : [];
+        const gruposBase = gruposGuardados.length > 0 ? gruposGuardados : GRUPOS_PRECIO_INICIALES;
+        setGruposPrecio(gruposBase.map((grupo) => {
+            const margenGrupo = Number(grupo.margen) || 0;
+            const precioGuardado = Number(grupo.precioVenta ?? grupo.precio_venta);
+            const precioCalculado = calcularPrecioVentaConIva(compraSinIva, margenGrupo, ivaGuardado);
+            return {
+                ...grupo,
+                margen: grupo.margen ?? margenGrupo,
+                precioVenta: Number.isFinite(precioGuardado) && precioGuardado > 0 ? precioGuardado : precioCalculado,
+            };
+        }));
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [productoEditar]);
+
+    useEffect(() => {
+        if (!productoEditar || productoEditar.tipo_producto !== 'Variable' || !empresaId) return;
+        let vigente = true;
+        const cargarVariantes = async () => {
+            setCargandoVariantes(true);
+            const { data, error } = await supabase.from('productos').select('id,codigo,precio_venta,atributos_variacion,activo')
+                .eq('empresa_id', empresaId).eq('producto_padre_id', productoEditar.id).order('nombre');
+            if (!vigente) return;
+            if (error) {
+                console.error('No se pudieron leer las variantes del producto:', error.message);
+                setCargandoVariantes(false);
+                return;
+            }
+            const filas = data || [];
+            setVariantesExistentes(filas);
+            const atributos = filas.flatMap((fila) => Array.isArray(fila.atributos_variacion) ? fila.atributos_variacion : []);
+            const ids = [...new Set(atributos.map((a) => a.plantilla_id).filter(Boolean))];
+            const valoresPorPlantilla = Object.fromEntries(ids.map((id) => [id, [...new Set(atributos.filter((a) => a.plantilla_id === id).map((a) => a.valor))]]));
+            setVariacionesSeleccionadas(ids);
+            setValoresVariacionSeleccionados(valoresPorPlantilla);
+            setVariantesEditadas(Object.fromEntries(filas.map((fila) => [JSON.stringify((fila.atributos_variacion || []).map((a) => [a.plantilla_id, a.valor]).sort()), {
+                productoId: fila.id, codigo: fila.codigo || '', precioVenta: String(fila.precio_venta ?? ''),
+            }])));
+            setCargandoVariantes(false);
+        };
+        cargarVariantes();
+        return () => { vigente = false; };
+    }, [productoEditar, empresaId]);
 
     // === RECALCULO EN CADENA (compra → venta), cada campo puede editarse a mano ===
 
@@ -148,6 +199,10 @@ const AgregarProducto = ({ onGuardado, onCancelar, productoEditar, ubicacionId }
     const recalcularVentaDesdeCompra = (compraSinIva, margen) => {
         const ventaConIva = calcularPrecioVentaConIva(compraSinIva, margen, ivaPct);
         setPrecioVentaConIva(ventaConIva ? ventaConIva.toFixed(0) : '');
+        setGruposPrecio((prev) => prev.map((grupo) => ({
+            ...grupo,
+            precioVenta: calcularPrecioVentaConIva(compraSinIva, Number(grupo.margen) || 0, ivaPct),
+        })));
     };
 
     // 4) Escribís "Incluyendo impuesto" (precio de venta) directamente → recalcula el margen %
@@ -168,6 +223,10 @@ const AgregarProducto = ({ onGuardado, onCancelar, productoEditar, ubicacionId }
         setPrecioCompraConIva(base ? precioConIva(base, nuevoIva).toFixed(0) : '');
         const ventaConIva = calcularPrecioVentaConIva(base, margenPct, nuevoIva);
         setPrecioVentaConIva(ventaConIva ? ventaConIva.toFixed(0) : '');
+        setGruposPrecio((prev) => prev.map((grupo) => ({
+            ...grupo,
+            precioVenta: calcularPrecioVentaConIva(base, Number(grupo.margen) || 0, nuevoIva),
+        })));
     };
 
     // --- FUNCIONES Y EFECTO PARA PRODUCTOS COMBO ---
@@ -181,7 +240,7 @@ const AgregarProducto = ({ onGuardado, onCancelar, productoEditar, ubicacionId }
         setFiltradosCombo(
             catalogoProductos.filter((p) => {
                 const esMismoProducto = productoEditar && p.id === productoEditar.id;
-                return !esMismoProducto && (p.nombre.toLowerCase().includes(query) || (p.codigo && p.codigo.toLowerCase().includes(query)));
+                return !esMismoProducto && p.tipo_producto !== 'Variable' && p.activo !== false && (p.nombre.toLowerCase().includes(query) || (p.codigo && p.codigo.toLowerCase().includes(query)));
             }).slice(0, 5)
         );
     };
@@ -228,6 +287,16 @@ const AgregarProducto = ({ onGuardado, onCancelar, productoEditar, ubicacionId }
         );
     };
 
+    const actualizarPrecioGrupo = (index, nuevoPrecio) => {
+        const precio = Number(nuevoPrecio);
+        if (!Number.isFinite(precio) || precio < 0) return;
+        const base = Number(precioCompraSinIva) || 0;
+        const nuevoMargen = base > 0 ? margenDesdeVentaConIva(base, precio, ivaPct) : 0;
+        setGruposPrecio((prev) => prev.map((grupo, i) => i === index
+            ? { ...grupo, precioVenta: precio, margen: nuevoMargen.toFixed(1) }
+            : grupo));
+    };
+
     const eliminarGrupo = (index) => {
         setGruposPrecio((prev) => prev.filter((_, i) => i !== index));
     };
@@ -237,6 +306,26 @@ const AgregarProducto = ({ onGuardado, onCancelar, productoEditar, ubicacionId }
         if (!nombreGrupo) return;
         setGruposPrecio((prev) => [...prev, { nombre: nombreGrupo, margen: 25, precioVenta: 0 }]);
     };
+
+    const dimensionesVariacion = plantillasVariaciones.filter((plantilla) => variacionesSeleccionadas.includes(plantilla.id)).map((plantilla) => ({
+        plantilla,
+        valores: (valoresVariacionSeleccionados[plantilla.id] || []).filter((valor) => (plantilla.valores || []).includes(valor)),
+    }));
+    const variantesExcedenLimite = dimensionesVariacion.reduce((total, dimension) => total * Math.max(1, dimension.valores.length), 1) > 100;
+    let combinacionesVariacion = [];
+    if (dimensionesVariacion.length && dimensionesVariacion.every((dimension) => dimension.valores.length) && !variantesExcedenLimite) {
+        combinacionesVariacion = dimensionesVariacion.reduce((combinaciones, dimension) => combinaciones.flatMap((atributos) => dimension.valores.map((valor) => [
+            ...atributos,
+            { plantilla_id: dimension.plantilla.id, nombre: dimension.plantilla.nombre, valor },
+        ])), [[]]);
+    }
+    const claveCombinacion = (atributos) => JSON.stringify(atributos.map((a) => [a.plantilla_id, a.valor]).sort(([idA, valorA], [idB, valorB]) => String(idA).localeCompare(String(idB)) || String(valorA).localeCompare(String(valorB))));
+    const actualizarVariante = (clave, campo, valor) => setVariantesEditadas((prev) => ({ ...prev, [clave]: { ...prev[clave], [campo]: valor } }));
+    const alternarPlantillaVariacion = (plantilla, marcada) => {
+        setVariacionesSeleccionadas((prev) => marcada ? [...new Set([...prev, plantilla.id])] : prev.filter((id) => id !== plantilla.id));
+        setValoresVariacionSeleccionados((prev) => ({ ...prev, [plantilla.id]: marcada ? [...(plantilla.valores || [])] : [] }));
+    };
+    const plantillasDisponiblesFormulario = plantillasVariaciones.filter((plantilla) => plantilla.activo || variacionesSeleccionadas.includes(plantilla.id));
 
     const [subiendoImagen, setSubiendoImagen] = useState(false);
 
@@ -274,13 +363,32 @@ const AgregarProducto = ({ onGuardado, onCancelar, productoEditar, ubicacionId }
         setDescripcion(''); setAdministraStock(true); setCantidadAlerta(''); setExpiraCantidad('');
         setImagenPreview(null); setPrecioCompraSinIva(''); setPrecioCompraConIva(''); setPrecioVentaConIva(''); setMargenPct(25);
         setComboProductos([]);
+        setVariacionesSeleccionadas([]); setValoresVariacionSeleccionados({}); setVariantesEditadas({}); setVariantesExistentes([]);
+        setTipoProducto('Individual');
         setBusquedaCombo('');
         setFiltradosCombo([]);
+        setGruposPrecio(GRUPOS_PRECIO_INICIALES.map((grupo) => ({ ...grupo, precioVenta: 0 })));
     };
 
     const guardarProducto = async (opcion) => {
         if (!nombre.trim()) return alert('El nombre del producto es obligatorio.');
         if (!unidad) return alert('Seleccioná la unidad.');
+        if (productoEditar?.tipo_producto === 'Variable' && tipoProducto !== 'Variable' && variantesExistentes.length) {
+            return alert('No se puede cambiar el tipo mientras este producto tenga variantes asociadas. Conservá el tipo Variable para proteger sus códigos y stock.');
+        }
+        if (tipoProducto === 'Variable') {
+            if (productoEditar?.tipo_producto === 'Variable' && cargandoVariantes) return alert('Espera a que termine de cargar la lista de variantes.');
+            if (!sku.trim()) return alert('Ingresá un SKU base para generar códigos únicos para cada variante.');
+            if (variantesExcedenLimite) return alert('La combinación supera 100 variantes. Reducí los valores seleccionados.');
+            if (!combinacionesVariacion.length) return alert('Seleccioná al menos una variación activa y uno de sus valores.');
+            if (opcion === 'cargar_stock') return alert('El stock inicial se carga por variante desde el catálogo una vez guardado.');
+            const codigos = combinacionesVariacion.map((atributos) => {
+                const clave = claveCombinacion(atributos);
+                const defecto = `${slugVariacion(sku)}-${slugVariacion(atributos.map((a) => a.valor).join('-'))}`.slice(0, 100);
+                return String(variantesEditadas[clave]?.codigo || defecto).trim().toLowerCase();
+            });
+            if (new Set(codigos).size !== codigos.length) return alert('Cada combinación debe tener un código distinto.');
+        }
 
         if (!productoEditar && empresaId) {
             const { data: limites } = await supabase.rpc('consultar_limites_empresa', { p_empresa_id: empresaId });
@@ -300,7 +408,7 @@ const AgregarProducto = ({ onGuardado, onCancelar, productoEditar, ubicacionId }
                 subcategoria: subcategoria || null,
                 garantia: garantia || null,
                 descripcion: descripcion || null,
-                administra_stock: administraStock,
+                administra_stock: tipoProducto === 'Variable' ? false : administraStock,
                 alerta_stock_bajo: cantidadAlerta ? Number(cantidadAlerta) : 5,
                 expira_cantidad: expiraCantidad ? Number(expiraCantidad) : null,
                 expira_unidad: expiraUnidad,
@@ -311,6 +419,13 @@ const AgregarProducto = ({ onGuardado, onCancelar, productoEditar, ubicacionId }
                 tipo_impuesto: tipoImpuestoPrecio,
                 tipo_producto: tipoProducto,
                 combo_productos: tipoProducto === 'Combo' ? comboProductos : null,
+                producto_padre_id: productoEditar?.producto_padre_id || null,
+                atributos_variacion: productoEditar?.atributos_variacion || [],
+                grupos_precio: gruposPrecio.map((grupo) => ({
+                    nombre: String(grupo.nombre || '').trim(),
+                    margen: Number(grupo.margen) || 0,
+                    precioVenta: Math.round(Number(grupo.precioVenta) || 0),
+                })).filter((grupo) => grupo.nombre),
             };
 
             let productoGuardado = null;
@@ -323,6 +438,61 @@ const AgregarProducto = ({ onGuardado, onCancelar, productoEditar, ubicacionId }
                 const { data, error } = await supabase.from('productos').insert([{ ...datosProducto, stock_actual: 0, empresa_id: empresaId }]).select();
                 if (error) throw error;
                 productoGuardado = data?.[0];
+            }
+
+            if (tipoProducto === 'Variable' && productoGuardado?.id) {
+                const existentesPorClave = new Map(variantesExistentes.map((fila) => [claveCombinacion(fila.atributos_variacion || []), fila]));
+                const variantesPendientes = combinacionesVariacion.map((atributos) => {
+                    const clave = claveCombinacion(atributos);
+                    const edicion = variantesEditadas[clave] || {};
+                    const existente = existentesPorClave.get(clave);
+                    const codigoDefault = `${slugVariacion(sku)}-${slugVariacion(atributos.map((a) => a.valor).join('-'))}`.slice(0, 100);
+                    const precioVariante = Math.max(0, Math.round(Number(edicion.precioVenta ?? precioVentaConIva) || 0));
+                    const precioBase = Number(precioVentaConIva) || 0;
+                    const factor = precioBase > 0 ? precioVariante / precioBase : 1;
+                    const nombreAtributos = atributos.map((a) => `${a.nombre}: ${a.valor}`).join(' / ');
+                    return {
+                        id: existente?.id || edicion.productoId || null,
+                        datos: {
+                            nombre: `${nombre.trim()} (${nombreAtributos})`,
+                            codigo: String(edicion.codigo || codigoDefault).trim(),
+                            unidad,
+                            marca: marca || null,
+                            categoria: categoria || null,
+                            subcategoria: subcategoria || null,
+                            garantia: garantia || null,
+                            descripcion: descripcion || null,
+                            administra_stock: true,
+                            alerta_stock_bajo: cantidadAlerta ? Number(cantidadAlerta) : 5,
+                            expira_cantidad: expiraCantidad ? Number(expiraCantidad) : null,
+                            expira_unidad: expiraUnidad,
+                            imagen_url: imagenPreview || null,
+                            precio_compra: Number(precioCompraConIva) || 0,
+                            precio_venta: precioVariante,
+                            activo: true,
+                            iva: `IVA ${ivaPct}%`,
+                            tipo_impuesto: tipoImpuestoPrecio,
+                            tipo_producto: 'Individual',
+                            combo_productos: null,
+                            grupos_precio: datosProducto.grupos_precio.map((grupo) => ({ ...grupo, precioVenta: Math.round(Number(grupo.precioVenta || 0) * factor) })),
+                            producto_padre_id: productoGuardado.id,
+                            atributos_variacion: atributos,
+                        },
+                    };
+                });
+                const nuevasVariantes = variantesPendientes.filter((fila) => !fila.id).map((fila) => ({ ...fila.datos, stock_actual: 0, empresa_id: empresaId }));
+                if (nuevasVariantes.length) {
+                    const { error: errorNuevas } = await supabase.from('productos').insert(nuevasVariantes);
+                    if (errorNuevas) {
+                        if (!productoEditar) await supabase.from('productos').delete().eq('id', productoGuardado.id).eq('empresa_id', empresaId);
+                        throw errorNuevas;
+                    }
+                }
+                for (const fila of variantesPendientes.filter((variante) => variante.id)) {
+                    const { error: errorVariante } = await supabase.from('productos').update(fila.datos)
+                        .eq('id', fila.id).eq('producto_padre_id', productoGuardado.id).eq('empresa_id', empresaId);
+                    if (errorVariante) throw errorVariante;
+                }
             }
 
             if (opcion === 'cargar_stock') {
@@ -504,7 +674,7 @@ const AgregarProducto = ({ onGuardado, onCancelar, productoEditar, ubicacionId }
                                     <div>
                                         <label className="block text-xs font-bold text-gray-500 mb-1">{t('manageStockQuestion')}</label>
                                         <label className="flex items-center gap-2 border border-gray-300 rounded p-2 w-fit">
-                                            <input type="checkbox" checked={administraStock} onChange={(e) => setAdministraStock(e.target.checked)} />
+                                            <input type="checkbox" checked={tipoProducto === 'Variable' ? false : administraStock} disabled={tipoProducto === 'Variable'} onChange={(e) => setAdministraStock(e.target.checked)} />
                                             <span className="text-sm">{t('yes')}</span>
                                         </label>
                                     </div>
@@ -593,13 +763,41 @@ const AgregarProducto = ({ onGuardado, onCancelar, productoEditar, ubicacionId }
                                     <label className="block text-xs font-bold text-gray-500 mb-1">{t('productType')}:</label>
                                     <select className="w-full border border-gray-300 rounded p-2 text-sm bg-white" value={tipoProducto} onChange={(e) => setTipoProducto(e.target.value)}>
                                         <option>Individual</option>
+                                        <option>Variable</option>
                                         <option>Combo</option>
                                         <option>Servicio</option>
                                     </select>
                                 </div>
                             </div>
 
-                            {tipoProducto === 'Combo' ? (
+                            {tipoProducto === 'Variable' ? (
+                                <section className="mt-2 space-y-4 rounded-xl border border-orange-200 bg-orange-50/40 p-4">
+                                    <div>
+                                        <h4 className="font-bold text-slate-800">Variantes del producto</h4>
+                                        <p className="mt-1 text-xs text-slate-600">Cada combinación tendrá código, precio y stock propios. El stock se carga por variante desde el catálogo.</p>
+                                    </div>
+                                    {!plantillasDisponiblesFormulario.length ? (
+                                        <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">No hay plantillas activas. Primero crea atributos y valores en <b>Productos → Variaciones</b>.</div>
+                                    ) : plantillasDisponiblesFormulario.map((plantilla) => {
+                                        const seleccionada = variacionesSeleccionadas.includes(plantilla.id);
+                                        const valoresMarcados = valoresVariacionSeleccionados[plantilla.id] || [];
+                                        return <div key={plantilla.id} className="rounded-lg border bg-white p-3">
+                                            <label className="flex cursor-pointer items-center gap-2 text-sm font-bold"><input type="checkbox" checked={seleccionada} onChange={(e) => alternarPlantillaVariacion(plantilla, e.target.checked)} />{plantilla.nombre}</label>
+                                            {seleccionada && <div className="mt-3 flex flex-wrap gap-2">{(plantilla.valores || []).map((valor) => <label key={valor} className="flex cursor-pointer items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs"><input type="checkbox" checked={valoresMarcados.includes(valor)} onChange={(e) => setValoresVariacionSeleccionados((prev) => ({ ...prev, [plantilla.id]: e.target.checked ? [...new Set([...valoresMarcados, valor])] : valoresMarcados.filter((v) => v !== valor) }))} />{valor}</label>)}</div>}
+                                        </div>;
+                                    })}
+                                    {variantesExcedenLimite && <p className="text-sm font-semibold text-red-700">La combinación genera más de 100 variantes. Reduce los valores seleccionados.</p>}
+                                    {!!combinacionesVariacion.length && <div className="overflow-x-auto rounded-lg border bg-white">
+                                        <div className="border-b p-3 text-sm font-semibold">{combinacionesVariacion.length} combinaciones generadas</div>
+                                        <table className="w-full min-w-[520px] text-left text-xs"><thead className="bg-slate-50 uppercase text-slate-500"><tr><th className="p-3">Valor</th><th className="p-3">SKU / código</th><th className="p-3">Precio de venta</th></tr></thead><tbody className="divide-y">{combinacionesVariacion.map((atributos) => {
+                                            const clave = claveCombinacion(atributos);
+                                            const codigoDefecto = `${slugVariacion(sku)}-${slugVariacion(atributos.map((a) => a.valor).join('-'))}`.slice(0, 100);
+                                            return <tr key={clave}><td className="p-3 font-semibold">{atributos.map((a) => `${a.nombre}: ${a.valor}`).join(' / ')}</td><td className="p-3"><input value={variantesEditadas[clave]?.codigo ?? codigoDefecto} onChange={(e) => actualizarVariante(clave, 'codigo', e.target.value)} maxLength={100} className="w-full rounded border px-2 py-1.5" aria-label={`Código de ${atributos.map((a) => a.valor).join(' ')}`} /></td><td className="p-3"><input type="number" min="0" value={variantesEditadas[clave]?.precioVenta ?? precioVentaConIva ?? ''} onChange={(e) => actualizarVariante(clave, 'precioVenta', e.target.value)} className="w-32 rounded border px-2 py-1.5" aria-label={`Precio de ${atributos.map((a) => a.valor).join(' ')}`} /></td></tr>;
+                                        })}</tbody></table>
+                                    </div>}
+                                    {productoEditar && productoEditar.tipo_producto === 'Variable' && variantesExistentes.some((fila) => !combinacionesVariacion.some((variante) => claveCombinacion(variante) === claveCombinacion(fila.atributos_variacion || []))) && <p className="text-xs text-amber-800">Las variantes existentes que quites de esta selección se conservan para proteger su stock e historial.</p>}
+                                </section>
+                            ) : tipoProducto === 'Combo' ? (
                                 <div className="flex flex-col gap-4 mt-2">
                                     {/* Buscador de sub-productos */}
                                     <div className="relative">
@@ -812,13 +1010,13 @@ const AgregarProducto = ({ onGuardado, onCancelar, productoEditar, ubicacionId }
                     <div className="flex flex-wrap gap-3 justify-end">
                         {productoEditar ? (
                             <>
-                                <button
+                                {tipoProducto !== 'Variable' && <button
                                     disabled={guardando}
                                     onClick={() => guardarProducto('cargar_stock')}
                                     className="bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-bold px-4 py-2.5 rounded flex items-center gap-2 disabled:opacity-60"
                                 >
                                     📦 Actualizar y editar Stock de apertura
-                                </button>
+                                </button>}
                                 <button
                                     disabled={guardando}
                                     onClick={() => onCancelar && onCancelar()}
@@ -836,13 +1034,13 @@ const AgregarProducto = ({ onGuardado, onCancelar, productoEditar, ubicacionId }
                             </>
                         ) : (
                             <>
-                                <button
+                                {tipoProducto !== 'Variable' && <button
                                     disabled={guardando}
                                     onClick={() => guardarProducto('cargar_stock')}
                                     className="bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-bold px-4 py-2.5 rounded flex items-center gap-2 disabled:opacity-60"
                                 >
                                     📦 Guardar y cargar stock inicial
-                                </button>
+                                </button>}
                                 <button
                                     disabled={guardando}
                                     onClick={() => guardarProducto('agregar_otro')}
@@ -892,14 +1090,14 @@ const AgregarProducto = ({ onGuardado, onCancelar, productoEditar, ubicacionId }
                                     </div>
                                     <div>
                                         <label className="block text-[10px] font-bold text-gray-400 mb-1">Precio venta (IVA inc.)</label>
-                                        <input type="text" readOnly className="w-full border border-gray-200 bg-gray-50 rounded p-1.5 text-sm" value={Math.round(g.precioVenta) || 0} />
+                                        <input type="number" min="0" step="1" className="w-full border border-gray-300 rounded p-1.5 text-sm" value={Math.round(g.precioVenta) || 0} onChange={(e) => actualizarPrecioGrupo(i, e.target.value)} />
                                     </div>
                                 </div>
                             </div>
                         ))}
                     </div>
                     <p className="text-[10px] text-gray-400 mt-3">
-                        Los grupos de precio se calculan en pantalla a partir del precio de compra. Solo el precio del grupo principal se guarda como "Precio de venta" del producto.
+                        Los márgenes y precios de cada grupo se guardan con el producto y se aplican en el POS al seleccionar un cliente de ese grupo.
                     </p>
                 </div>
             </div>

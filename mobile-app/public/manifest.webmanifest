@@ -1,0 +1,15 @@
+{
+  "id": "/",
+  "name": "GDA POS Móvil",
+  "short_name": "GDA POS",
+  "description": "Ventas e inventario de tu negocio, en tiempo real.",
+  "lang": "es",
+  "start_url": "/",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#f4f6f8",
+  "theme_color": "#101c2f",
+  "icons": [
+    { "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}

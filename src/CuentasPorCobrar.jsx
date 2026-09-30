@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { supabase } from './supabaseClient';
 import { useEmpresaInfo } from './utils/useEmpresa';
+import { registrarPagoCliente } from './utils/registrarPagoCliente';
 
 export default function CuentasPorCobrar() {
   const { id: empresaId } = useEmpresaInfo();
@@ -35,25 +36,25 @@ export default function CuentasPorCobrar() {
       return;
     }
 
-    const nuevoSaldo = venta.saldo_pendiente - abono;
-    const nuevoEstado = nuevoSaldo <= 0 ? 'pagado' : 'pendiente';
-    const saldoFinal = nuevoSaldo <= 0 ? 0 : nuevoSaldo;
+    if (abono > Number(venta.saldo_pendiente || 0)) {
+      alert('El abono no puede superar el saldo de esta factura.');
+      return;
+    }
 
-    const { error } = await supabase
-      .from('ventas')
-      .update({ 
-        saldo_pendiente: saldoFinal, 
-        estado: nuevoEstado 
-      })
-      .eq('id', venta.id)
-      .eq('empresa_id', empresaId);
-
-    if (error) {
-      alert('Error al registrar el pago: ' + error.message);
-    } else {
-      alert(nuevoEstado === 'pagado' ? '¡Deuda cancelada!' : 'Pago parcial registrado.');
+    try {
+      await registrarPagoCliente({
+        empresaId,
+        ventaId: venta.id,
+        monto: abono,
+        metodoPago: 'Efectivo',
+        nota: 'Abono registrado desde Cuentas por Cobrar',
+      });
+      const nuevoSaldo = Math.max(0, Number(venta.saldo_pendiente || 0) - abono);
+      alert(nuevoSaldo === 0 ? '¡Deuda cancelada!' : 'Pago parcial registrado y aplicado a la factura.');
       setMontoPago({ ...montoPago, [venta.id]: '' }); // Limpiar input
       cargarDeudas(); // Recargar la tabla
+    } catch (error) {
+      alert('Error al registrar el pago: ' + error.message);
     }
   };
 

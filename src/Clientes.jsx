@@ -8,6 +8,7 @@ import autoTable from 'jspdf-autotable';
 import { generateReceipt } from './utils/generateReceipt';
 import { useNotificacion } from './NotificacionContext';
 import { useLanguage } from './LanguageContext';
+import { registrarPagoCliente } from './utils/registrarPagoCliente';
 
 export default function Clientes() {
   const { t } = useLanguage();
@@ -324,57 +325,21 @@ export default function Clientes() {
     setGuardandoPagoVenta(true);
     try {
       const cajaElegida = cuentaPagoVenta !== 'Ninguna' ? cajasDisponibles.find((c) => c.id === cuentaPagoVenta) : null;
-
-      const { error: errorPago } = await supabase.from('pagos_clientes').insert([{
-        empresa_id: empresaId,
-        cliente_id: clienteLibroMayor?.id || null,
+      const resultado = await registrarPagoCliente({
+        empresaId,
+        clienteId: clienteLibroMayor?.id || null,
         monto,
-        metodo_pago: metodoPagoVenta,
-        nota: notaPagoVenta || null,
+        metodoPago: metodoPagoVenta,
+        nota: notaPagoVenta,
         fecha: fechaPagoVenta ? new Date(fechaPagoVenta).toISOString() : new Date().toISOString(),
-        cuenta_pago: cajaElegida ? cajaElegida.nombre : null,
-        documento_url: documentoPagoVenta || null,
-      }]);
-      if (errorPago) throw errorPago;
-
-      if (cajaElegida) {
-        const { error: errorCaja } = await supabase
-          .from('cuentas_caja')
-          .update({ saldo: Number(cajaElegida.saldo || 0) + monto })
-          .eq('id', cajaElegida.id)
-          .eq('empresa_id', empresaId);
-        if (errorCaja) throw errorCaja;
-      }
-
-      let queryVentasPendientes = supabase
-        .from('ventas')
-        .select('id, total, monto_pagado, saldo_pendiente, estado_pago, fecha')
-        .in('cliente', [clienteLibroMayor?.nombre, clienteLibroMayor?.nombre_empresa].filter(Boolean))
-        .gt('saldo_pendiente', 0)
-        .order('fecha', { ascending: true });
-      if (empresaId) queryVentasPendientes = queryVentasPendientes.eq('empresa_id', empresaId);
-      const { data: ventasPendientes, error: errorVentas } = await queryVentasPendientes;
-      if (errorVentas) throw errorVentas;
-
-      let restante = monto;
-      for (const v of ventasPendientes || []) {
-        if (restante <= 0) break;
-        const saldoActualVenta = Number(v.saldo_pendiente) || 0;
-        const aplicado = Math.min(restante, saldoActualVenta);
-        if (aplicado <= 0) continue;
-        const nuevoSaldo = Math.max(0, saldoActualVenta - aplicado);
-        const nuevoEstado = nuevoSaldo <= 0 ? 'Pagado' : 'Pago Parcial';
-        const { error: errorUpdate } = await supabase
-          .from('ventas')
-          .update({ saldo_pendiente: nuevoSaldo, estado_pago: nuevoEstado })
-          .eq('id', v.id);
-        if (errorUpdate) throw errorUpdate;
-        restante -= aplicado;
-      }
+        cuentaPago: cajaElegida?.nombre || null,
+        cuentaId: cajaElegida?.id || null,
+        documentoUrl: documentoPagoVenta,
+      });
 
       sonidoExito();
-      if (restante > 0) {
-        alert(`Pago registrado. ${formatGs(restante)} quedaron como crédito a favor del cliente.`);
+      if (Number(resultado?.monto_sin_aplicar) > 0) {
+        alert(`Pago registrado y aplicado a las facturas pendientes. ${formatGs(resultado.monto_sin_aplicar)} quedaron como crédito sin aplicar.`);
       }
       setVentaPagar(null);
       await cargarPagos();
@@ -924,67 +889,22 @@ export default function Clientes() {
     if (!monto || monto <= 0) return alert('Ingresá un monto válido.');
     setGuardandoPago(true);
     try {
-      // Buscamos el nombre de la caja elegida (guardamos el nombre en el historial,
-      // como ya hacía este campo, que es de tipo texto)
       const cajaElegida = cuentaPago !== 'Ninguna' ? cajasDisponibles.find((c) => c.id === cuentaPago) : null;
-
-      // 1) Dejamos registrado el pago (esto ya funcionaba y sirve como historial/comprobante)
-      const { error: errorPago } = await supabase.from('pagos_clientes').insert([{
-        empresa_id: empresaId,
-        cliente_id: clientePagar.id,
+      const resultado = await registrarPagoCliente({
+        empresaId,
+        clienteId: clientePagar.id,
         monto,
-        metodo_pago: metodoPago,
-        nota: notaPago || null,
+        metodoPago,
+        nota: notaPago,
         fecha: fechaPago ? new Date(fechaPago).toISOString() : new Date().toISOString(),
-        cuenta_pago: cajaElegida ? cajaElegida.nombre : null,
-        documento_url: documentoPago || null,
-      }]);
-      if (errorPago) throw errorPago;
-
-      // 1.b) Si eligieron una caja/cuenta real, el pago del cliente entra como
-      // dinero a esa caja: le sumamos el monto a su saldo.
-      if (cajaElegida) {
-        const { error: errorCaja } = await supabase
-          .from('cuentas_caja')
-          .update({ saldo: Number(cajaElegida.saldo || 0) + monto })
-          .eq('id', cajaElegida.id)
-          .eq('empresa_id', empresaId);
-        if (errorCaja) throw errorCaja;
-      }
-
-      // 2) APLICAMOS EL PAGO DE VERDAD sobre las ventas a crédito del cliente,
-      // de la más vieja a la más nueva (FIFO), actualizando saldo_pendiente y
-      // estado_pago directamente en la tabla "ventas" de Supabase. Esto ya no
-      // es un cálculo de pantalla: queda guardado en la base de datos.
-      let queryVentasPendientes = supabase
-        .from('ventas')
-        .select('id, total, monto_pagado, saldo_pendiente, estado_pago, fecha')
-        .in('cliente', [clientePagar.nombre, clientePagar.nombre_empresa].filter(Boolean))
-        .gt('saldo_pendiente', 0)
-        .order('fecha', { ascending: true });
-      if (empresaId) queryVentasPendientes = queryVentasPendientes.eq('empresa_id', empresaId);
-      const { data: ventasPendientes, error: errorVentas } = await queryVentasPendientes;
-      if (errorVentas) throw errorVentas;
-
-      let restante = monto;
-      for (const venta of ventasPendientes || []) {
-        if (restante <= 0) break;
-        const saldoActualVenta = Number(venta.saldo_pendiente) || 0;
-        const aplicado = Math.min(restante, saldoActualVenta);
-        if (aplicado <= 0) continue;
-        const nuevoSaldo = Math.max(0, saldoActualVenta - aplicado);
-        const nuevoEstado = nuevoSaldo <= 0 ? 'Pagado' : 'Pago Parcial';
-        const { error: errorUpdate } = await supabase
-          .from('ventas')
-          .update({ saldo_pendiente: nuevoSaldo, estado_pago: nuevoEstado })
-          .eq('id', venta.id);
-        if (errorUpdate) throw errorUpdate;
-        restante -= aplicado;
-      }
+        cuentaPago: cajaElegida?.nombre || null,
+        cuentaId: cajaElegida?.id || null,
+        documentoUrl: documentoPago,
+      });
 
       sonidoExito();
-      if (restante > 0) {
-        alert(`Pago registrado. ${formatGs(restante)} quedaron como crédito a favor del cliente (no había más deuda pendiente a la cual aplicarlos).`);
+      if (Number(resultado?.monto_sin_aplicar) > 0) {
+        alert(`Pago registrado y aplicado a las facturas pendientes. ${formatGs(resultado.monto_sin_aplicar)} quedaron como crédito sin aplicar.`);
       }
       setClientePagar(null);
       await cargarPagos();

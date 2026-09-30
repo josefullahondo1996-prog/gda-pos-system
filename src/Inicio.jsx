@@ -3,6 +3,7 @@ import { supabase } from './supabaseClient';
 import FiltroFecha from './FiltroFecha';
 import { useEmpresaInfo } from './utils/useEmpresa';
 import { useSucursalActiva } from './utils/SucursalContext';
+import { registrarPagoCliente } from './utils/registrarPagoCliente';
 import {
   ShoppingCart, TrendingUp, FileWarning, MinusCircle, Package,
   AlertTriangle, Handshake, LineChart, PieChart as PieChartIcon,
@@ -306,38 +307,26 @@ const Inicio = ({ perfilUsuario, accionInicial }) => {
     }
     setGuardandoPagoInicio(true);
     try {
-      const nuevoSaldo = Math.max(0, deudaPagar.monto - monto);
+      let qCliente = supabase.from('clientes').select('id').eq('nombre', deudaPagar.cliente);
+      if (empresaId) qCliente = qCliente.eq('empresa_id', empresaId);
+      const { data: clienteEncontrado, error: errorCliente } = await qCliente.maybeSingle();
+      if (errorCliente) throw errorCliente;
+
+      const resultado = await registrarPagoCliente({
+        empresaId,
+        clienteId: clienteEncontrado?.id || null,
+        ventaId: deudaPagar.id,
+        monto,
+        metodoPago: metodoPagoInicio,
+        nota: notaPagoInicio,
+        fecha: fechaPagoInicio ? new Date(fechaPagoInicio).toISOString() : new Date().toISOString(),
+        cuentaPago: cuentaPagoInicio !== 'Ninguna' ? cuentaPagoInicio : null,
+        documentoUrl: documentoPagoInicio,
+      });
+      const nuevoSaldo = Math.max(0, Number(deudaPagar.monto || 0) - Number(resultado?.monto_aplicado || 0));
       const nuevoEstado = nuevoSaldo <= 0 ? 'Pagado' : 'Pago Parcial';
-
-      // 1) ESTO ES LO REAL: actualizamos la venta específica en Supabase.
-      const { error: errorUpdate } = await supabase
-        .from('ventas')
-        .update({ saldo_pendiente: nuevoSaldo, estado_pago: nuevoEstado })
-        .eq('id', deudaPagar.id);
-      if (errorUpdate) throw errorUpdate;
-
-      // 2) Buscamos si el cliente existe en tu tabla "clientes" para dejar
-      // también el pago registrado en su historial (Libro Mayor -> Pagos).
-      // Si no lo encuentra (venta antigua sin cliente registrado), no pasa
-      // nada: el paso 1 ya es lo que realmente importa (saldo actualizado).
-      try {
-        let qCliente = supabase.from('clientes').select('id').eq('nombre', deudaPagar.cliente);
-        if (empresaId) qCliente = qCliente.eq('empresa_id', empresaId);
-        const { data: clienteEncontrado } = await qCliente.maybeSingle();
-        if (clienteEncontrado) {
-          await supabase.from('pagos_clientes').insert([{
-            empresa_id: empresaId,
-            cliente_id: clienteEncontrado.id,
-            monto,
-            metodo_pago: metodoPagoInicio,
-            nota: notaPagoInicio || null,
-            fecha: fechaPagoInicio ? new Date(fechaPagoInicio).toISOString() : new Date().toISOString(),
-            cuenta_pago: cuentaPagoInicio !== 'Ninguna' ? cuentaPagoInicio : null,
-            documento_url: documentoPagoInicio || null,
-          }]);
-        }
-      } catch (errorSecundario) {
-        console.warn('No se pudo registrar el pago en el historial del cliente:', errorSecundario.message);
+      if (Number(resultado?.monto_sin_aplicar) > 0) {
+        alert(`Pago aplicado a esta factura. ${formatCurrency(resultado.monto_sin_aplicar)} quedaron como crédito sin aplicar.`);
       }
 
       // Reflejamos el cambio al instante en pantalla, sin esperar una recarga completa.

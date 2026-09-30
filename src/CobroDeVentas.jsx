@@ -41,6 +41,12 @@ const CobroDeVentas = ({ perfilUsuario }) => {
   const [paginaActual, setPaginaActual] = useState(1);
   const [porPagina, setPorPagina] = useState(25);
 
+  const fechaLocal = (valor) => {
+    if (!valor) return new Date(NaN);
+    const soloFecha = String(valor).match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    return soloFecha ? new Date(Number(soloFecha[1]), Number(soloFecha[2]) - 1, Number(soloFecha[3])) : new Date(valor);
+  };
+
   // Cargar datos
   useEffect(() => {
     const cargarDatos = async () => {
@@ -87,18 +93,27 @@ const CobroDeVentas = ({ perfilUsuario }) => {
     }
 
     if (fechaInicio) {
-      const inicio = new Date(fechaInicio);
+      const inicio = fechaLocal(fechaInicio);
       inicio.setHours(0, 0, 0, 0);
-      filtered = filtered.filter((v) => new Date(v.fecha) >= inicio);
+      filtered = filtered.filter((v) => fechaLocal(v.fecha) >= inicio);
     }
 
     if (fechaFin) {
-      const fin = new Date(fechaFin);
+      const fin = fechaLocal(fechaFin);
       fin.setHours(23, 59, 59, 999);
-      filtered = filtered.filter((v) => new Date(v.fecha) <= fin);
+      filtered = filtered.filter((v) => fechaLocal(v.fecha) <= fin);
     }
 
-    return filtered;
+    // Mantener los importes del informe coherentes con el saldo guardado.
+    // La tabla de pagos no enlaza cada movimiento a una venta concreta.
+    return filtered.map((venta) => {
+      const total = Number(venta.total || 0);
+      const saldo = Number(venta.saldo_pendiente);
+      const pagado = venta.saldo_pendiente !== null && venta.saldo_pendiente !== undefined && Number.isFinite(saldo)
+        ? Math.max(0, Math.min(total, total - saldo))
+        : Number(venta.monto_pagado || 0);
+      return { ...venta, monto_pagado: pagado };
+    });
   }, [ventas, filtroEstado, filtroMetodoPago, filtroCliente, fechaInicio, fechaFin]);
 
   // Calcular métricas
@@ -164,7 +179,7 @@ const CobroDeVentas = ({ perfilUsuario }) => {
   const datosEvoluccion = useMemo(() => {
     const agrupado = {};
     ventasFiltradas.forEach((v) => {
-      const fecha = new Date(v.fecha).toLocaleDateString('es-PY', { day: '2-digit', month: 'short' });
+      const fecha = fechaLocal(v.fecha).toLocaleDateString('es-PY', { day: '2-digit', month: 'short' });
       if (!agrupado[fecha]) {
         agrupado[fecha] = { fecha, cobrado: 0, pendiente: 0, total: 0 };
       }
@@ -215,7 +230,7 @@ const CobroDeVentas = ({ perfilUsuario }) => {
     const filas = datosPaginados.map((d) => {
       if (tabActivo === 'Estado actual') {
         return [
-          new Date(d.fecha).toLocaleDateString('es-PY'),
+          fechaLocal(d.fecha).toLocaleDateString('es-PY'),
           d.cliente || 'N/A',
           Number(d.total).toLocaleString('es-PY'),
           Number(d.monto_pagado).toLocaleString('es-PY'),
@@ -261,7 +276,7 @@ const CobroDeVentas = ({ perfilUsuario }) => {
     const filas = datosPaginados.map((d) => {
       if (tabActivo === 'Estado actual') {
         return [
-          new Date(d.fecha).toLocaleDateString('es-PY'),
+          fechaLocal(d.fecha).toLocaleDateString('es-PY'),
           d.cliente || 'N/A',
           Number(d.total).toLocaleString('es-PY'),
           Number(d.monto_pagado).toLocaleString('es-PY'),
@@ -313,7 +328,7 @@ const CobroDeVentas = ({ perfilUsuario }) => {
     const filas = datosPaginados.map((d) => {
       if (tabActivo === 'Estado actual') {
         return [
-          new Date(d.fecha).toLocaleDateString('es-PY'),
+          fechaLocal(d.fecha).toLocaleDateString('es-PY'),
           d.cliente || 'N/A',
           Number(d.total).toLocaleString('es-PY'),
           Number(d.monto_pagado).toLocaleString('es-PY'),
@@ -373,6 +388,7 @@ const CobroDeVentas = ({ perfilUsuario }) => {
         </h1>
         <p className="text-sm text-gray-500 mt-1">Controla tus ventas, gastos y cierre de cajas</p>
       </div>
+      <p className="mb-4 rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">El importe cobrado por venta se calcula como total menos saldo pendiente. La base no enlaza cada movimiento de pago con su factura, así que el método mostrado corresponde al encabezado de la venta y no permite reconstruir pagos individuales.</p>
 
       {/* Filtros */}
       <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-200 mb-6">
@@ -659,7 +675,7 @@ const CobroDeVentas = ({ perfilUsuario }) => {
                     <tr key={idx} className="border-b border-gray-100 hover:bg-gray-50">
                       {tabActivo === 'Estado actual' ? (
                         <>
-                          <td className="px-4 py-3">{new Date(item.fecha).toLocaleDateString('es-PY')}</td>
+          <td className="px-4 py-3">{fechaLocal(item.fecha).toLocaleDateString('es-PY')}</td>
                           <td className="px-4 py-3 font-bold text-gray-800">{item.cliente || 'N/A'}</td>
                           <td className="px-4 py-3 text-right">{formatGs(item.total)}</td>
                           <td className="px-4 py-3 text-right text-green-600 font-bold">{formatGs(item.monto_pagado)}</td>

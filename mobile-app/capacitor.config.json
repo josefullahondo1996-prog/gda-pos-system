@@ -1,0 +1,12 @@
+{
+  "appId": "com.gdapossystem.mobile",
+  "appName": "GDA POS Móvil",
+  "webDir": "dist",
+  "backgroundColor": "#f4f6f8",
+  "loggingBehavior": "none",
+  "android": {
+    "path": "android",
+    "backgroundColor": "#f4f6f8",
+    "allowMixedContent": false
+  }
+}

@@ -210,7 +210,7 @@ export default function GestorCompras({ vistaInicial = 'lista' }) {
       notificar.error(`No se pudieron cargar los productos: ${error.message}`);
       return;
     }
-    setProductos(data || []);
+    setProductos((data || []).filter((producto) => producto.tipo_producto !== 'Variable' && producto.activo !== false));
   };
 
   const cargarTodasLasCompras = async () => {

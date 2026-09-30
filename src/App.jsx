@@ -112,6 +112,13 @@ function App() {
         setCargando(true);
         setSession(session);
         await cargarPerfil(session);
+        if (_event === 'SIGNED_IN' && session?.user?.id) {
+          setTimeout(() => {
+            supabase.rpc('registrar_inicio_sesion_auditoria').then(({ error }) => {
+              if (error) console.warn('No se pudo guardar el evento de inicio de sesión:', error.message);
+            });
+          }, 0);
+        }
         setCargando(false);
       }
     );

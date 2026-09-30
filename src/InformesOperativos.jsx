@@ -16,7 +16,11 @@ const ESTADOS = [
 ];
 
 const moneda = (valor) => `Gs ${Math.round(Number(valor) || 0).toLocaleString('es-PY')}`;
-const fechaCorta = (fecha) => fecha ? new Date(fecha).toLocaleDateString('es-PY') : '—';
+const fechaCorta = (fecha) => {
+  if (!fecha) return '—';
+  const soloDia = String(fecha).match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  return (soloDia ? new Date(Number(soloDia[1]), Number(soloDia[2]) - 1, Number(soloDia[3])) : new Date(fecha)).toLocaleDateString('es-PY');
+};
 const inicioMesISO = () => {
   const fecha = new Date();
   return new Date(fecha.getFullYear(), fecha.getMonth(), 1).toISOString().slice(0, 10);
@@ -56,10 +60,10 @@ function Tabla({ columnas, filas, vacio }) {
   return <div className="overflow-x-auto"><table className="w-full min-w-[720px] text-left text-sm"><thead className="bg-slate-50 text-[11px] font-bold uppercase tracking-wide text-slate-500"><tr>{columnas.map((columna) => <th key={columna.titulo} className={`px-4 py-3 ${columna.derecha ? 'text-right' : ''}`}>{columna.titulo}</th>)}</tr></thead><tbody className="divide-y divide-slate-100">{filas.length ? filas.map((fila, indice) => <tr key={fila.id || `${fila.ref || fila.nombre || fila.fecha || 'fila'}-${indice}`} className="hover:bg-slate-50/70">{columnas.map((columna) => <td key={columna.titulo} className={`px-4 py-3 ${columna.derecha ? 'text-right font-semibold tabular-nums' : 'text-slate-700'}`}>{columna.render ? columna.render(fila) : (fila[columna.campo] ?? '—')}</td>)}</tr>) : <tr><td colSpan={columnas.length} className="px-4 py-12 text-center text-sm text-slate-400">{vacio}</td></tr>}</tbody></table></div>;
 }
 
-export default function InformesOperativos() {
+export default function InformesOperativos({ initialReport = 'stock' }) {
   const { id: empresaId } = useEmpresaInfo();
   const { sucursalActiva, ubicaciones, usuarioVeTodas } = useSucursalActiva();
-  const [reporte, setReporte] = useState('stock');
+  const [reporte, setReporte] = useState(initialReport);
   const [datos, setDatos] = useState({});
   const [errores, setErrores] = useState({});
   const [cargando, setCargando] = useState(false);
@@ -68,6 +72,8 @@ export default function InformesOperativos() {
   const [busqueda, setBusqueda] = useState('');
   const [umbralStock, setUmbralStock] = useState('5');
   const [mostrarSoloBajo, setMostrarSoloBajo] = useState(false);
+
+  useEffect(() => { setReporte(initialReport); }, [initialReport]);
 
   const cargar = async (tipo = reporte) => {
     if (!empresaId) return;
@@ -167,7 +173,7 @@ export default function InformesOperativos() {
         ? detallesVentas.filter((detalle) => String(detalle.venta_id) === String(documento.id))
         : detallesCompras.filter((detalle) => String(detalle.compra_id) === String(documento.id));
       const impuesto = detalles.reduce((suma, detalle) => suma + Number(detalle.impuesto || 0), 0);
-      return { id: `${documento.clase}-${documento.id}`, clase: documento.clase, fecha: documento.fecha, ref: documento.numero_factura || documento.nro_factura || documento.id, tercero: documento.cliente || documento.proveedor_nombre || documento.proveedor || '—', base: Number(documento.total || 0) - impuesto, impuesto, total: Number(documento.total || 0) };
+      return { id: `${documento.clase}-${documento.id}`, clase: documento.clase, fecha: documento.fecha, ref: documento.numero_factura || documento.nro_factura || documento.id, tercero: documento.cliente || documento.proveedor_nombre || documento.proveedor || '—', impuesto, total: Number(documento.total || 0) };
     }).filter((fila) => !termino || `${fila.clase} ${fila.tercero} ${fila.ref}`.toLocaleLowerCase('es').includes(termino)).sort((a, b) => new Date(b.fecha) - new Date(a.fecha));
   }, [conjuntos.ventas, conjuntos.compras, conjuntos.detalle_ventas, conjuntos.detalle_compras, desde, hasta, sucursalActiva, termino]);
 
@@ -215,7 +221,7 @@ export default function InformesOperativos() {
     if (reporte === 'stock') descargarCSV('inventario-stock', ['Código', 'Producto', 'Stock', 'Costo unitario', 'Precio de venta', 'Valor al costo', 'Valor de venta'], filasStock.map((fila) => [fila.codigo, fila.nombre, fila.stock_reporte, fila.precio_compra, fila.precio_venta, fila.valor_costo, fila.valor_venta]));
     if (reporte === 'deudas') descargarCSV('deudas', ['Tipo', 'Fecha', 'Referencia', 'Tercero', 'Total', 'Saldo'], filasDeuda.map((fila) => [fila.tipo, fechaCorta(fila.fecha), fila.ref, fila.tercero, fila.total, fila.saldo]));
     if (reporte === 'gastos') descargarCSV('egresos', ['Fecha', 'Descripción', 'Categoría', 'Proveedor', 'Método', 'Cuenta', 'Monto'], filasGastos.map((fila) => [fechaCorta(fila.fecha), fila.descripcion, fila.categoria_reporte, fila.proveedor, fila.metodo_pago, fila.cuenta_pago, fila.monto_reporte]));
-    if (reporte === 'iva') descargarCSV('iva-registrado', ['Tipo', 'Fecha', 'Referencia', 'Tercero', 'Base estimada', 'Impuesto registrado', 'Total'], filasIVA.map((fila) => [fila.clase, fechaCorta(fila.fecha), fila.ref, fila.tercero, fila.base, fila.impuesto, fila.total]));
+    if (reporte === 'iva') descargarCSV('iva-registrado', ['Tipo', 'Fecha', 'Referencia', 'Tercero', 'Impuesto registrado en líneas', 'Total comprobante'], filasIVA.map((fila) => [fila.clase, fechaCorta(fila.fecha), fila.ref, fila.tercero, fila.impuesto, fila.total]));
     if (reporte === 'vencimientos') descargarCSV('vencimientos-productos', ['Código', 'Producto', 'Vencimiento', 'Días restantes', 'Stock', 'Estado'], filasVencimientos.map((fila) => [fila.codigo, fila.nombre, fila.fecha_vencimiento, fila.dias_para_vencer, fila.stock_vencimiento, fila.estado_vencimiento]));
     if (reporte === 'ajustes') descargarCSV('ajustes-stock', ['Fecha', 'Sucursal', 'Motivo', 'Producto', 'Stock anterior', 'Stock contado', 'Diferencia'], filasAjustes.map((fila) => [fechaCorta(fila.fecha), fila.ubicacion, fila.motivo, fila.producto, fila.stock_anterior, fila.stock_nuevo, fila.diferencia]));
   };
@@ -238,7 +244,7 @@ export default function InformesOperativos() {
       </section>
 
       {error && <div role="alert" className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">{error}</div>}
-      {reporte === 'iva' && <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm text-blue-800">El impuesto se suma desde las líneas existentes de ventas y compras. Revisá el resultado con tu configuración fiscal antes de usarlo para una declaración.</div>}
+      {reporte === 'iva' && <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">Solo se muestran impuestos guardados explícitamente en las líneas. El sistema aún no conserva de forma consistente tasas, exenciones ni el IVA total de compras; este resumen no sirve como declaración fiscal.</div>}
 
       {reporte === 'stock' && <><div className="grid gap-3 sm:grid-cols-3"><Tarjeta titulo="Productos" valor={filasStock.length.toLocaleString('es-PY')} /><Tarjeta titulo="Stock bajo" valor={filasStock.filter((fila) => fila.bajo).length.toLocaleString('es-PY')} nota={`Umbral configurado: ${Number(umbralStock) || 0}`} /><Tarjeta titulo="Valor del stock al costo" valor={moneda(suma(filasStock, 'valor_costo'))} nota={sucursalActiva ? `${filasStock.filter((fila) => fila.stock_reporte === null).length} productos sin desglose de stock por sucursal` : undefined} /></div><section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm"><Tabla columnas={[{ titulo: 'Código', campo: 'codigo' }, { titulo: 'Producto', campo: 'nombre' }, { titulo: 'Stock', derecha: true, render: (fila) => <span className={fila.bajo ? 'font-bold text-amber-700' : ''}>{fila.stock_reporte === null ? 'Sin desglose' : Number(fila.stock_reporte).toLocaleString('es-PY')}</span> }, { titulo: 'Costo unitario', derecha: true, render: (fila) => moneda(fila.precio_compra) }, { titulo: 'Precio de venta', derecha: true, render: (fila) => moneda(fila.precio_venta) }, { titulo: 'Estado', render: (fila) => fila.stock_reporte === null ? <span className="text-xs font-bold text-slate-500">Sin desglose</span> : fila.bajo ? <span className="rounded-full bg-amber-50 px-2 py-1 text-xs font-bold text-amber-700">Bajo</span> : <span className="text-xs font-bold text-emerald-700">Disponible</span> }]} filas={filasStock} vacio="No hay productos que coincidan con los filtros." /></section></>}
 
@@ -246,7 +252,7 @@ export default function InformesOperativos() {
 
       {reporte === 'gastos' && <><div className="grid gap-3 sm:grid-cols-3"><Tarjeta titulo="Comprobantes" valor={filasGastos.length.toLocaleString('es-PY')} /><Tarjeta titulo="Total egresos" valor={moneda(suma(filasGastos, 'monto_reporte'))} /><Tarjeta titulo="Categorías" valor={new Set(filasGastos.map((fila) => fila.categoria_reporte)).size.toLocaleString('es-PY')} /></div><section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm"><Tabla columnas={[{ titulo: 'Fecha', render: (fila) => fechaCorta(fila.fecha) }, { titulo: 'Descripción', campo: 'descripcion' }, { titulo: 'Categoría', campo: 'categoria_reporte' }, { titulo: 'Proveedor', campo: 'proveedor' }, { titulo: 'Método de pago', campo: 'metodo_pago' }, { titulo: 'Cuenta', campo: 'cuenta_pago' }, { titulo: 'Monto', derecha: true, render: (fila) => moneda(fila.monto_reporte) }]} filas={filasGastos} vacio="No hay egresos para este período." /></section></>}
 
-      {reporte === 'iva' && <><div className="grid gap-3 sm:grid-cols-3"><Tarjeta titulo="Documentos" valor={filasIVA.length.toLocaleString('es-PY')} /><Tarjeta titulo="Impuesto registrado" valor={moneda(suma(filasIVA, 'impuesto'))} /><Tarjeta titulo="Total documentos" valor={moneda(suma(filasIVA, 'total'))} /></div><section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm"><Tabla columnas={[{ titulo: 'Tipo', campo: 'clase' }, { titulo: 'Fecha', render: (fila) => fechaCorta(fila.fecha) }, { titulo: 'Referencia', campo: 'ref' }, { titulo: 'Cliente / proveedor', campo: 'tercero' }, { titulo: 'Base estimada', derecha: true, render: (fila) => moneda(fila.base) }, { titulo: 'IVA en líneas', derecha: true, render: (fila) => moneda(fila.impuesto) }, { titulo: 'Total', derecha: true, render: (fila) => moneda(fila.total) }]} filas={filasIVA} vacio="No hay documentos con líneas impositivas para este período." /></section></>}
+      {reporte === 'iva' && <><div className="grid gap-3 sm:grid-cols-3"><Tarjeta titulo="Documentos" valor={filasIVA.length.toLocaleString('es-PY')} /><Tarjeta titulo="IVA ventas registrado en líneas" valor={moneda(suma(filasIVA.filter((fila) => fila.clase === 'Venta'), 'impuesto'))} /><Tarjeta titulo="IVA compras registrado en líneas" valor={moneda(suma(filasIVA.filter((fila) => fila.clase === 'Compra'), 'impuesto'))} /></div><section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm"><Tabla columnas={[{ titulo: 'Tipo', campo: 'clase' }, { titulo: 'Fecha', render: (fila) => fechaCorta(fila.fecha) }, { titulo: 'Referencia', campo: 'ref' }, { titulo: 'Cliente / proveedor', campo: 'tercero' }, { titulo: 'Impuesto registrado en líneas', derecha: true, render: (fila) => moneda(fila.impuesto) }, { titulo: 'Total comprobante', derecha: true, render: (fila) => moneda(fila.total) }]} filas={filasIVA} vacio="No hay documentos para este período." /></section></>}
 
       {reporte === 'vencimientos' && <><div className="grid gap-3 sm:grid-cols-3"><Tarjeta titulo="Productos con vencimiento" valor={filasVencimientos.length.toLocaleString('es-PY')} /><Tarjeta titulo="Vencidos" valor={filasVencimientos.filter((fila) => fila.estado_vencimiento === 'Vencido').length.toLocaleString('es-PY')} nota="Revisá el stock y las reglas de venta." /><Tarjeta titulo="Vencen en 30 días" valor={filasVencimientos.filter((fila) => fila.estado_vencimiento === 'Próximo a vencer').length.toLocaleString('es-PY')} /></div><section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm"><Tabla columnas={[{ titulo: 'Código', campo: 'codigo' }, { titulo: 'Producto', campo: 'nombre' }, { titulo: 'Fecha de vencimiento', render: (fila) => fechaCorta(fila.fecha_vencimiento) }, { titulo: 'Días', derecha: true, render: (fila) => fila.dias_para_vencer < 0 ? `${Math.abs(fila.dias_para_vencer)} vencido(s)` : fila.dias_para_vencer }, { titulo: 'Stock', derecha: true, render: (fila) => fila.stock_vencimiento === null ? 'Sin desglose' : numero(fila.stock_vencimiento) }, { titulo: 'Estado', render: (fila) => <span className={`rounded-full px-2 py-1 text-xs font-bold ${fila.estado_vencimiento === 'Vencido' ? 'bg-red-50 text-red-700' : fila.estado_vencimiento === 'Próximo a vencer' ? 'bg-amber-50 text-amber-700' : 'bg-emerald-50 text-emerald-700'}`}>{fila.estado_vencimiento}</span> }]} filas={filasVencimientos} vacio="No hay productos con fecha de vencimiento registrada." /></section></>}
 

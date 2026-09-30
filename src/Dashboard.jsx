@@ -52,8 +52,16 @@ const PanelDesarrollador = lazy(() => import('./PanelDesarrollador'));
 const VentasPorPersonal = lazy(() => import('./VentasPorPersonal'));
 const Pedidos = lazy(() => import('./Pedidos'));
 const InformesOperativos = lazy(() => import('./InformesOperativos'));
+const InformesMicdepos = lazy(() => import('./InformesMicdepos'));
 const TransferenciasStock = lazy(() => import('./TransferenciasStock'));
 const AjustesStock = lazy(() => import('./AjustesStock'));
+const ImportarDatos = lazy(() => import('./ImportarDatos'));
+const Fabricacion = lazy(() => import('./Fabricacion'));
+const PlantillasNotificacion = lazy(() => import('./PlantillasNotificacion'));
+const VariacionesProductos = lazy(() => import('./VariacionesProductos'));
+const Cotizaciones = lazy(() => import('./Cotizaciones'));
+const FlujoFondos = lazy(() => import('./FlujoFondos'));
+const Envios = lazy(() => import('./Envios'));
 
 export default function Dashboard({ session, perfilUsuario, initialView = 'inicio' }) {
   const { t, locale } = useLanguage();
@@ -85,15 +93,32 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
       caja_registradora: 'informes', ganancias_perdidas: 'informes',
       ventas_por_producto: 'informes', compras_por_producto: 'informes', cobro_de_ventas: 'informes', vendedores_comisiones: 'informes', ventas_por_personal: 'informes', usuarios: 'usuarios', roles: 'roles',
       pedidos: 'ventas_pos',
+      cotizaciones: 'ventas_pos',
+      envios: 'ventas_pos',
+      flujo_fondos: 'informes',
       informes_operativos: 'informes',
+      informes_micdepos: 'informes',
+      plantillas_notificacion: 'configuraciones',
+      variaciones_productos: 'productos',
       transferencias_stock: 'productos',
       ajustes_stock: 'productos',
+      importar_productos: 'productos',
+      importar_contactos: 'clientes_proveedores',
+      fabricacion: 'productos',
     };
+    if (vista === 'importar_productos' && !esAdmin && permisosRol) return permisosRol.productos?.['Agregar producto'] === true;
+    if (vista === 'importar_contactos' && !esAdmin && permisosRol) {
+      return permisosRol.clientes_proveedores?.['Agregar cliente'] === true
+        || permisosRol.clientes_proveedores?.['Agregar proveedor'] === true;
+    }
     const categoria = categoriaPorVista[vista];
     if (vista === 'transferencias_stock' && !esAdmin && permisosRol?.productos) {
       return permisosRol.productos['Transferir stock'] === true;
     }
     if (vista === 'ajustes_stock' && !esAdmin && permisosRol?.productos) {
+      return permisosRol.productos['Ajustar stock'] === true;
+    }
+    if (vista === 'fabricacion' && !esAdmin && permisosRol?.productos) {
       return permisosRol.productos['Ajustar stock'] === true;
     }
     return !categoria || tieneCategoria(categoria);
@@ -224,6 +249,18 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
       setVistaActiva('stock_history');
       return;
     }
+    if (path.startsWith('/fabricacion')) {
+      setVistaActiva('fabricacion');
+      setMenuExpandido('fabricacion');
+      return;
+    }
+    if (path.startsWith('/informes/')) {
+      const informePath = path.split('/')[2];
+      const informesOperativos = ['stock', 'deudas', 'gastos', 'iva', 'vencimientos', 'ajustes'];
+      setVistaActiva(informesOperativos.includes(informePath) ? 'informes_operativos' : 'informes_micdepos');
+      setMenuExpandido('informes');
+      return;
+    }
 
     switch (path) {
       case '/':
@@ -300,6 +337,26 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
       case '/ajustes-stock':
         setVistaActiva('ajustes_stock');
         break;
+      case '/importar-productos':
+        setVistaActiva('importar_productos');
+        break;
+      case '/importar-contactos':
+        setVistaActiva('importar_contactos');
+        break;
+      case '/plantillas-notificacion':
+        setVistaActiva('plantillas_notificacion');
+        break;
+      case '/presupuestos':
+        setVistaActiva('cotizaciones');
+        break;
+      case '/envios':
+      case '/shipments':
+      case '/entregas':
+        setVistaActiva('envios');
+        break;
+      case '/variaciones-productos':
+        setVistaActiva('variaciones_productos');
+        break;
       case '/agregar_producto':
         setVistaActiva('agregar_producto');
         break;
@@ -359,6 +416,10 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
         break;
       case '/informes-operativos':
         setVistaActiva('informes_operativos');
+        break;
+      case '/flujo-fondos':
+      case '/flujo_fondos':
+        setVistaActiva('flujo_fondos');
         break;
       default:
         setVistaActiva(initialView);
@@ -528,13 +589,40 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
         return <Pedidos />;
 
       case 'informes_operativos':
-        return <InformesOperativos />;
+        return <InformesOperativos key={location.pathname} initialReport={location.pathname.startsWith('/informes/') ? location.pathname.split('/')[2] : 'stock'} />;
+
+      case 'informes_micdepos':
+        return <InformesMicdepos key={location.pathname} initialReport={location.pathname.split('/')[2] || 'compras-ventas'} />;
 
       case 'transferencias_stock':
         return <TransferenciasStock />;
 
       case 'ajustes_stock':
         return <AjustesStock />;
+
+      case 'importar_productos':
+        return <ImportarDatos tipo="productos" />;
+
+      case 'importar_contactos':
+        return <ImportarDatos tipo="contactos" />;
+
+      case 'fabricacion':
+        return <Fabricacion key={refreshKey} initialTab={location.pathname.split('/')[2] || 'recetas'} perfilUsuario={perfilUsuario} />;
+
+      case 'plantillas_notificacion':
+        return <PlantillasNotificacion key={refreshKey} />;
+
+      case 'variaciones_productos':
+        return <VariacionesProductos key={refreshKey} />;
+
+      case 'cotizaciones':
+        return <Cotizaciones key={refreshKey} />;
+
+      case 'envios':
+        return <Envios key={refreshKey} />;
+
+      case 'flujo_fondos':
+        return <FlujoFondos key={refreshKey} />;
 
       default:
         return <GraficosDashboard />;
@@ -616,7 +704,7 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
               <button
                 key={ruta}
                 type="button"
-                onClick={() => irA(etiqueta === 'Vender' ? 'pos' : etiqueta === 'Productos' ? 'catalogo' : etiqueta === 'Clientes' ? 'clientes' : etiqueta === 'Caja' ? 'caja_registradora' : etiqueta === 'Caja / Banco' ? 'cajas' : etiqueta === 'Gastos' ? 'gastos' : etiqueta === 'Compras' ? 'compras' : etiqueta === 'Reportes' ? 'ganancias_perdidas' : etiqueta === 'Informe de cajas' ? 'informe_caja_pago' : etiqueta === 'Devoluciones' ? 'devoluciones_compra' : etiqueta === 'Pedidos pendientes' ? 'cobros' : etiqueta === 'Histórico de ventas' ? 'todas_ventas' : 'inicio', ruta)}
+                onClick={() => irA(etiqueta === 'Vender' ? 'pos' : etiqueta === 'Productos' ? 'catalogo' : etiqueta === 'Clientes' ? 'clientes' : etiqueta === 'Caja' ? 'caja_registradora' : etiqueta === 'Caja / Banco' ? 'cajas' : etiqueta === 'Gastos' ? 'gastos' : etiqueta === 'Compras' ? 'compras' : etiqueta === 'Reportes' ? 'ganancias_perdidas' : etiqueta === 'Informe de cajas' ? 'informe_caja_pago' : etiqueta === 'Devoluciones' ? 'devoluciones_compra' : etiqueta === 'Pedidos pendientes' ? 'cobros' : etiqueta === 'Histórico de ventas' ? 'todas_ventas' : etiqueta === 'Presupuestos' ? 'cotizaciones' : etiqueta === 'Flujo de fondos' ? 'flujo_fondos' : etiqueta === 'Mis entregas' ? 'envios' : 'inicio', ruta)}
                 className="w-full min-h-[74px] px-8 flex items-center gap-6 text-left text-[21px] tracking-wide text-[#202020] hover:bg-[#fff5f0] active:bg-[#ffe9df]"
               >
                 <Icono size={32} strokeWidth={2.1} className="shrink-0 text-[#161616]" />
@@ -729,6 +817,7 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
                     <Link to="/proveedores" onClick={() => irA('proveedores', '/proveedores')} className={estiloSubItem('proveedores')}>🠖 {t('suppliers')}</Link>
                     <Link to="/clientes" onClick={() => irA('clientes', '/clientes')} className={estiloSubItem('clientes')}>🠖 {t('customers')}</Link>
                     <Link to="/grupos_clientes" onClick={() => irA('grupos_clientes', '/grupos_clientes')} className={estiloSubItem('grupos_clientes')}>🠖 {t('customerGroups')}</Link>
+                    {(esAdmin || !permisosRol || permisosRol.clientes_proveedores?.['Agregar cliente'] === true || permisosRol.clientes_proveedores?.['Agregar proveedor'] === true) && <Link to="/importar-contactos" onClick={() => irA('importar_contactos', '/importar-contactos')} className={estiloSubItem('importar_contactos')}>🠖 Importar contactos</Link>}
                   </div>
                 )}
               </>
@@ -749,11 +838,38 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
                   <div className="bg-transparent py-1 flex flex-col border-l border-slate-200 ml-5">
                     <Link to="/catalogo" onClick={() => irA('catalogo', '/catalogo')} className={estiloSubItem('catalogo')}>🠖 {t('productList')}</Link>
                     <Link to="/agregar_producto" onClick={() => irA('agregar_producto', '/agregar_producto')} className={estiloSubItem('agregar_producto')}>🠖 {t('addProduct')}</Link>
+                    <Link to="/variaciones-productos" onClick={() => irA('variaciones_productos', '/variaciones-productos')} className={estiloSubItem('variaciones_productos')}>🠖 Variaciones</Link>
                     <Link to="/marcas" onClick={() => irA('marcas', '/marcas')} className={estiloSubItem('marcas')}>🠖 {t('brands')}</Link>
                     <Link to="/categorias" onClick={() => irA('categorias', '/categorias')} className={estiloSubItem('categorias')}>🠖 {t('categories')}</Link>
                     <Link to="/unidades" onClick={() => irA('unidades', '/unidades')} className={estiloSubItem('unidades')}>🠖 {t('units')}</Link>
+                    {(esAdmin || !permisosRol || permisosRol.productos?.['Agregar producto'] === true) && <Link to="/importar-productos" onClick={() => irA('importar_productos', '/importar-productos')} className={estiloSubItem('importar_productos')}>🠖 Importar productos</Link>}
                     {(esAdmin || !permisosRol || permisosRol.productos?.['Transferir stock'] === true) && <Link to="/transferencias-stock" onClick={() => irA('transferencias_stock', '/transferencias-stock')} className={estiloSubItem('transferencias_stock')}>🠖 Transferencias de stock</Link>}
                     {(esAdmin || !permisosRol || permisosRol.productos?.['Ajustar stock'] === true) && <Link to="/ajustes-stock" onClick={() => irA('ajustes_stock', '/ajustes-stock')} className={estiloSubItem('ajustes_stock')}>🠖 Ajustes de stock</Link>}
+                  </div>
+                )}
+              </>
+            )}
+
+            {/* MENÚ: FABRICACIÓN, separado de Productos como en Micdepos */}
+            {(esAdmin || !permisosRol || permisosRol.productos?.['Ajustar stock'] === true) && (
+              <>
+                <button onClick={() => toggleMenu('fabricacion')} className={estiloBotonDesplegable('fabricacion')} title="Fabricación">
+                  <div className="flex items-center gap-3"><Factory size={18} strokeWidth={2} /> {!sidebarColapsado && 'Fabricación'}</div>
+                  {!sidebarColapsado && <span className={`inline-flex items-center justify-center w-5 h-5 rounded-md text-[10px] transition-colors ${menuExpandido === 'fabricacion' ? 'bg-[#1f2937] text-[#f59e0b]' : 'text-slate-500 hover:bg-[#1f2937] hover:text-[#f59e0b]'}`}>{menuExpandido === 'fabricacion' ? '▼' : '◀'}</span>}
+                </button>
+                {menuExpandido === 'fabricacion' && !sidebarColapsado && (
+                  <div className="bg-transparent py-1 flex flex-col border-l border-slate-200 ml-5">
+                    <Link to="/fabricacion/recetas" onClick={() => irA('fabricacion', '/fabricacion/recetas')} className={estiloSubItem('fabricacion')}>🠖 Recetas</Link>
+                    <Link to="/fabricacion/importar" onClick={() => irA('fabricacion', '/fabricacion/importar')} className={estiloSubItem('fabricacion')}>🠖 Importar recetas</Link>
+                    <Link to="/fabricacion/produccion" onClick={() => irA('fabricacion', '/fabricacion/produccion')} className={estiloSubItem('fabricacion')}>🠖 Producción</Link>
+                    <Link to="/fabricacion/ordenes" onClick={() => irA('fabricacion', '/fabricacion/ordenes')} className={estiloSubItem('fabricacion')}>🠖 Órdenes de producción</Link>
+                    <Link to="/fabricacion/informe" onClick={() => irA('fabricacion', '/fabricacion/informe')} className={estiloSubItem('fabricacion')}>🠖 Informe de fabricación</Link>
+                    <Link to="/fabricacion/operarios" onClick={() => irA('fabricacion', '/fabricacion/operarios')} className={estiloSubItem('fabricacion')}>🠖 Productividad de operarios</Link>
+                    <Link to="/fabricacion/centros" onClick={() => irA('fabricacion', '/fabricacion/centros')} className={estiloSubItem('fabricacion')}>🠖 Centros de trabajo</Link>
+                    <Link to="/fabricacion/etapas" onClick={() => irA('fabricacion', '/fabricacion/etapas')} className={estiloSubItem('fabricacion')}>🠖 Etapas de producción</Link>
+                    <Link to="/fabricacion/variaciones" onClick={() => irA('fabricacion', '/fabricacion/variaciones')} className={estiloSubItem('fabricacion')}>🠖 Reporte de variaciones</Link>
+                    <Link to="/fabricacion/config" onClick={() => irA('fabricacion', '/fabricacion/config')} className={estiloSubItem('fabricacion')}>🠖 Configuración</Link>
+                    <Link to="/fabricacion/manual" onClick={() => irA('fabricacion', '/fabricacion/manual')} className={estiloSubItem('fabricacion')}>🠖 Manual</Link>
                   </div>
                 )}
               </>
@@ -818,6 +934,8 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
                     <Link to="/pos" onClick={() => irA('pos', '/pos')} className={estiloSubItem('pos')}>🠖 {t('pos')}</Link>
                     <Link to="/cobros" onClick={() => irA('cobros', '/cobros')} className={estiloSubItem('cobros')}>🠖 {t('pendingOrders')}</Link>
                     <Link to="/pedidos" onClick={() => irA('pedidos', '/pedidos')} className={estiloSubItem('pedidos')}>🠖 Pedidos</Link>
+                    <Link to="/presupuestos" onClick={() => irA('cotizaciones', '/presupuestos')} className={estiloSubItem('cotizaciones')}>🠖 Presupuestos / Cotizaciones</Link>
+                    <Link to="/envios" onClick={() => irA('envios', '/envios')} className={estiloSubItem('envios')}>🠖 Envíos</Link>
                   </div>
                 )}
               </>
@@ -876,6 +994,20 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
                     <Link to="/vendedores-comisiones" onClick={() => irA('vendedores_comisiones', '/vendedores-comisiones')} className={estiloSubItem('vendedores_comisiones')}>🠖 {t('sellersCommissions')}</Link>
                     <Link to="/ventas-por-personal" onClick={() => irA('ventas_por_personal', '/ventas-por-personal')} className={estiloSubItem('ventas_por_personal')}>🠖 Ventas por personal</Link>
                     <Link to="/informes-operativos" onClick={() => irA('informes_operativos', '/informes-operativos')} className={estiloSubItem('informes_operativos')}>🠖 Stock, deudas e IVA</Link>
+                    <Link to="/informes/stock" onClick={() => irA('informes_operativos', '/informes/stock')} className={estiloSubItem('informes_operativos')}>🠖 Inventario / stock</Link>
+                    <Link to="/informes/vencimientos" onClick={() => irA('informes_operativos', '/informes/vencimientos')} className={estiloSubItem('informes_operativos')}>🠖 Vencimiento de productos</Link>
+                    <Link to="/informes/ajustes" onClick={() => irA('informes_operativos', '/informes/ajustes')} className={estiloSubItem('informes_operativos')}>🠖 Ajustes de inventario</Link>
+                    <Link to="/informes/gastos" onClick={() => irA('informes_operativos', '/informes/gastos')} className={estiloSubItem('informes_operativos')}>🠖 Comprobantes de egresos</Link>
+                    <Link to="/informes/iva" onClick={() => irA('informes_operativos', '/informes/iva')} className={estiloSubItem('informes_operativos')}>🠖 Informe Fiscal (IVA)</Link>
+                    <Link to="/informes/compras-ventas" onClick={() => irA('informes_micdepos', '/informes/compras-ventas')} className={estiloSubItem('informes_micdepos')}>🠖 Compras y ventas</Link>
+                    <Link to="/informes/clientes-proveedores" onClick={() => irA('informes_micdepos', '/informes/clientes-proveedores')} className={estiloSubItem('informes_micdepos')}>🠖 Proveedores y clientes</Link>
+                    <Link to="/informes/grupos-clientes" onClick={() => irA('informes_micdepos', '/informes/grupos-clientes')} className={estiloSubItem('informes_micdepos')}>🠖 Grupos de clientes (reporte)</Link>
+                    <Link to="/informes/productos-mas-vendidos" onClick={() => irA('informes_micdepos', '/informes/productos-mas-vendidos')} className={estiloSubItem('informes_micdepos')}>🠖 Productos más vendidos</Link>
+                    <Link to="/informes/detalle-articulo" onClick={() => irA('informes_micdepos', '/informes/detalle-articulo')} className={estiloSubItem('informes_micdepos')}>🠖 Detalle por artículo</Link>
+                    <Link to="/informes/pagos-compras" onClick={() => irA('informes_micdepos', '/informes/pagos-compras')} className={estiloSubItem('informes_micdepos')}>🠖 Pagos de compra</Link>
+                    <Link to="/informes/actividad" onClick={() => irA('informes_micdepos', '/informes/actividad')} className={estiloSubItem('informes_micdepos')}>🠖 Historial de actividades</Link>
+                    <Link to="/informes/rg-90" onClick={() => irA('informes_micdepos', '/informes/rg-90')} className={estiloSubItem('informes_micdepos')}>🠖 RG 90 — Marangatu</Link>
+                    <Link to="/flujo-fondos" onClick={() => irA('flujo_fondos', '/flujo-fondos')} className={estiloSubItem('flujo_fondos')}>🠖 Flujo de fondos</Link>
                   </div>
                 )}
               </>
@@ -897,6 +1029,7 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
                     <Link to="/config_empresa" onClick={() => irA('config_empresa', '/config_empresa')} className={estiloSubItem('config_empresa')}>🠖 {t('companySettings')}</Link>
                     <Link to="/ubicaciones_comerciales" onClick={() => irA('ubicaciones_comerciales', '/ubicaciones_comerciales')} className={estiloSubItem('ubicaciones_comerciales')}>🠖 {t('commercialLocations')}</Link>
                     <Link to="/config_factura" onClick={() => irA('config_factura', '/config_factura')} className={estiloSubItem('config_factura')}>🠖 {t('invoiceSettings')}</Link>
+                    <Link to="/plantillas-notificacion" onClick={() => irA('plantillas_notificacion', '/plantillas-notificacion')} className={estiloSubItem('plantillas_notificacion')}>🠖 Plantillas de notificación</Link>
                   </div>
                 )}
               </>
@@ -981,6 +1114,11 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
                 {vistaActiva === 'ventas_por_personal' && 'Ventas por personal'}
                 {vistaActiva === 'pedidos' && 'Pedidos'}
                 {vistaActiva === 'informes_operativos' && 'Informes operativos'}
+                {vistaActiva === 'fabricacion' && 'Fabricación'}
+                {vistaActiva === 'variaciones_productos' && 'Variaciones de productos'}
+                {vistaActiva === 'cotizaciones' && 'Presupuestos y cotizaciones'}
+                {vistaActiva === 'envios' && 'Envíos'}
+                {vistaActiva === 'flujo_fondos' && 'Flujo de fondos'}
               </h2>
             <div className="flex-1"></div>
             <div className="hidden md:flex items-center gap-2 lg:gap-3">
