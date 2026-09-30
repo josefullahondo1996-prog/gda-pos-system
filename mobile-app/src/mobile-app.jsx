@@ -5,7 +5,8 @@ import {
   LogOut, Minus, Package, Plus, RefreshCw, Search, ShoppingBag, ShoppingCart, Store,
   UserRound, Wallet, X,
 } from 'lucide-react';
-import { supabase } from '../../src/supabaseClient';
+import MobileModules from './mobile-modules.jsx';
+import { supabase } from './supabaseClient.js';
 
 const money = (value) => `Gs ${Math.round(Number(value) || 0).toLocaleString('es-PY')}`;
 const todayStart = () => {
@@ -25,10 +26,10 @@ const loadAllRows = async (makeQuery) => {
   }
   return { data: rows, error: null };
 };
-const roleCanSee = (profile, category) => {
+const roleCanSee = (profile, category, permission) => {
   const role = (profile?.roles?.nombre || '').toLowerCase();
-  if (role.includes('admin') || role.includes('desarrollador') || !profile?.roles?.permisos) return true;
-  return Object.values(profile.roles.permisos[category] || {}).some(Boolean);
+  if (role.includes('admin') || role.includes('desarrollador')) return true;
+  return Boolean(profile?.roles?.permisos?.[category]?.[permission]);
 };
 
 function MobileApp() {
@@ -88,9 +89,13 @@ function MobileApp() {
   }, []);
 
   const empresaId = profile?.empresa_id || profile?.empresas?.id;
-  const permisoPOS = roleCanSee(profile, 'ventas_pos');
-  const permisoProductos = roleCanSee(profile, 'productos');
-  const permisoVentas = roleCanSee(profile, 'ventas_pos');
+  const permisoPOS = roleCanSee(profile, 'ventas_pos', 'Acceder al Punto de Venta');
+  const permisoProductos = roleCanSee(profile, 'productos', 'Ver productos');
+  const permisoVentas = permisoPOS;
+  const permisoClientes = roleCanSee(profile, 'clientes_proveedores', 'Ver clientes');
+  const permisoProveedores = roleCanSee(profile, 'clientes_proveedores', 'Ver proveedores');
+  const permisoCompras = roleCanSee(profile, 'compras', 'Ver compras');
+  const permisoGastos = roleCanSee(profile, 'gastos', 'Ver gastos');
   const soloPOS = Boolean(profile && !['admin', 'desarrollador'].some((role) => (profile.roles?.nombre || '').toLowerCase().includes(role))
     && profile.roles?.permisos?.ventas_pos?.['Solo Punto de Venta (bloquea todo lo demás)']);
 
@@ -110,19 +115,27 @@ function MobileApp() {
     if (!empresaId || !profile) return;
     setData((current) => ({ ...current, loading: true }));
     const start = todayStart();
-    const branchQuery = supabase.from('ubicaciones_comerciales').select('id, nombre').eq('empresa_id', empresaId).eq('activo', true).order('nombre');
-    const boxQuery = supabase.from('caja_registros').select('*').eq('empresa_id', empresaId).eq('estado', 'Abierta').order('fecha_apertura', { ascending: false }).limit(20);
-    const salesQuery = soloPOS
-      ? Promise.resolve({ data: [], error: null })
-      : loadAllRows(() => supabase.from('ventas').select('id, cliente, total, fecha, estado_pago').eq('empresa_id', empresaId).gte('fecha', start).order('fecha', { ascending: false }));
-    const productsQuery = loadAllRows(() => supabase.from('productos').select('*').eq('empresa_id', empresaId).eq('activo', true).order('nombre'));
+    const emptyResult = Promise.resolve({ data: [], error: null });
+    const branchQuery = permisoPOS ? supabase.from('ubicaciones_comerciales').select('id, nombre').eq('empresa_id', empresaId).eq('activo', true).order('nombre') : emptyResult;
+    const boxQuery = permisoPOS ? supabase.from('caja_registros').select('*').eq('empresa_id', empresaId).eq('estado', 'Abierta').order('fecha_apertura', { ascending: false }).limit(20) : emptyResult;
+    let salesQuery = !permisoVentas || soloPOS
+      ? emptyResult
+      : loadAllRows(() => {
+          let query = supabase.from('ventas').select('id, cliente, total, fecha, estado_pago').eq('empresa_id', empresaId).gte('fecha', start).order('fecha', { ascending: false });
+          if (!roleCanSee(profile, 'ventas_pos', 'Ver ventas de otros usuarios')) query = query.eq('usuario_nombre', userName(profile));
+          return query;
+        });
+    const productsQuery = permisoProductos || permisoPOS
+      ? loadAllRows(() => supabase.from('productos').select('*').eq('empresa_id', empresaId).eq('activo', true).order('nombre'))
+      : emptyResult;
+    const customersQuery = permisoClientes || permisoPOS
+      ? supabase.from('clientes').select('id, nombre, nombre_empresa, grupo_clientes').eq('empresa_id', empresaId).order('nombre').limit(1000)
+      : emptyResult;
+    const groupsQuery = permisoPOS
+      ? supabase.from('grupos_clientes').select('nombre, grupo_precios').eq('empresa_id', empresaId).eq('activo', true)
+      : emptyResult;
     const [branchesResult, boxesResult, salesResult, productsResult, customersResult, groupsResult] = await Promise.all([
-      branchQuery,
-      boxQuery,
-      salesQuery,
-      productsQuery,
-      supabase.from('clientes').select('id, nombre, nombre_empresa, grupo_clientes').eq('empresa_id', empresaId).order('nombre').limit(1000),
-      supabase.from('grupos_clientes').select('nombre, grupo_precios').eq('empresa_id', empresaId).eq('activo', true),
+      branchQuery, boxQuery, salesQuery, productsQuery, customersQuery, groupsQuery,
     ]);
     const failure = [branchesResult, boxesResult, salesResult, productsResult, customersResult, groupsResult].find((result) => result.error);
     if (failure) {
@@ -143,7 +156,7 @@ function MobileApp() {
       return sameUser && sameBranch;
     }) || null;
     setData({ loading: false, sales: salesResult.data || [], products: productsResult.data || [], customers: customersResult.data || [], groups: groupsResult.data || [], box, branches });
-  }, [empresaId, profile, soloPOS]);
+  }, [empresaId, profile, soloPOS, permisoPOS, permisoProductos, permisoVentas, permisoClientes]);
 
   useEffect(() => { loadData(); }, [loadData, refresh]);
 
@@ -254,6 +267,9 @@ function MobileApp() {
     { id: 'pos', title: 'Cobrar', Icon: ShoppingCart, allowed: permisoPOS },
     { id: 'stock', title: 'Productos', Icon: Package, allowed: permisoProductos },
     { id: 'sales', title: 'Ventas', Icon: ClipboardList, allowed: permisoVentas },
+    { id: 'contacts', title: 'Contactos', Icon: UserRound, allowed: permisoClientes || permisoProveedores },
+    { id: 'purchases', title: 'Compras', Icon: ShoppingBag, allowed: permisoCompras },
+    { id: 'expenses', title: 'Gastos', Icon: Wallet, allowed: permisoGastos },
   ].filter((tab) => tab.allowed && (!soloPOS || tab.id === 'pos'));
 
   return <div className="app-shell">
@@ -281,6 +297,14 @@ function MobileApp() {
         </section>}
         {screen === 'stock' && <section className="screen-section"><div className="screen-title"><div><span className="eyebrow">INVENTARIO</span><h1>Productos</h1><p>{data.products.length} artículos activos</p></div></div><div className="search-field"><Search size={19} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Buscar por nombre o código" /></div><div className="inventory-list">{filteredProducts.map((product) => { const quantity = Number(product.stock_actual); const critical = Number.isFinite(quantity) && quantity <= Number(product.stock_minimo || 0); return <article className="inventory-row" key={product.id}><div className="inventory-art">{product.imagen_url || product.imagen ? <img src={product.imagen_url || product.imagen} alt="" /> : <Package size={20} />}</div><div className="inventory-name"><strong>{product.nombre}</strong><span>{product.codigo || product.categoria || 'Sin código'}</span></div><div className={`stock-value ${critical ? 'critical' : ''}`}><strong>{Number.isFinite(quantity) ? quantity.toLocaleString('es-PY') : '—'}</strong><small>{product.unidad || 'unid.'}</small></div></article>; })}</div></section>}
         {!soloPOS && screen === 'sales' && <section className="screen-section"><div className="screen-title"><div><span className="eyebrow">REGISTRO DEL DÍA</span><h1>Ventas</h1><p>{data.sales.length} movimientos recientes</p></div></div><SalesList sales={data.sales} /></section>}
+        {!soloPOS && ['contacts', 'purchases', 'expenses'].includes(screen) && <MobileModules
+          screen={screen}
+          empresaId={empresaId}
+          allowCustomers={permisoClientes}
+          allowSuppliers={permisoProveedores}
+          allowPurchases={permisoCompras}
+          allowExpenses={permisoGastos}
+        />}
       </>}
     </main>
     <nav className="bottom-nav">{tabs.map(({ id, title, Icon }) => <button className={screen === id ? 'active' : ''} key={id} onClick={() => { setScreen(id); setQuery(''); }}><Icon size={20} strokeWidth={screen === id ? 2.3 : 1.8} /><span>{title}</span></button>)}</nav>
