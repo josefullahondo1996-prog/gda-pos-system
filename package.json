@@ -18,10 +18,12 @@
     "jspdf": "^4.2.1",
     "jspdf-autotable": "^5.0.8",
     "lucide-react": "^1.25.0",
+    "qrcode.react": "^4.2.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-router-dom": "^7.18.1",
-    "recharts": "^3.9.2"
+    "recharts": "^3.9.2",
+    "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4.3.2",
@@ -32,4 +34,3 @@
     "vite": "^5.4.0"
   }
 }
-

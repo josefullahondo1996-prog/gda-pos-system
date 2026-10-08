@@ -69,9 +69,10 @@ export default function FlujoFondos() {
       leerPorFecha('compras', empresaId, 'fecha', desde, hasta),
       leerTodos('pagos_compras', empresaId),
       leerPorFecha('pagos_clientes', empresaId, 'fecha', desde, hasta),
+      leerPorFecha('pagos_devoluciones_ventas', empresaId, 'pagado_en', desde, hasta),
     ]);
-    const [ventasR, gastosR, comprasR, pagosComprasR, cobrosR] = resultados;
-    const fallos = resultados.map((r, i) => r.status === 'rejected' ? ['ventas', 'gastos', 'compras/pagos', 'pagos a proveedores', 'cobros de clientes'][i] : null).filter(Boolean);
+    const [ventasR, gastosR, comprasR, pagosComprasR, cobrosR, reembolsosR] = resultados;
+    const fallos = resultados.map((r, i) => r.status === 'rejected' ? ['ventas', 'gastos', 'compras/pagos', 'pagos a proveedores', 'cobros de clientes', 'reembolsos de ventas'][i] : null).filter(Boolean);
     if (ventasR.status === 'rejected' || gastosR.status === 'rejected') {
       setError(`No se pudieron leer ventas o gastos: ${[ventasR, gastosR].filter((r) => r.status === 'rejected').map((r) => r.reason?.message || 'error de base de datos').join(' · ')}`);
       setMovimientos([]); setCargando(false); return;
@@ -81,6 +82,7 @@ export default function FlujoFondos() {
     const compras = comprasR.status === 'fulfilled' ? comprasR.value : [];
     const pagosCompras = pagosComprasR.status === 'fulfilled' ? pagosComprasR.value : [];
     const cobrosClientes = cobrosR.status === 'fulfilled' ? cobrosR.value : [];
+    const reembolsosVentas = reembolsosR.status === 'fulfilled' ? reembolsosR.value : [];
     const esSucursal = (fila) => !sucursalActiva || !fila.ubicacion_id || String(fila.ubicacion_id) === String(sucursalActiva);
     const pagosCompraPorId = new Map();
     pagosCompras.forEach((pago) => pagosCompraPorId.set(String(pago.compra_id), (pagosCompraPorId.get(String(pago.compra_id)) || 0) + Number(pago.monto || 0)));
@@ -110,6 +112,10 @@ export default function FlujoFondos() {
       const monto = Number(pago.monto ?? pago.cantidad ?? 0) || 0;
       if (monto > 0) filas.push({ id: `cobro-${pago.id}`, fecha: pago.fecha, tipo: 'Entrada', concepto: 'Cobro de saldo de cliente', referencia: pago.numero_referencia || pago.factura_no || pago.venta_id || pago.id, metodo: pago.metodo_pago || pago.cuenta_pago || 'No especificado', monto });
     });
+    reembolsosVentas.forEach((pago) => {
+      const monto = Number(pago.monto || 0);
+      if (monto > 0) filas.push({ id: `reembolso-venta-${pago.id}`, fecha: pago.pagado_en, tipo: 'Salida', concepto: 'Reembolso de devolución de venta', referencia: `DV-${pago.devolucion_id}`, metodo: pago.metodo_pago || 'No especificado', monto });
+    });
     filas.sort((a, b) => new Date(b.fecha) - new Date(a.fecha));
     setMovimientos(filas);
     setAvisos(fallos.length ? [`No se pudieron leer: ${fallos.join(', ')}. El informe muestra las fuentes disponibles.`] : []);
@@ -131,6 +137,6 @@ export default function FlujoFondos() {
     {avisos.map((aviso) => <div key={aviso} className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">{aviso}</div>)}
     <section className="grid gap-3 sm:grid-cols-3"><article className="rounded-xl border bg-white p-4"><p className="text-sm text-slate-500">Entradas registradas</p><p className="mt-2 text-xl font-bold text-emerald-700">{moneda(totales.entradas)}</p></article><article className="rounded-xl border bg-white p-4"><p className="text-sm text-slate-500">Salidas registradas</p><p className="mt-2 text-xl font-bold text-red-700">{moneda(totales.salidas)}</p></article><article className="rounded-xl border bg-white p-4"><p className="text-sm text-slate-500">Neto del período</p><p className={`mt-2 text-xl font-bold ${saldoNeto < 0 ? 'text-red-700' : 'text-slate-900'}`}>{moneda(saldoNeto)}</p></article></section>
     <section className="overflow-hidden rounded-xl border bg-white"><div className="flex items-center justify-between border-b px-4 py-3"><h2 className="font-semibold">Movimientos</h2><span className="text-xs text-slate-500">{movimientos.length.toLocaleString('es-PY')} registros</span></div><div className="overflow-x-auto"><table className="w-full min-w-[760px] text-left text-sm"><thead className="bg-slate-50 text-xs uppercase text-slate-500"><tr><th className="p-3">Fecha</th><th className="p-3">Tipo</th><th className="p-3">Concepto</th><th className="p-3">Referencia</th><th className="p-3">Método / cuenta</th><th className="p-3 text-right">Importe</th></tr></thead><tbody className="divide-y">{cargando ? <tr><td colSpan="6" className="p-8 text-center text-slate-500">Cargando movimientos…</td></tr> : movimientos.length ? movimientos.map((fila) => <tr key={fila.id} className="hover:bg-slate-50"><td className="whitespace-nowrap p-3">{fechaTexto(fila.fecha)}</td><td className={`p-3 font-semibold ${fila.tipo === 'Entrada' ? 'text-emerald-700' : 'text-red-700'}`}>{fila.tipo}</td><td className="p-3">{fila.concepto}</td><td className="p-3">{fila.referencia}</td><td className="p-3">{fila.metodo}</td><td className="whitespace-nowrap p-3 text-right font-semibold">{moneda(fila.monto)}</td></tr>) : <tr><td colSpan="6" className="p-10 text-center text-slate-500">No hay movimientos en este período.</td></tr>}</tbody></table></div></section>
-    <p className="text-xs leading-relaxed text-slate-500">El neto se calcula con pagos de ventas y clientes, gastos y pagos a proveedores. Los pagos iniciales de compras se estiman a partir del total y saldo vigente; el sistema todavía no conserva su fecha y cuenta de pago por separado.</p>
+    <p className="text-xs leading-relaxed text-slate-500">El neto incluye pagos de ventas y clientes, gastos, pagos a proveedores y reembolsos registrados. Los pagos iniciales de compras se estiman a partir del total y saldo vigente; el sistema todavía no conserva su fecha y cuenta de pago por separado.</p>
   </main>;
 }

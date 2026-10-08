@@ -58,6 +58,7 @@ const PuntoDeVenta = ({ cajaInfo, session, perfilUsuario, onVolver, onSolicitarC
   const [cuentasCaja, setCuentasCaja] = useState([]);
   const [clientesDisponibles, setClientesDisponibles] = useState([]);
   const [gruposClientes, setGruposClientes] = useState([]);
+  const [reglasDescuento, setReglasDescuento] = useState([]);
   const [personalServicio, setPersonalServicio] = useState('');
   const [usuariosServicio, setUsuariosServicio] = useState([]);
   // === ESTADOS PRINCIPALES ===
@@ -213,6 +214,21 @@ const PuntoDeVenta = ({ cajaInfo, session, perfilUsuario, onVolver, onSolicitarC
       if (!gruposResult.error && gruposResult.data) setGruposClientes(gruposResult.data);
     };
     if (empresaId) cargarClientes();
+  }, [empresaId]);
+
+  useEffect(() => {
+    let vigente = true;
+    const cargarDescuentos = async () => {
+      if (!empresaId) return;
+      const { data, error } = await supabase.from('descuentos_ventas').select('*').eq('empresa_id', empresaId).eq('activo', true);
+      if (!vigente) return;
+      if (error) {
+        if (error.code !== '42P01') console.warn('No se pudieron cargar descuentos promocionales:', error.message);
+        setReglasDescuento([]);
+      } else setReglasDescuento(data || []);
+    };
+    cargarDescuentos();
+    return () => { vigente = false; };
   }, [empresaId]);
 
   useEffect(() => {
@@ -449,7 +465,33 @@ const PuntoDeVenta = ({ cajaInfo, session, perfilUsuario, onVolver, onSolicitarC
           : a / b;
     return Number.isFinite(resultado) ? resultado : null;
   }, [calculadoraA, calculadoraB, operacionCalculadora]);
-  const descuentoAplicado = Math.min(Math.max(0, Number(descuento) || 0), subtotal);
+  const descuentoPromocional = useMemo(() => {
+    const ahora = Date.now();
+    const normalizar = (valor) => String(valor || '').trim().toLocaleLowerCase('es');
+    return carrito.reduce((total, item) => {
+      // Al convertir una cotización, respetamos exactamente el precio y total aprobados.
+      if (item.cotizacion_precio_fijo) return total;
+      const precio = Number(item.precio_venta ?? item.precio) || 0;
+      const bruto = Math.max(0, precio * Number(item.cantidad || 0));
+      if (!bruto) return total;
+      const candidatos = reglasDescuento.filter((regla) => {
+        if (!regla.activo || (regla.fecha_inicio && new Date(regla.fecha_inicio).getTime() > ahora) || (regla.fecha_fin && new Date(regla.fecha_fin).getTime() <= ahora)) return false;
+        if (regla.ubicacion_ids?.length && !regla.ubicacion_ids.includes(ubicacionActivaId)) return false;
+        if (regla.producto_ids?.length && !regla.producto_ids.some((id) => String(id) === String(item.id))) return false;
+        if (regla.marca && normalizar(regla.marca) !== normalizar(item.marca)) return false;
+        if (regla.categoria && normalizar(regla.categoria) !== normalizar(item.categoria)) return false;
+        return true;
+      }).sort((a, b) => Number(b.prioridad || 0) - Number(a.prioridad || 0));
+      const regla = candidatos[0];
+      if (!regla) return total;
+      const descuentoLinea = regla.tipo === 'porcentaje'
+        ? bruto * Math.min(100, Math.max(0, Number(regla.valor) || 0)) / 100
+        : Math.min(bruto, Math.max(0, Number(regla.valor) || 0) * Number(item.cantidad || 0));
+      return total + descuentoLinea;
+    }, 0);
+  }, [carrito, reglasDescuento, ubicacionActivaId]);
+  const descuentoManual = Math.max(0, Number(descuento) || 0);
+  const descuentoAplicado = Math.min(descuentoManual + descuentoPromocional, subtotal);
   const cargoEmbalajeAplicado = Math.max(0, Number(cargoEmbalaje) || 0);
   const totalConAjustes = Math.max(0, subtotal - descuentoAplicado + cargoEmbalajeAplicado);
   const formatMoneda = (valor, moneda = monedaVenta) => {
@@ -863,8 +905,9 @@ const PuntoDeVenta = ({ cajaInfo, session, perfilUsuario, onVolver, onSolicitarC
           {mostrarOpciones && (
             <div className="mx-3 mb-3 rounded-lg border border-gray-200 bg-gray-50 p-2 grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-2 text-[11px]">
               <div className="min-w-0">
-                <label className="font-bold text-gray-500 block mb-1 truncate">{t('discount')} (Gs)</label>
-                <input type="number" min="0" max={subtotal} step="1" value={descuento} onChange={(e) => setDescuento(e.target.value)} onBlur={() => setDescuento(String(descuentoAplicado || ''))} className="w-full h-8 border border-gray-300 rounded px-2 bg-white" />
+                <label className="font-bold text-gray-500 block mb-1 truncate">{t('discount')} manual (Gs)</label>
+                <input type="number" min="0" max={Math.max(0, subtotal - descuentoPromocional)} step="1" value={descuento} onChange={(e) => setDescuento(e.target.value)} onBlur={() => setDescuento(String(Math.min(descuentoManual, Math.max(0, subtotal - descuentoPromocional)) || ''))} className="w-full h-8 border border-gray-300 rounded px-2 bg-white" />
+                {descuentoPromocional > 0 && <p className="mt-1 text-[10px] font-semibold text-emerald-700">Promoción automática: {formatGs(descuentoPromocional)}</p>}
               </div>
               <div className="min-w-0">
                 <label className="font-bold text-gray-500 block mb-1 truncate">{t('packagingCharge')} (Gs)</label>

@@ -18,12 +18,17 @@ export default function Clientes() {
   const [ventasRaw, setVentasRaw] = useState([]);
   const [ubicacionesMap, setUbicacionesMap] = useState({});
   const [pagosRaw, setPagosRaw] = useState([]);
+  const [pagosAplicacionesRaw, setPagosAplicacionesRaw] = useState([]);
+  const [errorAplicacionesPagos, setErrorAplicacionesPagos] = useState(false);
   const [busqueda, setBusqueda] = useState('');
 
   // Filtros tipo checkbox (reales, calculados desde tus ventas)
   const [filtroCreditosOtorgados, setFiltroCreditosOtorgados] = useState(false);
   const [filtroPagoRealizado, setFiltroPagoRealizado] = useState(false);
   const [filtroCreditoAFavor, setFiltroCreditoAFavor] = useState(false);
+  const [filtroSaldoInicial, setFiltroSaldoInicial] = useState(false);
+  const [filtroSinVenta, setFiltroSinVenta] = useState('');
+  const [filtroVendedor, setFiltroVendedor] = useState('Ninguna');
 
   // Filtros tipo dropdown
   const [filtroGrupo, setFiltroGrupo] = useState('Ninguna');
@@ -69,10 +74,25 @@ export default function Clientes() {
   const [guardandoPago, setGuardandoPago] = useState(false);
   const [clienteLibroMayor, setClienteLibroMayor] = useState(null);
   const [libroMayorTab, setLibroMayorTab] = useState('libro');
+  const [historialCliente, setHistorialCliente] = useState([]);
+  const [cargandoHistorialCliente, setCargandoHistorialCliente] = useState(false);
+  const [documentosCliente, setDocumentosCliente] = useState([]);
+  const [cargandoDocumentosCliente, setCargandoDocumentosCliente] = useState(false);
+  const [subiendoDocumentoCliente, setSubiendoDocumentoCliente] = useState(false);
+  const [errorDocumentosCliente, setErrorDocumentosCliente] = useState('');
   const [libroMayorDesde, setLibroMayorDesde] = useState('');
   const [libroMayorHasta, setLibroMayorHasta] = useState('');
   const [libroMayorFormato, setLibroMayorFormato] = useState('Format 1');
   const [libroMayorUbicacion, setLibroMayorUbicacion] = useState('Todas');
+  const [correoLibroMayorAbierto, setCorreoLibroMayorAbierto] = useState(false);
+  const [cargandoPlantillaLibroMayor, setCargandoPlantillaLibroMayor] = useState(false);
+  const [paraLibroMayor, setParaLibroMayor] = useState('');
+  const [ccLibroMayor, setCcLibroMayor] = useState('');
+  const [bccLibroMayor, setBccLibroMayor] = useState('');
+  const [asuntoLibroMayor, setAsuntoLibroMayor] = useState('');
+  const [cuerpoLibroMayor, setCuerpoLibroMayor] = useState('');
+  const [formatoCorreoLibroMayor, setFormatoCorreoLibroMayor] = useState('Format 1');
+  const [descargarPdfCorreo, setDescargarPdfCorreo] = useState(true);
   const [fotoAmpliada, setFotoAmpliada] = useState(null);
   const [pagoSeleccionado, setPagoSeleccionado] = useState(null);
   const [pagoAccion, setPagoAccion] = useState(null);
@@ -176,11 +196,12 @@ export default function Clientes() {
   }, [nombreDelNegocio]);
 
   useEffect(() => {
+    if (!empresaId) return;
     cargarClientes();
     cargarVentas();
     cargarPagos();
     cargarUbicaciones();
-  }, []);
+  }, [empresaId]);
 
   // Cajas/cuentas de Caja-Banco disponibles para elegir al registrar un pago
   const cargarCajasDisponibles = async () => {
@@ -198,6 +219,104 @@ export default function Clientes() {
     if (empresaId) cargarCajasDisponibles();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [empresaId]);
+
+  useEffect(() => {
+    let vigente = true;
+    const cargarHistorial = async () => {
+      if (!clienteLibroMayor || libroMayorTab !== 'historial' || !empresaId) return;
+      setCargandoHistorialCliente(true);
+      const { data, error } = await supabase
+        .from('eventos_auditoria')
+        .select('id, ocurrido_en, accion, usuario_nombre, detalle')
+        .eq('empresa_id', empresaId)
+        .eq('tabla', 'clientes')
+        .eq('registro_id', String(clienteLibroMayor.id))
+        .order('ocurrido_en', { ascending: false })
+        .limit(200);
+      if (vigente) {
+        setHistorialCliente(error ? [] : (data || []));
+        setCargandoHistorialCliente(false);
+      }
+    };
+    cargarHistorial();
+    return () => { vigente = false; };
+  }, [clienteLibroMayor, libroMayorTab, empresaId]);
+
+  useEffect(() => {
+    let vigente = true;
+    const cargarDocumentos = async () => {
+      if (!clienteLibroMayor || libroMayorTab !== 'documentos' || !empresaId) return;
+      setCargandoDocumentosCliente(true);
+      setErrorDocumentosCliente('');
+      const ruta = `${empresaId}/${clienteLibroMayor.id}`;
+      const { data, error } = await supabase.storage.from('documentos-clientes').list(ruta, {
+        limit: 100,
+        sortBy: { column: 'created_at', order: 'desc' },
+      });
+      if (!vigente) return;
+      if (error) {
+        setDocumentosCliente([]);
+        setErrorDocumentosCliente('No se pudieron cargar los documentos. Verificá que esté aplicada la migración de documentos de clientes.');
+      } else {
+        setDocumentosCliente((data || []).filter((item) => item.id));
+      }
+      setCargandoDocumentosCliente(false);
+    };
+    cargarDocumentos();
+    return () => { vigente = false; };
+  }, [clienteLibroMayor, libroMayorTab, empresaId]);
+
+  const subirDocumentoCliente = async (event) => {
+    const archivo = event.target.files?.[0];
+    event.target.value = '';
+    if (!archivo || !clienteLibroMayor || !empresaId) return;
+    if (archivo.size > 20 * 1024 * 1024) {
+      notificar.error('El archivo supera el límite de 20 MB.');
+      return;
+    }
+    const nombreSeguro = archivo.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+    const ruta = `${empresaId}/${clienteLibroMayor.id}/${crypto.randomUUID()}-${nombreSeguro}`;
+    setSubiendoDocumentoCliente(true);
+    setErrorDocumentosCliente('');
+    const { error } = await supabase.storage.from('documentos-clientes').upload(ruta, archivo, {
+      contentType: archivo.type || 'application/octet-stream',
+      upsert: false,
+    });
+    setSubiendoDocumentoCliente(false);
+    if (error) {
+      setErrorDocumentosCliente('No se pudo subir el archivo. Verificá que esté aplicada la migración de documentos de clientes.');
+      return;
+    }
+    const { data } = await supabase.storage.from('documentos-clientes').list(`${empresaId}/${clienteLibroMayor.id}`, {
+      limit: 100,
+      sortBy: { column: 'created_at', order: 'desc' },
+    });
+    setDocumentosCliente((data || []).filter((item) => item.id));
+  };
+
+  const abrirDocumentoCliente = async (documento) => {
+    const ruta = `${empresaId}/${clienteLibroMayor.id}/${documento.name}`;
+    const { data, error } = await supabase.storage.from('documentos-clientes').createSignedUrl(ruta, 120);
+    if (error || !data?.signedUrl) {
+      notificar.error('No se pudo abrir el documento.');
+      return;
+    }
+    window.open(data.signedUrl, '_blank', 'noopener,noreferrer');
+  };
+
+  const borrarDocumentoCliente = async (documento) => {
+    const confirmado = await confirmar(`¿Eliminar el archivo “${documento.name}”?`, {
+      titulo: 'Eliminar documento', textoConfirmar: 'Eliminar', textoCancelar: 'Cancelar', peligroso: true,
+    });
+    if (!confirmado) return;
+    const ruta = `${empresaId}/${clienteLibroMayor.id}/${documento.name}`;
+    const { error } = await supabase.storage.from('documentos-clientes').remove([ruta]);
+    if (error) {
+      notificar.error('No se pudo eliminar el documento.');
+      return;
+    }
+    setDocumentosCliente((actuales) => actuales.filter((item) => item.name !== documento.name));
+  };
 
   const cargarClientes = async () => {
     // Solo traemos personas/clientes. Los que están marcados puramente como
@@ -237,6 +356,13 @@ export default function Clientes() {
     if (empresaId) query = query.eq('empresa_id', empresaId);
     const { data, error } = await query;
     if (!error && data) setPagosRaw(data);
+    if (!empresaId) return;
+    const { data: aplicaciones, error: errorAplicaciones } = await supabase
+      .from('pagos_clientes_aplicaciones')
+      .select('pago_id, venta_id, monto_aplicado')
+      .eq('empresa_id', empresaId);
+    setPagosAplicacionesRaw(errorAplicaciones ? [] : (aplicaciones || []));
+    setErrorAplicacionesPagos(Boolean(errorAplicaciones));
   };
 
   const abrirDetallePagoLibroMayor = (pago) => {
@@ -363,6 +489,11 @@ export default function Clientes() {
         (v) => v.cliente && (v.cliente === c.nombre || v.cliente === c.nombre_empresa)
       );
       const pagosManuales = pagosRaw.filter((p) => p.cliente_id === c.id);
+      const idsPagosCliente = new Set(pagosManuales.map((p) => p.id));
+      const idsVentasCliente = new Set(ventasDelCliente.map((v) => v.id));
+      const aplicacionesCliente = pagosAplicacionesRaw.filter((aplicacion) => (
+        idsPagosCliente.has(aplicacion.pago_id) && idsVentasCliente.has(aplicacion.venta_id)
+      ));
       const pagoRealizadoManual = pagosManuales.reduce((acc, p) => acc + (Number(p.monto) || 0), 0);
       const totalFacturado = ventasDelCliente.reduce((acc, v) => acc + (Number(v.total) || 0), 0);
 
@@ -406,9 +537,11 @@ export default function Clientes() {
         devolucionVencida,
         ventasDelCliente: ventasDelClienteConSaldo,
         pagosManuales,
+        aplicacionesCliente,
+        aplicacionesPagosDisponibles: !errorAplicacionesPagos,
       };
     });
-  }, [clientes, ventasRaw, pagosRaw]);
+  }, [clientes, ventasRaw, pagosRaw, pagosAplicacionesRaw, errorAplicacionesPagos]);
 
   const clientesFiltrados = useMemo(() => {
     const termino = busqueda.toLowerCase();
@@ -423,9 +556,17 @@ export default function Clientes() {
       if (filtroCreditosOtorgados && !(c.creditoOtorgado > 0)) return false;
       if (filtroPagoRealizado && !(c.pagoRealizado > 0)) return false;
       if (filtroCreditoAFavor && !(c.creditoAFavor > 0)) return false;
+      if (filtroSaldoInicial && Number(c.saldo_apertura || 0) === 0) return false;
+      if (filtroVendedor !== 'Ninguna' && c.vendedor_asignado !== filtroVendedor) return false;
+      if (filtroSinVenta) {
+        const corte = new Date();
+        corte.setMonth(corte.getMonth() - Number(filtroSinVenta));
+        const tuvoVentaReciente = c.ventasDelCliente.some((v) => v.fecha && new Date(v.fecha) >= corte);
+        if (tuvoVentaReciente) return false;
+      }
       return true;
     });
-  }, [clientesEnriquecidos, busqueda, filtroGrupo, filtroEstado, filtroCreditosOtorgados, filtroPagoRealizado, filtroCreditoAFavor]);
+  }, [clientesEnriquecidos, busqueda, filtroGrupo, filtroEstado, filtroCreditosOtorgados, filtroPagoRealizado, filtroCreditoAFavor, filtroSaldoInicial, filtroSinVenta, filtroVendedor]);
 
   // Paginación
   const totalPaginas = Math.max(1, Math.ceil(clientesFiltrados.length / entradasPorPagina));
@@ -437,6 +578,7 @@ export default function Clientes() {
 
   const gruposDisponibles = [...new Set(clientes.map((c) => c.grupo_clientes).filter(Boolean))];
   const estadosDisponibles = [...new Set(clientes.map((c) => c.estado).filter(Boolean))];
+  const vendedoresDisponibles = [...new Set(clientes.map((c) => c.vendedor_asignado).filter(Boolean))];
 
   const formatGs = (v) => `${Number(v || 0).toLocaleString('es-PY')} Gs`;
 
@@ -947,11 +1089,12 @@ export default function Clientes() {
       </h2>
 
       {/* FILTROS SUPERIORES */}
-      <div className="bg-white p-4 rounded-lg shadow-sm border-t-2 border-[#004284] mb-4">
-        <h3 className="text-xs font-bold text-gray-500 mb-4 flex items-center gap-1 uppercase">
-          {t('filters')}
-        </h3>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
+      <div className="bg-white p-5 md:p-6 rounded-2xl shadow-sm border border-slate-200/80 mb-5">
+        <div className="flex items-center justify-between mb-5">
+          <div><h3 className="text-sm font-extrabold text-slate-800">{t('filters')}</h3><p className="text-xs text-slate-500 mt-1">Refina la lista con el estado y actividad de tus clientes.</p></div>
+          <span className="rounded-full bg-blue-50 px-3 py-1 text-[11px] font-bold text-blue-700">{clientesFiltrados.length} resultados</span>
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3 mb-5">
           <label className="flex items-center gap-2 text-xs font-bold text-gray-700 cursor-pointer">
             <input type="checkbox" checked={filtroCreditosOtorgados} onChange={(e) => { setFiltroCreditosOtorgados(e.target.checked); setPaginaActual(1); }} />
             {t('creditGranted')}
@@ -968,8 +1111,12 @@ export default function Clientes() {
             <input type="checkbox" checked={filtroCreditoAFavor} onChange={(e) => { setFiltroCreditoAFavor(e.target.checked); setPaginaActual(1); }} />
             {t('creditBalance')}
           </label>
+          <label className="flex items-center gap-2 text-xs font-bold text-gray-700 cursor-pointer">
+            <input type="checkbox" checked={filtroSaldoInicial} onChange={(e) => { setFiltroSaldoInicial(e.target.checked); setPaginaActual(1); }} />
+            Saldo inicial
+          </label>
         </div>
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
           <div>
             <label className="block text-xs font-bold text-gray-700 mb-1">{t('customerGroup')}:</label>
             <select className="w-full border rounded p-2 bg-white outline-none" value={filtroGrupo} onChange={(e) => { setFiltroGrupo(e.target.value); setPaginaActual(1); }}>
@@ -984,14 +1131,26 @@ export default function Clientes() {
               {estadosDisponibles.map((es) => <option key={es}>{es}</option>)}
             </select>
           </div>
+          <div>
+            <label className="block text-xs font-bold text-gray-700 mb-1">Sin ventas durante:</label>
+            <select className="w-full border rounded p-2 bg-white outline-none" value={filtroSinVenta} onChange={(e) => { setFiltroSinVenta(e.target.value); setPaginaActual(1); }}>
+              <option value="">Cualquier período</option><option value="1">1 mes</option><option value="3">3 meses</option><option value="6">6 meses</option><option value="12">1 año</option>
+            </select>
+          </div>
+          <div>
+            <label className="block text-xs font-bold text-gray-700 mb-1">Vendedor:</label>
+            <select className="w-full border rounded p-2 bg-white outline-none" value={filtroVendedor} onChange={(e) => { setFiltroVendedor(e.target.value); setPaginaActual(1); }}>
+              <option>Ninguna</option>{vendedoresDisponibles.map((vendedor) => <option key={vendedor}>{vendedor}</option>)}
+            </select>
+          </div>
         </div>
       </div>
 
       {/* TABLA PRINCIPAL DE ENTRADAS */}
-      <div className="bg-white rounded-lg shadow-sm border-t-2 border-[#004284]">
-        <div className="p-4 border-b flex justify-between items-center">
-          <h3 className="text-base font-bold text-gray-700">{t('allCustomers')}</h3>
-          <button onClick={() => { setClienteEditando(null); resetearFormulario(); setMostrarModalAñadir(true); }} className="bg-[#fd7e14] text-white px-4 py-2 rounded text-sm font-bold hover:bg-[#e86e04] transition shadow-sm">
+      <div className="bg-white rounded-2xl shadow-sm border border-slate-200/80 overflow-hidden">
+        <div className="p-5 md:px-6 border-b border-slate-100 flex justify-between items-center">
+          <div><h3 className="text-base font-extrabold text-slate-800">{t('allCustomers')}</h3><p className="text-xs text-slate-500 mt-1">Consulta saldos, ventas y datos de contacto desde cada ficha.</p></div>
+          <button onClick={() => { setClienteEditando(null); resetearFormulario(); setMostrarModalAñadir(true); }} className="bg-orange-500 text-white px-4 py-2.5 rounded-xl text-sm font-bold hover:bg-orange-600 transition shadow-sm shadow-orange-500/20">
             + {t('add')}
           </button>
         </div>
@@ -1042,18 +1201,19 @@ export default function Clientes() {
                   </div>
                 )}
               </div>
-              <button onClick={exportarPDF} className="border rounded px-3 py-1.5 text-xs font-bold text-gray-600 hover:bg-gray-50">Exportar a PDF</button>
-                          <button onClick={exportarPDF} className="border rounded px-3 py-1.5 text-xs font-bold text-gray-600 hover:bg-gray-50">{t('exportPdf')}</button>
+              <button onClick={exportarPDF} className="border border-slate-200 rounded-lg px-3 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-50">{t('exportPdf')}</button>
             </div>
 
-            <input type="text" className="border rounded p-1.5 w-64 outline-none focus:border-blue-500 text-xs" placeholder="Buscar ..." value={busqueda} onChange={(e) => { setBusqueda(e.target.value); setPaginaActual(1); }} />
-                      <input type="text" className="border rounded p-1.5 w-64 outline-none focus:border-blue-500 text-xs" placeholder={`${t('search')} ...`} value={busqueda} onChange={(e) => { setBusqueda(e.target.value); setPaginaActual(1); }} />
+            <label className="relative block w-full sm:w-64">
+              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" aria-hidden="true">⌕</span>
+              <input type="search" className="w-full border border-slate-200 rounded-lg py-2 pl-9 pr-3 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 text-xs" placeholder={`${t('search')} clientes...`} value={busqueda} onChange={(e) => { setBusqueda(e.target.value); setPaginaActual(1); }} aria-label="Buscar clientes" />
+            </label>
           </div>
 
-          <div className="overflow-x-auto border rounded">
-            <table className="w-full text-left text-[11px] border-collapse whitespace-nowrap">
+          <div className="overflow-x-auto border border-slate-200 rounded-xl">
+            <table className="w-full text-left text-xs border-collapse whitespace-nowrap">
               <thead>
-                <tr className="bg-gray-50 text-[#004284] font-black uppercase border-b-2">
+                <tr className="bg-slate-50 text-slate-500 font-extrabold uppercase border-b border-slate-200 tracking-wide text-[10px]">
                   <th className="p-3">ACCION</th>
                   <th className="p-3">CODIGO CLIENTE</th>
                   {columnasVisibles.empresa && <th className="p-3">NOMBRE DE LA EMPRESA</th>}
@@ -1078,7 +1238,7 @@ export default function Clientes() {
                   <tr><td colSpan="17" className="text-center py-10 text-gray-400 font-medium text-sm">{t('noData')}</td></tr>
                 ) : (
                   clientesPagina.map((cliente) => (
-                    <tr key={cliente.id} className="border-b hover:bg-gray-50 text-gray-700">
+                    <tr key={cliente.id} className="border-b border-slate-100 hover:bg-blue-50/40 text-slate-700 transition-colors">
                       <td className="p-2 relative">
                         <button
                           onClick={(e) => {
@@ -1139,7 +1299,7 @@ export default function Clientes() {
                                 onClick={() => { setMenuAccionesAbierto(null); handleDesactivarCliente(cliente); }}
                                 className="w-full text-left px-3 py-2 hover:bg-gray-100 text-gray-700 flex items-center gap-2"
                               >
-                                ⏻ {cliente.estado === 'Inactivo' ? 'Activar' : 'Deactivate'}
+                                ⏻ {cliente.estado === 'Inactivo' ? 'Activar' : 'Desactivar'}
                               </button>
                               <div className="border-t my-1" />
                               <button
@@ -1706,21 +1866,36 @@ export default function Clientes() {
       {clienteLibroMayor && (() => {
         const cliente = clienteLibroMayor;
         const iniciales = (cliente.nombre || '?').trim().split(/\s+/).slice(0, 2).map((p) => p[0]).join('').toUpperCase();
+        const estadoNormalizado = (estado) => String(estado || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().toLowerCase();
+        const ventaEstaAnulada = (venta) => ['anulada', 'anulado', 'devuelta', 'devolucion'].includes(estadoNormalizado(venta.estado_pago));
+        const ventasLibroMayor = cliente.ventasDelCliente.filter((venta) => !ventaEstaAnulada(venta));
+        const pagosAplicadosPorVenta = new Map();
+        cliente.aplicacionesCliente.forEach((aplicacion) => {
+          pagosAplicadosPorVenta.set(
+            aplicacion.venta_id,
+            (pagosAplicadosPorVenta.get(aplicacion.venta_id) || 0) + (Number(aplicacion.monto_aplicado) || 0)
+          );
+        });
 
-        // Armamos los movimientos (ventas + pagos) para la tabla estilo "libro mayor"
+        // Las ventas anuladas no crean deuda. Los pagos aplicados se descuentan
+        // del pago inicial para no volver a contabilizarlos en la fecha de venta.
         const movimientos = [
-          ...cliente.ventasDelCliente.map((v) => ({
-            fecha: v.fecha,
-            referencia: v.id ? String(v.id).slice(-4) : '—',
-            tipo: 'Ventas',
-            ubicacionId: v.ubicacion_id || null,
-            ubicacion: (v.ubicacion_id && ubicacionesMap[v.ubicacion_id]) || nombreDelNegocio || '—',
-            estadoPago: v.estado_pago || '—',
-            debito: Number(v.total) || 0,
-            credito: 0,
-            pagadoInicial: Number(v.monto_pagado) || 0,
-            metodoPago: v.metodo_pago || '—',
-          })),
+          ...ventasLibroMayor.flatMap((v) => {
+            const base = {
+              fecha: v.fecha,
+              referencia: v.id ? String(v.id).slice(-4) : '—',
+              ubicacionId: v.ubicacion_id || null,
+              ubicacion: (v.ubicacion_id && ubicacionesMap[v.ubicacion_id]) || nombreDelNegocio || '—',
+              estadoPago: v.estado_pago || '—',
+              metodoPago: v.metodo_pago || '—',
+            };
+            const totalPagadoActual = Math.max(0, Number(v.montoPagadoActual ?? ((Number(v.total) || 0) - (Number(v.saldoActual) || 0))) || 0);
+            const pagoInicial = Math.max(0, totalPagadoActual - (pagosAplicadosPorVenta.get(v.id) || 0));
+            return [
+              { ...base, tipo: 'Ventas', debito: Number(v.total) || 0, credito: 0 },
+              ...(pagoInicial > 0 ? [{ ...base, tipo: 'Pago inicial', debito: 0, credito: pagoInicial }] : []),
+            ];
+          }),
           ...cliente.pagosManuales.map((p) => ({
             fecha: p.fecha,
             referencia: p.id ? `SP${new Date(p.fecha || Date.now()).getFullYear()}/${String(p.id).slice(-4)}` : '—',
@@ -1733,7 +1908,19 @@ export default function Clientes() {
             pagadoInicial: 0,
             metodoPago: p.metodo_pago || '—',
           })),
-        ].sort((a, b) => new Date(a.fecha || 0) - new Date(b.fecha || 0));
+        ].sort((a, b) => {
+          const porFecha = new Date(a.fecha || 0) - new Date(b.fecha || 0);
+          if (porFecha) return porFecha;
+          const orden = { Ventas: 0, 'Pago inicial': 1, Pago: 2 };
+          return (orden[a.tipo] ?? 3) - (orden[b.tipo] ?? 3);
+        });
+
+        const fechaLocal = (fecha) => {
+          if (!fecha) return '';
+          const d = new Date(fecha);
+          return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+        };
+        const saldoApertura = Number(cliente.saldo_apertura) || 0;
 
         const movimientosPorUbicacion = movimientos.filter((m) => (
           libroMayorUbicacion === 'Todas'
@@ -1743,17 +1930,17 @@ export default function Clientes() {
 
         const movimientosAntesDelRango = movimientosPorUbicacion.filter((m) => {
           if (!m.fecha || !libroMayorDesde) return false;
-          return new Date(m.fecha).toISOString().slice(0, 10) < libroMayorDesde;
+          return fechaLocal(m.fecha) < libroMayorDesde;
         });
 
         const saldoInicialRango = movimientosAntesDelRango.reduce(
           (saldo, m) => saldo + m.debito - m.credito,
-          0
+          saldoApertura
         );
 
         const movimientosFiltrados = movimientosPorUbicacion.filter((m) => {
           if (!m.fecha) return true;
-          const f = new Date(m.fecha).toISOString().slice(0, 10);
+          const f = fechaLocal(m.fecha);
           if (libroMayorDesde && f < libroMayorDesde) return false;
           if (libroMayorHasta && f > libroMayorHasta) return false;
           return true;
@@ -1764,46 +1951,184 @@ export default function Clientes() {
           saldoAcumulado += m.debito - m.credito;
           return { ...m, saldo: saldoAcumulado };
         });
+        const mostrarSaldoAnterior = Math.abs(saldoInicialRango) > 0;
+        const filasLibroMayor = mostrarSaldoAnterior
+          ? [{
+              fecha: libroMayorDesde ? `${libroMayorDesde}T00:00:00` : null,
+              referencia: '—', tipo: 'Saldo anterior', ubicacion: '—', estadoPago: '—',
+              debito: Math.max(0, saldoInicialRango), credito: Math.max(0, -saldoInicialRango),
+              saldo: saldoInicialRango, metodoPago: '—',
+            }, ...filasConSaldo]
+          : filasConSaldo;
 
         const totalFacturaRango = movimientosFiltrados.reduce((total, m) => total + m.debito, 0);
         const totalCreditoRango = movimientosFiltrados.reduce((total, m) => total + m.credito, 0);
-        const totalPagadoRango = movimientosFiltrados.reduce(
-          (total, m) => total + m.pagadoInicial + m.credito,
-          0
-        );
+        const totalPagadoRango = totalCreditoRango;
         const saldoAdeudadoRango = saldoAcumulado;
         const creditoAFavorRango = Math.max(0, -saldoAdeudadoRango);
 
-        const exportarLibroMayorPDF = () => {
+        const hoyLocal = new Date();
+        const fechaCorteAntiguedad = new Date(hoyLocal.getFullYear(), hoyLocal.getMonth(), hoyLocal.getDate());
+        const plazoPagoPartes = String(cliente.termino_pago || '').match(/(\d+)\s*(dias?|mes(?:es)?)/i);
+        const plazoPagoCantidad = plazoPagoPartes ? Number(plazoPagoPartes[1]) : 0;
+        const plazoPagoEnMeses = Boolean(plazoPagoPartes && /^mes/i.test(plazoPagoPartes[2]));
+        const calcularVencimientoEstimado = (fechaVenta) => {
+          if (!fechaVenta) return null;
+          const fecha = new Date(fechaVenta);
+          if (Number.isNaN(fecha.getTime())) return null;
+          const diaOriginal = fecha.getDate();
+          if (plazoPagoEnMeses) {
+            fecha.setDate(1);
+            fecha.setMonth(fecha.getMonth() + plazoPagoCantidad);
+            const ultimoDiaMes = new Date(fecha.getFullYear(), fecha.getMonth() + 1, 0).getDate();
+            fecha.setDate(Math.min(diaOriginal, ultimoDiaMes));
+          } else {
+            fecha.setDate(fecha.getDate() + plazoPagoCantidad);
+          }
+          return new Date(fecha.getFullYear(), fecha.getMonth(), fecha.getDate());
+        };
+        const diferenciaDias = (desde, hasta) => Math.floor((Date.UTC(hasta.getFullYear(), hasta.getMonth(), hasta.getDate()) - Date.UTC(desde.getFullYear(), desde.getMonth(), desde.getDate())) / 86400000);
+        const antiguedad = { vigente: 0, dias30: 0, dias60: 0, dias90: 0, mas90: 0, saldoInicialSinFecha: libroMayorUbicacion === 'Todas' ? Math.max(0, saldoApertura) : 0 };
+        ventasLibroMayor
+          .filter((venta) => libroMayorUbicacion === 'Todas' || venta.ubicacion_id === libroMayorUbicacion)
+          .forEach((venta) => {
+            const saldoPendiente = Math.max(0, Number(venta.saldoActual ?? venta.saldo_pendiente) || 0);
+            if (!saldoPendiente) return;
+            const vencimiento = calcularVencimientoEstimado(venta.fecha);
+            if (!vencimiento) {
+              antiguedad.saldoInicialSinFecha += saldoPendiente;
+              return;
+            }
+            const diasVencidos = diferenciaDias(vencimiento, fechaCorteAntiguedad);
+            if (diasVencidos <= 0) antiguedad.vigente += saldoPendiente;
+            else if (diasVencidos <= 30) antiguedad.dias30 += saldoPendiente;
+            else if (diasVencidos <= 60) antiguedad.dias60 += saldoPendiente;
+            else if (diasVencidos <= 90) antiguedad.dias90 += saldoPendiente;
+            else antiguedad.mas90 += saldoPendiente;
+          });
+        antiguedad.total = antiguedad.vigente + antiguedad.dias30 + antiguedad.dias60 + antiguedad.dias90 + antiguedad.mas90 + antiguedad.saldoInicialSinFecha;
+        const saldoCuentaActual = movimientosPorUbicacion.reduce((saldo, movimiento) => saldo + movimiento.debito - movimiento.credito, saldoApertura);
+        const creditoNetoEnCuenta = Math.min(antiguedad.total, Math.max(0, antiguedad.total - Math.max(0, saldoCuentaActual)));
+        const saldoNetoAntiguedad = Math.max(0, antiguedad.total - creditoNetoEnCuenta);
+        const saldoAFavorCuenta = Math.max(0, -saldoCuentaActual);
+        const idsPagosConAplicacion = new Set(cliente.aplicacionesCliente.map((aplicacion) => aplicacion.pago_id));
+        const hayPagosSinAsignacion = cliente.pagosManuales.some((pago) => !idsPagosConAplicacion.has(pago.id));
+
+        const crearLibroMayorPDF = (formato = libroMayorFormato) => {
           const doc = new jsPDF('landscape');
           doc.text(`Libro mayor - ${cliente.nombre}`, 14, 12);
           doc.setFontSize(8);
           doc.text(`Período: ${libroMayorDesde || 'Inicio'} a ${libroMayorHasta || 'Actual'}`, 14, 18);
           autoTable(doc, {
             startY: 23,
-            head: [['Fecha', 'Referencia', 'Tipo', 'Ubicación', 'Estado', 'Débito', 'Crédito', 'Saldo', 'Método']],
-            body: filasConSaldo.map((m) => [
-              m.fecha ? new Date(m.fecha).toLocaleString('es-PY') : '—',
-              m.referencia,
-              m.tipo,
-              m.ubicacion,
-              m.estadoPago,
-              formatGs(m.debito),
-              formatGs(m.credito),
-              formatGs(Math.abs(m.saldo)),
-              m.metodoPago,
-            ]),
+            head: [['Vigente', '1–30 días', '31–60 días', '61–90 días', 'Más de 90 días', 'Saldo sin vencimiento', 'Deuda abierta']],
+            body: [[formatGs(antiguedad.vigente), formatGs(antiguedad.dias30), formatGs(antiguedad.dias60), formatGs(antiguedad.dias90), formatGs(antiguedad.mas90), formatGs(antiguedad.saldoInicialSinFecha), formatGs(antiguedad.total)], ['Crédito neto en cuenta', formatGs(creditoNetoEnCuenta), 'Saldo neto adeudado', formatGs(saldoNetoAntiguedad), 'Saldo a favor', formatGs(saldoAFavorCuenta), '']],
+            styles: { fontSize: 7 },
+            headStyles: { fillColor: [15, 23, 42] },
+          });
+          autoTable(doc, {
+            startY: doc.lastAutoTable.finalY + 4,
+            head: [formato === 'Format 2'
+              ? ['Fecha', 'Transaction', 'Cantidad', 'Saldo']
+              : ['Fecha', 'Referencia', 'Tipo', 'Ubicación', 'Estado', 'Débito', 'Crédito', 'Saldo', 'Método']],
+            body: filasLibroMayor.map((m) => formato === 'Format 2'
+              ? [m.fecha ? new Date(m.fecha).toLocaleDateString('es-PY') : '—', `${m.tipo}${m.referencia !== '—' ? ` #${m.referencia}` : ''}`, formatGs(m.debito - m.credito), formatGs(Math.abs(m.saldo))]
+              : [
+                  m.fecha ? new Date(m.fecha).toLocaleString('es-PY') : '—', m.referencia, m.tipo, m.ubicacion,
+                  m.estadoPago, formatGs(m.debito), formatGs(m.credito), formatGs(Math.abs(m.saldo)), m.metodoPago,
+                ]),
             styles: { fontSize: 7 },
             headStyles: { fillColor: [249, 115, 22] },
           });
+          return doc;
+        };
+
+        const exportarLibroMayorPDF = () => {
+          const doc = crearLibroMayorPDF();
           doc.save(`libro_mayor_${cliente.codigo_cliente || cliente.id}.pdf`);
+        };
+
+        const reemplazarEtiquetasCorreo = (texto) => String(texto || '')
+          .replaceAll('{business_name}', nombreDelNegocio || 'Mi negocio')
+          .replaceAll('{business_logo}', '')
+          .replaceAll('{contact_name}', cliente.nombre || '')
+          .replaceAll('{balance_due}', formatGs(Math.max(0, saldoCuentaActual)))
+          .replaceAll('{due_amount}', formatGs(Math.max(0, saldoCuentaActual)))
+          .replaceAll('{cumulative_due_amount}', formatGs(Math.max(0, saldoCuentaActual)))
+          .replaceAll('{date_from}', libroMayorDesde || 'Inicio')
+          .replaceAll('{date_to}', libroMayorHasta || 'Actual');
+
+        const abrirCorreoLibroMayor = async () => {
+          setParaLibroMayor(cliente.email || '');
+          setFormatoCorreoLibroMayor(libroMayorFormato);
+          setDescargarPdfCorreo(true);
+          const plantillaBase = {
+            asunto: 'Estado de cuenta · {business_name}',
+            cc: '',
+            bcc: '',
+            contenido: 'Estimado/a {contact_name},\n\nLe enviamos su estado de cuenta actualizado de {business_name}.\n\nSaldo pendiente: {balance_due}\nPeríodo: {date_from} a {date_to}\n\nAnte cualquier consulta, comuníquese con nuestra administración.\n\nAtentamente,\n{business_name}',
+          };
+          setAsuntoLibroMayor(reemplazarEtiquetasCorreo(plantillaBase.asunto));
+          setCcLibroMayor('');
+          setBccLibroMayor('');
+          setCuerpoLibroMayor(reemplazarEtiquetasCorreo(plantillaBase.contenido));
+          setCorreoLibroMayorAbierto(true);
+          if (!empresaId) return;
+          setCargandoPlantillaLibroMayor(true);
+          const { data, error } = await supabase
+            .from('plantillas_notificacion')
+            .select('asunto, cc, bcc, contenido, activo')
+            .eq('empresa_id', empresaId)
+            .eq('evento', 'send_ledger')
+            .eq('canal', 'email')
+            .maybeSingle();
+          if (!error && data?.activo !== false && data) {
+            setAsuntoLibroMayor(reemplazarEtiquetasCorreo(data.asunto || plantillaBase.asunto));
+            setCcLibroMayor(data.cc || '');
+            setBccLibroMayor(data.bcc || '');
+            setCuerpoLibroMayor(reemplazarEtiquetasCorreo(data.contenido || plantillaBase.contenido));
+          }
+          setCargandoPlantillaLibroMayor(false);
+        };
+
+        const prepararCorreoLibroMayor = (event) => {
+          event.preventDefault();
+          const normalizarDestinatarios = (valor) => String(valor || '').split(/[;,\s]+/).filter(Boolean);
+          const validarDestinatarios = (valor) => normalizarDestinatarios(valor).every((correo) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(correo));
+          if (!validarDestinatarios(paraLibroMayor) || !normalizarDestinatarios(paraLibroMayor).length) {
+            notificar.error('Ingresá al menos un correo válido en el campo Para.');
+            return;
+          }
+          if (!validarDestinatarios(ccLibroMayor) || !validarDestinatarios(bccLibroMayor)) {
+            notificar.error('Revisá los correos de CC y CCO.');
+            return;
+          }
+          const parametros = new URLSearchParams();
+          if (asuntoLibroMayor.trim()) parametros.set('subject', asuntoLibroMayor.trim());
+          if (ccLibroMayor.trim()) parametros.set('cc', normalizarDestinatarios(ccLibroMayor).join(','));
+          if (bccLibroMayor.trim()) parametros.set('bcc', normalizarDestinatarios(bccLibroMayor).join(','));
+          parametros.set('body', cuerpoLibroMayor);
+          if (descargarPdfCorreo) crearLibroMayorPDF(formatoCorreoLibroMayor).save(`libro_mayor_${cliente.codigo_cliente || cliente.id}.pdf`);
+          window.location.href = `mailto:${encodeURIComponent(normalizarDestinatarios(paraLibroMayor).join(','))}?${parametros.toString()}`;
+          setCorreoLibroMayorAbierto(false);
         };
 
         return (
           <div className="libro-mayor-scroll absolute inset-x-0 top-14 md:top-16 bottom-16 md:bottom-0 bg-white z-[9999] overflow-y-auto overflow-x-hidden flex flex-col">
+              <style>{`
+                .libro-mayor-table th, .libro-mayor-table td { padding: 10px; }
+                .libro-mayor-table[data-formato="Format 2"] th,
+                .libro-mayor-table[data-formato="Format 2"] td { padding: 5px 7px; }
+                @media print {
+                  body * { visibility: hidden !important; }
+                  .libro-mayor-scroll, .libro-mayor-scroll * { visibility: visible !important; }
+                  .libro-mayor-scroll { position: static !important; width: 100% !important; height: auto !important; overflow: visible !important; }
+                  .libro-mayor-header, .libro-mayor-controls, .libro-mayor-tabs { display: none !important; }
+                }
+              `}</style>
 
               {/* Encabezado con nombre y código del cliente */}
-              <div className="sticky top-0 z-20 bg-white border-b border-gray-200 px-4 md:px-6 py-3 flex justify-between items-center flex-shrink-0">
+              <div className="libro-mayor-header sticky top-0 z-20 bg-white border-b border-gray-200 px-4 md:px-6 py-3 flex justify-between items-center flex-shrink-0">
                 <h3 className="text-[#1f2937] font-bold text-lg">Ver contacto</h3>
                 <div className="flex items-center gap-3">
                   <div className="border border-gray-200 rounded-md bg-white px-3 py-2 min-w-[220px] text-sm text-gray-700 shadow-sm">
@@ -1854,15 +2179,11 @@ export default function Clientes() {
                         </p>
                       )}
                     </div>
-                    {/* Botón Add Discount */}
-                  <button className="bg-orange-500 hover:bg-orange-600 text-white text-xs font-bold px-4 py-2 rounded-md transition-colors shadow-sm">
-                    Add Discount
-                  </button>
                   </div>
                 </div>
 
                 {/* Pestañas - estilo CDEpos con iconos */}
-                <div className="flex gap-0 border-b border-gray-200 mb-4 text-sm font-bold text-gray-500 overflow-x-auto">
+                <div className="libro-mayor-tabs flex gap-0 border-b border-gray-200 mb-4 text-sm font-bold text-gray-500 overflow-x-auto">
                   <button
                     onClick={() => setLibroMayorTab('libro')}
                     className={`whitespace-nowrap pb-3 px-4 flex items-center gap-2 transition-colors ${libroMayorTab === 'libro' ? 'text-[#004284] border-b-3 border-[#004284]' : 'hover:text-gray-700'}`}
@@ -1878,10 +2199,11 @@ export default function Clientes() {
                     💰 Ventas
                   </button>
                   <button
-                    onClick={() => { setClienteLibroMayor(null); abrirDocumentosNotas(cliente); }}
-                    className="whitespace-nowrap pb-3 px-4 flex items-center gap-2 hover:text-gray-700 transition-colors"
+                    onClick={() => setLibroMayorTab('documentos')}
+                    className={`whitespace-nowrap pb-3 px-4 flex items-center gap-2 transition-colors ${libroMayorTab === 'documentos' ? 'text-[#004284] border-b-3 border-[#004284]' : 'hover:text-gray-700'}`}
+                    style={libroMayorTab === 'documentos' ? { borderBottomWidth: '3px' } : {}}
                   >
-                    ✏️ Documentos y notas
+                    📎 Documentos y notas
                   </button>
                   <button
                     onClick={() => setLibroMayorTab('pagos')}
@@ -1891,18 +2213,18 @@ export default function Clientes() {
                     💳 Pagos
                   </button>
                   <button
-                    onClick={() => setLibroMayorTab('ocupaciones')}
-                    className={`whitespace-nowrap pb-3 px-4 flex items-center gap-2 transition-colors ${libroMayorTab === 'ocupaciones' ? 'text-[#004284] border-b-3 border-[#004284]' : 'hover:text-gray-700'}`}
-                    style={libroMayorTab === 'ocupaciones' ? { borderBottomWidth: '3px' } : {}}
+                    onClick={() => setLibroMayorTab('historial')}
+                    className={`whitespace-nowrap pb-3 px-4 flex items-center gap-2 transition-colors ${libroMayorTab === 'historial' ? 'text-[#004284] border-b-3 border-[#004284]' : 'hover:text-gray-700'}`}
+                    style={libroMayorTab === 'historial' ? { borderBottomWidth: '3px' } : {}}
                   >
-                    📋 Ocupaciones
+                    🕘 Historial de cambios
                   </button>
                 </div>
 
                 {libroMayorTab === 'libro' && (
                   <>
                     {/* Controles: rango de fechas / formato / ubicación + acciones */}
-                    <div className="bg-white border border-gray-200 rounded-lg p-3 md:p-4 flex flex-col xl:flex-row xl:items-end justify-between gap-4 mb-4 shadow-sm">
+                    <div className="libro-mayor-controls bg-white border border-gray-200 rounded-lg p-3 md:p-4 flex flex-col xl:flex-row xl:items-end justify-between gap-4 mb-4 shadow-sm">
                       <div className="flex flex-wrap gap-4 items-end">
                         <div>
                           <p className="text-xs font-bold text-gray-600 mb-1">Rango de fechas:</p>
@@ -1921,7 +2243,7 @@ export default function Clientes() {
                                 onClick={() => setLibroMayorFormato(f)}
                                 className={`px-4 py-2 text-xs font-bold transition-colors ${libroMayorFormato === f ? 'bg-gray-200 text-gray-800' : 'bg-white text-gray-500 hover:bg-gray-50'}`}
                               >
-                                {f}
+                                {f === 'Format 1' ? 'Formato 1' : 'Formato 2'}
                               </button>
                             ))}
                           </div>
@@ -1961,14 +2283,7 @@ export default function Clientes() {
                           className="w-9 h-9 border rounded-lg flex items-center justify-center text-gray-500 hover:bg-gray-50 hover:text-gray-700 transition-colors"
                           title="Enviar por email"
                           aria-label="Enviar Libro mayor por email"
-                          onClick={() => {
-                            if (!cliente.email) {
-                              alert('Este contacto no tiene un email registrado.');
-                              return;
-                            }
-                            const asunto = `Libro mayor - ${cliente.nombre}`;
-                            window.location.href = `mailto:${cliente.email}?subject=${encodeURIComponent(asunto)}`;
-                          }}
+                          onClick={abrirCorreoLibroMayor}
                         >
                           ✉️
                         </button>
@@ -1976,16 +2291,23 @@ export default function Clientes() {
                     </div>
 
                     {/* Datos de empresa (derecha) */}
-                    <div className="flex justify-end mb-1">
-                      <div className="text-right text-xs">
+                    <div className={`flex ${libroMayorFormato === 'Format 2' ? 'justify-between' : 'justify-end'} mb-1 gap-4`}>
+                      <div className={`${libroMayorFormato === 'Format 2' ? 'text-left' : 'text-right'} text-xs`}>
                         <p className="font-bold text-gray-900">{nombreDelNegocio || 'Tu negocio'}</p>
                         {direccionEmpresa && <p className="text-gray-600">{direccionEmpresa}</p>}
                         {telefonoEmpresa && <p className="text-gray-600">{telefonoEmpresa}</p>}
                       </div>
+                      {libroMayorFormato === 'Format 2' && (
+                        <div className="text-right text-sm">
+                          <p className="font-extrabold tracking-wide text-slate-800">Statement</p>
+                          <p className="text-xs text-slate-500">Fecha</p>
+                          <p className="text-xs font-semibold text-slate-700">{libroMayorDesde || 'Inicio'} A {libroMayorHasta || 'Actual'}</p>
+                        </div>
+                      )}
                     </div>
 
                     {/* Datos del cliente (izquierda) + Resumen de la cuenta (derecha) */}
-                    <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_minmax(300px,400px)] items-start gap-6 mb-5">
+                    <div className={`grid grid-cols-1 ${libroMayorFormato === 'Format 1' ? 'lg:grid-cols-[minmax(0,1fr)_minmax(300px,400px)]' : ''} items-start gap-6 mb-5`}>
                       {/* Cliente destinatario */}
                       <div className="text-xs">
                         <div className="bg-orange-500 text-white font-bold px-3 py-1 w-fit mb-2 rounded-sm text-sm">A:</div>
@@ -1998,15 +2320,15 @@ export default function Clientes() {
                       </div>
 
                       {/* Resumen de la cuenta - estilo CDEpos con naranja */}
-                      <div className="border rounded-lg overflow-hidden min-w-[300px] max-w-[400px] flex-1">
+                      {libroMayorFormato === 'Format 1' && <div className="border rounded-lg overflow-hidden min-w-[300px] max-w-[400px] flex-1">
                         <div className="bg-orange-500 text-white font-bold text-sm py-1.5 px-3 flex justify-between items-center">
                           <span>Resumen de la cuenta</span>
                           <span className="text-[10px] font-normal text-white/80">{libroMayorDesde} A {libroMayorHasta}</span>
                         </div>
                         <div className="divide-y text-sm">
                           <div className="flex justify-between px-3 py-1.5">
-                            <span className="text-gray-600">Crédito a favor</span>
-                            <span className="font-bold text-gray-800">{formatGs(creditoAFavorRango)}</span>
+                            <span className="text-gray-600">Saldo anterior</span>
+                            <span className="font-bold text-gray-800">{formatGs(saldoInicialRango)}</span>
                           </div>
                           <div className="flex justify-between px-3 py-1.5">
                             <span className="text-gray-600">Total de la factura</span>
@@ -2017,16 +2339,51 @@ export default function Clientes() {
                             <span className="font-bold text-gray-800">{formatGs(totalPagadoRango)}</span>
                           </div>
                           <div className="flex justify-between px-3 py-1.5">
-                            <span className="text-gray-600">Pago Realizado</span>
-                            <span className="font-bold text-gray-800">{formatGs(totalCreditoRango)}</span>
+                            <span className="text-gray-600">Crédito a favor</span>
+                            <span className="font-bold text-gray-800">{formatGs(creditoAFavorRango)}</span>
                           </div>
                           <div className="flex justify-between px-3 py-1.5 bg-gray-50">
                             <span className="font-bold text-gray-900">Saldo adeudado</span>
                             <span className="font-bold text-gray-900">{formatGs(Math.max(0, saldoAdeudadoRango))}</span>
                           </div>
                         </div>
-                      </div>
+                      </div>}
                     </div>
+
+                    <section className="mb-5 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm print:break-inside-avoid">
+                      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 bg-slate-900 px-4 py-3 text-white">
+                        <div><h4 className="text-xs font-extrabold uppercase tracking-wider">Antigüedad de saldos pendientes</h4><p className="mt-1 text-[10px] text-slate-300">Corte {fechaCorteAntiguedad.toLocaleDateString('es-PY')} · vencimiento calculado con el plazo de pago actual</p></div>
+                        <div className="text-right"><span className="block text-[10px] uppercase tracking-wide text-slate-300">Deuda abierta por factura</span><strong className="text-lg font-extrabold">{formatGs(antiguedad.total)}</strong></div>
+                      </div>
+                      <div className="grid grid-cols-2 divide-x divide-y divide-slate-200 sm:grid-cols-3 xl:grid-cols-6 xl:divide-y-0">
+                        {[
+                          { label: 'Vigente', value: antiguedad.vigente, tone: 'text-emerald-700' },
+                          { label: '1–30 días', value: antiguedad.dias30, tone: 'text-amber-700' },
+                          { label: '31–60 días', value: antiguedad.dias60, tone: 'text-orange-700' },
+                          { label: '61–90 días', value: antiguedad.dias90, tone: 'text-rose-700' },
+                          { label: 'Más de 90 días', value: antiguedad.mas90, tone: 'text-red-700' },
+                          { label: 'Saldo inicial / sin fecha', value: antiguedad.saldoInicialSinFecha, tone: 'text-slate-700' },
+                        ].map((tramo) => <div key={tramo.label} className="min-h-[76px] px-3 py-3 xl:border-r xl:last:border-r-0">
+                          <p className="text-[10px] font-bold uppercase leading-4 tracking-wide text-slate-500">{tramo.label}</p>
+                          <p className={`mt-2 text-sm font-extrabold tabular-nums ${tramo.tone}`}>{formatGs(tramo.value)}</p>
+                        </div>)}
+                      </div>
+                      <div className="grid grid-cols-1 gap-2 border-t border-slate-200 bg-slate-50 px-4 py-3 text-xs sm:grid-cols-3">
+                        <p className="flex justify-between gap-2"><span className="text-slate-600">Crédito neto en cuenta</span><strong className="text-slate-800">{formatGs(creditoNetoEnCuenta)}</strong></p>
+                        <p className="flex justify-between gap-2"><span className="text-slate-600">Saldo neto adeudado</span><strong className="text-slate-900">{formatGs(saldoNetoAntiguedad)}</strong></p>
+                        <p className="flex justify-between gap-2"><span className="text-slate-600">Saldo a favor</span><strong className="text-emerald-700">{formatGs(saldoAFavorCuenta)}</strong></p>
+                      </div>
+                    </section>
+
+                    {(errorAplicacionesPagos || hayPagosSinAsignacion) && (
+                      <div role="status" className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-xs leading-5 text-amber-900">
+                        <strong>Conciliación histórica pendiente.</strong>{' '}
+                        {errorAplicacionesPagos
+                          ? 'No está disponible el detalle de aplicaciones de pagos a facturas. Los pagos se muestran, pero no se pueden asignar con certeza a cada saldo.'
+                          : 'Hay pagos sin aplicación registrada a factura. Se muestran por su fecha de cobro y no se inventa una asignación para calcular vencimientos.'}
+                        {' '}La antigüedad se calcula sobre el saldo pendiente actual y el plazo configurado hoy; los cambios históricos del plazo no están guardados por venta.
+                      </div>
+                    )}
 
                     <p className="text-xs font-bold text-gray-700 mb-3 text-center border-y border-gray-100 py-2">
                       Mostrando todas las facturas y pagos entre {libroMayorDesde} y {libroMayorHasta}
@@ -2034,23 +2391,24 @@ export default function Clientes() {
 
                     {/* Tabla de movimientos - estilo CDEpos */}
                     <div className="overflow-x-auto border border-gray-200 rounded-lg shadow-sm mt-2">
-                      <table className="min-w-[900px] w-full text-[11px] border-collapse whitespace-nowrap">
+                      <table data-formato={libroMayorFormato} className={`libro-mayor-table min-w-[900px] w-full border-collapse whitespace-nowrap ${libroMayorFormato === 'Format 2' ? 'text-[10px]' : 'text-[11px]'}`}>
                         <thead>
                           <tr className="bg-gray-100 text-gray-500 font-bold uppercase border-b text-[10px]">
-                            <th className="p-2.5 text-left">Fecha</th>
-                            <th className="p-2.5 text-left">Numero de Referencia</th>
-                            <th className="p-2.5 text-left">Tipo</th>
-                            <th className="p-2.5 text-left">Ubicación</th>
-                            <th className="p-2.5 text-center">Estado de Pago</th>
-                            <th className="p-2.5 text-right">Débito</th>
-                            <th className="p-2.5 text-right">Crédito</th>
-                            <th className="p-2.5 text-right">Saldo</th>
-                            <th className="p-2.5 text-left">Método de Pago</th>
+                            {libroMayorFormato === 'Format 2' ? <>
+                              <th className="p-2.5 text-left">Fecha</th><th className="p-2.5 text-left">Transaction</th>
+                              <th className="p-2.5 text-right">Cantidad</th><th className="p-2.5 text-right">Saldo</th>
+                            </> : <>
+                              <th className="p-2.5 text-left">Fecha</th><th className="p-2.5 text-left">Numero de Referencia</th>
+                              <th className="p-2.5 text-left">Tipo</th><th className="p-2.5 text-left">Ubicación</th>
+                              <th className="p-2.5 text-center">Estado de Pago</th><th className="p-2.5 text-right">Débito</th>
+                              <th className="p-2.5 text-right">Crédito</th><th className="p-2.5 text-right">Saldo</th>
+                              <th className="p-2.5 text-left">Método de Pago</th>
+                            </>}
                           </tr>
                         </thead>
                         <tbody>
                           {/* Fila especial: Crédito a favor */}
-                          {cliente.creditoAFavor > 0 && (
+                          {creditoAFavorRango > 0 && filasLibroMayor.length === 0 && (
                             <tr className="border-b bg-orange-50/50 text-gray-700">
                               <td className="p-2.5 text-gray-500">{libroMayorDesde}<br/><span className="text-[10px] text-gray-400">12:00 AM</span></td>
                               <td className="p-2.5"></td>
@@ -2063,10 +2421,18 @@ export default function Clientes() {
                               <td className="p-2.5"></td>
                             </tr>
                           )}
-                          {filasConSaldo.length === 0 && cliente.creditoAFavor <= 0 ? (
-                            <tr><td colSpan="9" className="text-center py-8 text-gray-400">No hay movimientos en el rango seleccionado.</td></tr>
+                          {filasLibroMayor.length === 0 ? (
+                            <tr><td colSpan={libroMayorFormato === 'Format 2' ? 4 : 9} className="text-center py-8 text-gray-400">No hay movimientos en el rango seleccionado.</td></tr>
                           ) : (
-                            filasConSaldo.map((m, i) => (
+                            filasLibroMayor.map((m, i) => (
+                              libroMayorFormato === 'Format 2' ? (
+                                <tr key={i} className="border-b hover:bg-gray-50/80 text-gray-700 transition-colors">
+                                  <td className="p-2.5 whitespace-nowrap">{m.fecha ? new Date(m.fecha).toLocaleDateString('es-PY') : '—'}</td>
+                                  <td className="p-2.5">{m.tipo}{m.referencia !== '—' ? ` #${m.referencia}` : ''}</td>
+                                  <td className="p-2.5 text-right">{formatGs(m.debito - m.credito)}</td>
+                                  <td className="p-2.5 text-right font-bold">{formatGs(Math.abs(m.saldo))} {m.saldo < 0 ? 'CR' : m.saldo > 0 ? 'DR' : ''}</td>
+                                </tr>
+                              ) : (
                               <tr key={i} className="border-b hover:bg-gray-50/80 text-gray-700 transition-colors">
                                 <td className="p-2.5">
                                   {m.fecha ? (
@@ -2097,17 +2463,24 @@ export default function Clientes() {
                                 <td className="p-2.5 text-right font-bold">{formatGs(Math.abs(m.saldo))} {m.saldo < 0 ? 'CR' : m.saldo > 0 ? 'DR' : ''}</td>
                                 <td className="p-2.5">{m.metodoPago !== '—' ? m.metodoPago : ''}</td>
                               </tr>
+                              )
                             ))
                           )}
                         </tbody>
-                        {filasConSaldo.length > 0 && (
+                        {filasLibroMayor.length > 0 && (
                           <tfoot>
                             <tr className="bg-gray-100 border-t-2 border-gray-200 font-bold text-gray-800">
-                              <td className="p-2.5" colSpan="5">Totales del período</td>
-                              <td className="p-2.5 text-right">{formatGs(totalFacturaRango)}</td>
-                              <td className="p-2.5 text-right">{formatGs(totalCreditoRango)}</td>
-                              <td className="p-2.5 text-right">{formatGs(Math.abs(saldoAdeudadoRango))}</td>
-                              <td className="p-2.5" />
+                              {libroMayorFormato === 'Format 2' ? <>
+                                <td className="p-2.5" colSpan="2">Totales del período</td>
+                                <td className="p-2.5 text-right">{formatGs(totalFacturaRango - totalCreditoRango)}</td>
+                                <td className="p-2.5 text-right">{formatGs(Math.abs(saldoAdeudadoRango))}</td>
+                              </> : <>
+                                <td className="p-2.5" colSpan="5">Totales del período</td>
+                                <td className="p-2.5 text-right">{formatGs(totalFacturaRango)}</td>
+                                <td className="p-2.5 text-right">{formatGs(totalCreditoRango)}</td>
+                                <td className="p-2.5 text-right">{formatGs(Math.abs(saldoAdeudadoRango))}</td>
+                                <td className="p-2.5" />
+                              </>}
                             </tr>
                           </tfoot>
                         )}
@@ -2116,13 +2489,48 @@ export default function Clientes() {
                   </>
                 )}
 
-                {/* Pestaña Ocupaciones */}
-                {libroMayorTab === 'ocupaciones' && (
-                  <div className="flex flex-col items-center justify-center py-16 text-gray-400">
-                    <span className="text-5xl mb-4">📋</span>
-                    <p className="text-sm font-medium">No hay ocupaciones registradas para este contacto.</p>
-                    <p className="text-xs mt-1">Las ocupaciones aparecerán aquí cuando se asignen.</p>
-                  </div>
+                {libroMayorTab === 'documentos' && (
+                  <section className="rounded-2xl border border-slate-200 bg-white p-5 md:p-6 shadow-sm">
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                      <div><h4 className="font-bold text-slate-800">Documentos y notas</h4><p className="mt-1 text-xs text-slate-500">Información interna guardada en la ficha de este cliente.</p></div>
+                      <button onClick={() => { setClienteLibroMayor(null); abrirDocumentosNotas(cliente); }} className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50">Editar nota</button>
+                    </div>
+                    <div className="mt-4 min-h-24 rounded-xl bg-slate-50 p-4 text-sm leading-6 text-slate-700 whitespace-pre-wrap">
+                      {cliente.notas?.trim() || <span className="text-slate-400">Todavía no hay notas guardadas para este cliente.</span>}
+                    </div>
+                    <div className="mt-6 flex flex-wrap items-center justify-between gap-3">
+                      <div><h5 className="text-sm font-bold text-slate-800">Archivos adjuntos</h5><p className="mt-1 text-xs text-slate-500">Archivos privados visibles solo para usuarios de esta empresa; máximo 20 MB por archivo.</p></div>
+                      <label className={`cursor-pointer rounded-lg bg-blue-700 px-3 py-2 text-xs font-bold text-white hover:bg-blue-800 ${subiendoDocumentoCliente ? 'pointer-events-none opacity-60' : ''}`}>
+                        {subiendoDocumentoCliente ? 'Subiendo…' : 'Añadir archivo'}
+                        <input type="file" className="sr-only" onChange={subirDocumentoCliente} disabled={subiendoDocumentoCliente} />
+                      </label>
+                    </div>
+                    {errorDocumentosCliente && <p role="alert" className="mt-3 rounded-lg bg-amber-50 p-3 text-xs text-amber-800">{errorDocumentosCliente}</p>}
+                    {cargandoDocumentosCliente ? <p className="py-6 text-center text-xs text-slate-500">Cargando archivos…</p> : documentosCliente.length === 0 ? (
+                      <p className="mt-3 rounded-xl border border-dashed border-slate-200 p-5 text-center text-xs text-slate-400">Todavía no hay archivos adjuntos.</p>
+                    ) : (
+                      <ul className="mt-3 divide-y divide-slate-100 rounded-xl border border-slate-200">
+                        {documentosCliente.map((documento) => <li key={documento.id} className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
+                          <div className="min-w-0"><p className="truncate text-sm font-semibold text-slate-700">{documento.name.replace(/^[0-9a-f-]{36}-/i, '')}</p><p className="mt-1 text-[11px] text-slate-400">{documento.created_at ? new Date(documento.created_at).toLocaleString('es-PY') : ''} · {Math.max(1, Math.round((documento.metadata?.size || 0) / 1024))} KB</p></div>
+                          <div className="flex gap-2"><button onClick={() => abrirDocumentoCliente(documento)} className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50">Abrir</button><button onClick={() => borrarDocumentoCliente(documento)} className="rounded-lg border border-red-100 px-3 py-1.5 text-xs font-semibold text-red-600 hover:bg-red-50">Eliminar</button></div>
+                        </li>)}
+                      </ul>
+                    )}
+                  </section>
+                )}
+
+                {libroMayorTab === 'historial' && (
+                  <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+                    <div className="border-b border-slate-100 px-5 py-4"><h4 className="font-bold text-slate-800">Historial de cambios</h4><p className="mt-1 text-xs text-slate-500">Registro de altas y modificaciones de esta ficha.</p></div>
+                    {cargandoHistorialCliente ? <p className="p-8 text-center text-sm text-slate-500">Cargando historial…</p> : historialCliente.length === 0 ? (
+                      <p className="p-8 text-center text-sm text-slate-500">No hay eventos de historial disponibles para este cliente.</p>
+                    ) : (
+                      <div className="overflow-x-auto"><table className="w-full min-w-[620px] text-left text-sm">
+                        <thead className="bg-slate-50 text-[10px] uppercase tracking-wide text-slate-500"><tr><th className="px-5 py-3">Fecha</th><th className="px-5 py-3">Acción</th><th className="px-5 py-3">Usuario</th><th className="px-5 py-3">Detalle</th></tr></thead>
+                        <tbody>{historialCliente.map((evento) => <tr key={evento.id} className="border-t border-slate-100 align-top"><td className="whitespace-nowrap px-5 py-3 text-slate-600">{new Date(evento.ocurrido_en).toLocaleString('es-PY')}</td><td className="px-5 py-3 font-semibold text-slate-700">{{ INSERT: 'Agregado', UPDATE: 'Actualizado', DELETE: 'Borrado' }[evento.accion] || evento.accion}</td><td className="px-5 py-3 text-slate-600">{evento.usuario_nombre || '—'}</td><td className="max-w-sm px-5 py-3 text-xs text-slate-500">{evento.detalle?.actual?.nombre || evento.detalle?.anterior?.nombre || 'Cambio en los datos del contacto'}</td></tr>)}</tbody>
+                      </table></div>
+                    )}
+                  </section>
                 )}
 
                 {libroMayorTab === 'ventas' && (() => {
@@ -2555,6 +2963,50 @@ export default function Clientes() {
                   )
                 )}
               </div>
+              {correoLibroMayorAbierto && (
+                <div className="fixed inset-0 z-[10001] flex items-center justify-center bg-slate-950/55 p-4" onClick={() => !cargandoPlantillaLibroMayor && setCorreoLibroMayorAbierto(false)}>
+                  <form role="dialog" aria-modal="true" aria-label="Enviar Libro mayor por correo" onSubmit={prepararCorreoLibroMayor} onClick={(event) => event.stopPropagation()} className="flex max-h-[92vh] w-full max-w-2xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
+                    <header className="flex items-start justify-between gap-4 bg-slate-900 px-5 py-4 text-white">
+                      <div><p className="text-[10px] font-bold uppercase tracking-[0.18em] text-orange-300">Comunicación con el cliente</p><h3 className="mt-1 text-lg font-extrabold">Enviar Libro mayor</h3><p className="mt-1 text-xs text-slate-300">Prepará el mensaje y el estado de cuenta en PDF.</p></div>
+                      <button type="button" onClick={() => setCorreoLibroMayorAbierto(false)} className="rounded-lg px-2 py-1 text-xl text-slate-300 hover:bg-white/10 hover:text-white" aria-label="Cerrar">×</button>
+                    </header>
+                    <div className="space-y-4 overflow-y-auto p-5">
+                      {cargandoPlantillaLibroMayor && <p className="text-xs text-slate-500">Cargando la plantilla de envío…</p>}
+                      <div className="grid gap-4 sm:grid-cols-2">
+                        <label className="block text-xs font-bold text-slate-600">Para
+                          <input type="text" value={paraLibroMayor} onChange={(event) => setParaLibroMayor(event.target.value)} placeholder="cliente@correo.com" autoComplete="email" className="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm font-normal text-slate-800 outline-none focus:border-orange-400 focus:ring-4 focus:ring-orange-100" />
+                        </label>
+                        <label className="block text-xs font-bold text-slate-600">Formato del Libro mayor
+                          <select value={formatoCorreoLibroMayor} onChange={(event) => setFormatoCorreoLibroMayor(event.target.value)} className="mt-1 block w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm font-normal text-slate-800 outline-none focus:border-orange-400">
+                            <option value="Format 1">Formato 1</option><option value="Format 2">Formato 2</option>
+                          </select>
+                        </label>
+                        <label className="block text-xs font-bold text-slate-600">CC
+                          <input type="text" value={ccLibroMayor} onChange={(event) => setCcLibroMayor(event.target.value)} placeholder="correo@ejemplo.com" className="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm font-normal text-slate-800 outline-none focus:border-orange-400" />
+                        </label>
+                        <label className="block text-xs font-bold text-slate-600">CCO
+                          <input type="text" value={bccLibroMayor} onChange={(event) => setBccLibroMayor(event.target.value)} placeholder="correo@ejemplo.com" className="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm font-normal text-slate-800 outline-none focus:border-orange-400" />
+                        </label>
+                      </div>
+                      <label className="block text-xs font-bold text-slate-600">Asunto
+                        <input type="text" value={asuntoLibroMayor} onChange={(event) => setAsuntoLibroMayor(event.target.value)} maxLength={180} className="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm font-normal text-slate-800 outline-none focus:border-orange-400" />
+                      </label>
+                      <label className="block text-xs font-bold text-slate-600">Mensaje
+                        <textarea value={cuerpoLibroMayor} onChange={(event) => setCuerpoLibroMayor(event.target.value)} rows={9} maxLength={12000} className="mt-1 block w-full resize-y rounded-lg border border-slate-300 px-3 py-3 text-sm font-normal leading-relaxed text-slate-800 outline-none focus:border-orange-400" />
+                      </label>
+                      <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
+                        <label className="flex items-start gap-2 text-xs font-semibold text-slate-700"><input type="checkbox" checked={descargarPdfCorreo} onChange={(event) => setDescargarPdfCorreo(event.target.checked)} className="mt-0.5 accent-orange-500" /><span>Descargar el PDF para adjuntarlo al correo</span></label>
+                        <span className="text-[11px] text-slate-500">Etiquetas: {'{business_name}'} · {'{contact_name}'} · {'{balance_due}'}</span>
+                      </div>
+                      <p className="rounded-lg border border-sky-200 bg-sky-50 px-3 py-2.5 text-xs leading-5 text-sky-900">GDA abrirá un borrador en la aplicación de correo del equipo. El navegador descarga el PDF, pero por seguridad no puede adjuntarlo automáticamente; adjuntalo al borrador antes de enviarlo. El mensaje no se envía hasta que lo confirmes allí.</p>
+                    </div>
+                    <footer className="flex flex-wrap justify-end gap-2 border-t border-slate-200 px-5 py-4">
+                      <button type="button" onClick={() => setCorreoLibroMayorAbierto(false)} className="rounded-lg border border-slate-300 px-4 py-2.5 text-sm font-bold text-slate-700 hover:bg-slate-50">Cancelar</button>
+                      <button type="submit" disabled={cargandoPlantillaLibroMayor} className="rounded-lg bg-orange-500 px-5 py-2.5 text-sm font-extrabold text-white hover:bg-orange-600 disabled:cursor-wait disabled:opacity-60">{descargarPdfCorreo ? 'Descargar PDF y preparar correo' : 'Preparar correo'}</button>
+                    </footer>
+                  </form>
+                </div>
+              )}
           </div>
         );
       })()}

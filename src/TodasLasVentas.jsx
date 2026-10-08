@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { supabase } from './supabaseClient';
 import { useEmpresaInfo } from './utils/useEmpresa';
 import { generateReceipt } from './utils/generateReceipt';
@@ -19,9 +20,19 @@ const badgeEstado = (estado) => {
     return `${base} bg-green-100 text-green-700`;
 };
 
-export default function TodasLasVentas({ onNuevaVenta }) {
+export default function TodasLasVentas({ onNuevaVenta, perfilUsuario }) {
     const { id: empresaId, nombre: nombreEmpresa, direccion: direccionEmpresa, telefono: telefonoEmpresa, ruc: rucEmpresa } = useEmpresaInfo();
     const { confirmar } = useNotificacion();
+    const esAdmin = (perfilUsuario?.roles?.nombre || '').toLowerCase().includes('admin');
+    const permisosVentas = perfilUsuario?.roles?.permisos?.ventas_pos || {};
+    const puedeVerPermisos = esAdmin || !perfilUsuario?.roles?.permisos;
+    const puedeAnular = puedeVerPermisos || permisosVentas['Anular venta'] === true;
+    const puedeEmitirRemision = puedeVerPermisos || permisosVentas['Acceder al Punto de Venta'] === true;
+    // La RPC disponible solo repone existencias y cambia estado; no registra
+    // un documento de devolución ni revierte pagos/caja. No se ofrece desde
+    // esta pantalla hasta contar con el flujo contable completo.
+    const puedeDevolver = false;
+    const puedeBorrar = esAdmin || permisosVentas['Borrar venta'] === true;
     const [ventas, setVentas] = useState([]);
     const [ubicaciones, setUbicaciones] = useState({});
     const [celularesPorCliente, setCelularesPorCliente] = useState({});
@@ -598,15 +609,16 @@ export default function TodasLasVentas({ onNuevaVenta }) {
                                                 {menuAbiertoId === venta.id && (
                                                     <div className="absolute left-0 z-20 mt-1 w-56 bg-white rounded-lg shadow-xl border border-gray-100 py-1 text-sm text-gray-700">
                                                         <button onClick={() => verVenta(venta)} className="w-full text-left px-4 py-2 hover:bg-gray-50 flex items-center gap-2">👁️ Ver</button>
-                                                        <button onClick={() => abrirEditar(venta)} className="w-full text-left px-4 py-2 hover:bg-gray-50 flex items-center gap-2">✏️ Editar</button>
-                                                        <button onClick={() => abrirModalAnular(venta)} className="w-full text-left px-4 py-2 hover:bg-gray-50 flex items-center gap-2 text-orange-600">🚫 Anular</button>
-                                                        <button onClick={() => borrarVenta(venta)} className="w-full text-left px-4 py-2 hover:bg-gray-50 flex items-center gap-2 text-red-600">🗑️ Borrar</button>
+                                                        {esAdmin && <button onClick={() => abrirEditar(venta)} className="w-full text-left px-4 py-2 hover:bg-gray-50 flex items-center gap-2">✏️ Editar</button>}
+                                                        {puedeAnular && <button onClick={() => abrirModalAnular(venta)} className="w-full text-left px-4 py-2 hover:bg-gray-50 flex items-center gap-2 text-orange-600">🚫 Anular</button>}
+                                                        {puedeBorrar && <button onClick={() => borrarVenta(venta)} className="w-full text-left px-4 py-2 hover:bg-gray-50 flex items-center gap-2 text-red-600">🗑️ Borrar</button>}
                                                         <button onClick={() => imprimirNotaRemision(venta)} className="w-full text-left px-4 py-2 hover:bg-gray-50 flex items-center gap-2">🚚 Nota de Remisión</button>
+                                                        {puedeEmitirRemision && <Link to={`/remisiones-electronicas?origen_tipo=venta&origen_id=${venta.id}`} onClick={() => setMenuAbiertoId(null)} className="w-full px-4 py-2 hover:bg-gray-50 flex items-center gap-2">📄 Remisión electrónica SIFEN</Link>}
                                                         <button onClick={() => imprimirFactura(venta)} className="w-full text-left px-4 py-2 hover:bg-gray-50 flex items-center gap-2">🖨️ Imprimir Factura</button>
                                                         <button onClick={() => imprimirNotaRemision(venta)} className="w-full text-left px-4 py-2 hover:bg-gray-50 flex items-center gap-2">📄 Imprimir nota de remisión</button>
                                                         <div className="border-t border-gray-100 my-1" />
                                                         <button onClick={() => verPagos(venta)} className="w-full text-left px-4 py-2 hover:bg-gray-50 flex items-center gap-2">💰 Ver pagos</button>
-                                                        <button onClick={() => devolverVenta(venta)} className="w-full text-left px-4 py-2 hover:bg-gray-50 flex items-center gap-2">↩️ Devolución de Venta</button>
+                                                        {puedeDevolver && <button onClick={() => devolverVenta(venta)} className="w-full text-left px-4 py-2 hover:bg-gray-50 flex items-center gap-2">↩️ Devolución de Venta</button>}
                                                         {venta.goekua_id && (
                                                             <>
                                                                 <button onClick={() => consultarEstadoSifen(venta)} className="w-full text-left px-4 py-2 hover:bg-gray-50 flex items-center gap-2">🔄 Actualizar Estado SIFEN</button>
@@ -823,7 +835,7 @@ export default function TodasLasVentas({ onNuevaVenta }) {
                         <h3 className="text-xl font-bold text-gray-800 mb-2">¿Anular esta venta?</h3>
                         <p className="text-sm text-gray-500 mb-4">
                             La venta N° {ventaAAnular.id} quedará <span className="font-bold">ANULADA</span> (no se borra).
-                            Se devolverá el stock al inventario{ventaAAnular.metodo_pago ? ' y se revertirá el monto de la caja' : ''}. Indicá el motivo:
+                            Se devolverá el stock al inventario. El movimiento de caja y los pagos no se revierten desde esta operación. Indicá el motivo:
                         </p>
                         <textarea
                             autoFocus

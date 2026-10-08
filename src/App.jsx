@@ -1,13 +1,17 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, lazy, Suspense } from 'react';
 import { supabase } from './supabaseClient';
 import Login from './Login';
 import CrearNegocio from './CrearNegocio';
 import Dashboard from './Dashboard';
 import ChatBotFlotante from './ChatBotFlotante';
 import { useLanguage } from './LanguageContext';
+import { useLocation } from 'react-router-dom';
+import GdaLandingPage from './GdaLandingPage';
+const CatalogoQRPublico = lazy(() => import('./CatalogoQR').then((m) => ({ default: m.CatalogoQRPublico })));
 
 function App() {
   const { t } = useLanguage();
+  const location = useLocation();
   const [session, setSession] = useState(null);
   const [perfilUsuario, setPerfilUsuario] = useState(null);
   const [cargando, setCargando] = useState(true);
@@ -126,6 +130,8 @@ function App() {
     return () => subscription.unsubscribe();
   }, []);
 
+  if (location.pathname.startsWith('/catalogo-qr/')) return <Suspense fallback={<div className="grid min-h-screen place-items-center text-slate-500">Cargando catálogo...</div>}><CatalogoQRPublico /></Suspense>;
+
   if (cargando) {
     return (
       <div className="min-h-screen flex items-center justify-center text-gray-500">
@@ -135,6 +141,9 @@ function App() {
   }
 
   if (!session) {
+    if (location.pathname !== '/login' && location.pathname !== '/crear-negocio') {
+      return <GdaLandingPage />;
+    }
     if (mostrarCrearNegocio) {
       return <CrearNegocio onVolverALogin={() => { setErrorAcceso(''); setMostrarCrearNegocio(false); }} />;
     }
