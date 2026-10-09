@@ -1,10 +1,10 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { supabase } from './supabaseClient';
 import { useEmpresaInfo } from './utils/useEmpresa';
 import { useNotificacion } from './NotificacionContext';
 import { QRCodeSVG } from 'qrcode.react';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { ExternalLink, Copy, Download, Plus, Search, QrCode, Pencil, Pause, Play, Trash2, X, Save } from 'lucide-react';
+import { ExternalLink, Copy, Download, Plus, Search, QrCode, Pencil, Pause, Play, Trash2, X, Save, Menu, ChevronLeft, ChevronRight } from 'lucide-react';
 
 const nuevoFormulario = () => ({ nombre: '', estado: 'Activo', expira_el: '', descripcion: '', mensaje_bienvenida: '', categoria: [], marca: [], ubicacion_id: '', precio_min: '', precio_max: '', whatsapp: '', color: '#f59e0b', qr_color: '#111827', qr_titulo: '', qr_subtitulo: '' });
 const urlPublica = (token) => `${window.location.origin}/catalogo-qr/${token}`;
@@ -107,10 +107,55 @@ export default function CatalogoQR() {
 export function CatalogoQRPublico() {
   const token = window.location.pathname.split('/').filter(Boolean).at(-1);
   const [catalogo, setCatalogo] = useState(null); const [cargando, setCargando] = useState(true); const [busqueda, setBusqueda] = useState('');
+  const [categoriaActiva, setCategoriaActiva] = useState('Todas'); const [menuCategoriasAbierto, setMenuCategoriasAbierto] = useState(false);
+  const sliderCategoriasRef = useRef(null); const productosRef = useRef(null);
   useEffect(() => { let vivo = true; supabase.rpc('obtener_catalogo_qr_publico', { p_token: token }).then(({ data }) => { if (vivo) { setCatalogo(data); setCargando(false); } }); return () => { vivo = false; }; }, [token]);
-  const productos = (catalogo?.productos || []).filter((p) => `${p.nombre} ${p.codigo || ''} ${p.categoria || ''}`.toLowerCase().includes(busqueda.toLowerCase()));
+  const productos = catalogo?.productos || [];
+  const categorias = [...new Set(productos.map((p) => p.categoria?.trim() || 'Sin categoría'))].sort((a, b) => a.localeCompare(b, 'es'));
+  const productosFiltrados = productos.filter((p) => {
+    const coincideBusqueda = `${p.nombre} ${p.codigo || ''} ${p.categoria || ''}`.toLowerCase().includes(busqueda.toLowerCase());
+    const coincideCategoria = categoriaActiva === 'Todas' || (p.categoria?.trim() || 'Sin categoría') === categoriaActiva;
+    return coincideBusqueda && coincideCategoria;
+  });
   const whatsapp = catalogo?.whatsapp?.replace(/\D/g, '');
+  const seleccionarCategoria = (categoria) => {
+    setCategoriaActiva(categoria);
+    setMenuCategoriasAbierto(false);
+    requestAnimationFrame(() => productosRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
+  };
+  const moverSliderCategorias = (direccion) => sliderCategoriasRef.current?.scrollBy({ left: direccion * 240, behavior: 'smooth' });
   if (cargando) return <main className="grid min-h-screen place-items-center bg-slate-50 text-slate-500">Cargando catálogo...</main>;
   if (!catalogo) return <main className="grid min-h-screen place-items-center bg-slate-50 p-6 text-center"><div><QrCode className="mx-auto mb-3 text-slate-300" size={44}/><h1 className="text-xl font-bold text-slate-800">Este catálogo no está disponible</h1><p className="mt-1 text-sm text-slate-500">El enlace pudo haber vencido o el catálogo fue pausado.</p></div></main>;
-  return <main className="min-h-screen bg-slate-50" style={{'--catalog-color':catalogo.color || '#f59e0b'}}><header className="bg-slate-950 px-5 py-10 text-white" style={{borderBottom:`5px solid ${catalogo.color || '#f59e0b'}`}}><div className="mx-auto max-w-6xl"><p className="text-sm font-semibold text-amber-300">{catalogo.empresa}</p><h1 className="mt-2 text-3xl font-extrabold">{catalogo.nombre}</h1>{catalogo.descripcion && <p className="mt-2 max-w-2xl text-slate-300">{catalogo.descripcion}</p>}{catalogo.bienvenida && <p className="mt-3 text-sm text-slate-200">{catalogo.bienvenida}</p>}<div className="mt-5 flex max-w-xl items-center gap-2 rounded-xl bg-white px-3 py-2 text-slate-500"><Search size={18}/><input value={busqueda} onChange={(e)=>setBusqueda(e.target.value)} placeholder="Buscar productos..." className="w-full text-sm outline-none"/></div></div></header><section className="mx-auto max-w-6xl px-4 py-7"><p className="mb-4 text-sm text-slate-500">{productos.length} productos</p><div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">{productos.map((p)=><article key={p.id} className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm"><div className="grid h-48 place-items-center bg-slate-100">{p.imagen ? <img src={p.imagen} alt={p.nombre} className="h-full w-full object-contain"/> : <QrCode className="text-slate-300" size={44}/>}</div><div className="p-4"><div className="text-xs font-semibold uppercase tracking-wide text-slate-400">{p.categoria || p.marca || 'Producto'}</div><h2 className="mt-1 line-clamp-2 min-h-12 font-bold text-slate-800">{p.nombre}</h2>{p.codigo && <p className="text-xs text-slate-400">Código: {p.codigo}</p>}<div className="mt-3 flex items-end justify-between gap-2"><span className="text-lg font-extrabold text-slate-900">{moneda(p.precio)}</span><span className={`text-xs font-semibold ${p.disponible?'text-emerald-700':'text-slate-400'}`}>{p.disponible?'Disponible':'Consultar disponibilidad'}</span></div>{whatsapp && <a target="_blank" rel="noreferrer" href={`https://wa.me/${whatsapp}?text=${encodeURIComponent(`Hola, consulto por ${p.nombre}${p.codigo ? ` (${p.codigo})` : ''}.`)}`} className="mt-4 block rounded-lg bg-emerald-600 px-3 py-2 text-center text-sm font-bold text-white hover:bg-emerald-700">Consultar por WhatsApp</a>}</div></article>)}</div>{productos.length===0 && <div className="rounded-xl border border-dashed p-12 text-center text-slate-400">No hay productos que coincidan con la búsqueda.</div>}</section><footer className="pb-8 text-center text-xs text-slate-400">Catálogo digital · {catalogo.empresa}</footer></main>;
+  return <main className="min-h-screen bg-slate-50" style={{'--catalog-color':catalogo.color || '#f59e0b'}}>
+    <header className="relative z-30 bg-slate-950 px-5 py-7 text-white" style={{borderBottom:`5px solid ${catalogo.color || '#f59e0b'}`}}>
+      <div className="mx-auto max-w-6xl">
+        <div className="flex items-start justify-between gap-4">
+          <div><p className="text-sm font-semibold text-amber-300">{catalogo.empresa}</p><h1 className="mt-2 text-3xl font-extrabold">{catalogo.nombre}</h1></div>
+          <div className="relative shrink-0">
+            <button type="button" aria-label="Abrir categorías" aria-expanded={menuCategoriasAbierto} onClick={() => setMenuCategoriasAbierto((abierto) => !abierto)} className="flex items-center gap-2 rounded-xl border border-white/20 bg-white/10 px-3 py-2.5 text-sm font-semibold text-white transition hover:bg-white/20"><Menu size={19}/><span className="hidden sm:inline">Categorías</span></button>
+            {menuCategoriasAbierto && <><button type="button" aria-label="Cerrar menú de categorías" onClick={() => setMenuCategoriasAbierto(false)} className="fixed inset-0 z-30 cursor-default"/><div className="absolute right-0 top-full z-40 mt-2 max-h-[70vh] w-64 overflow-y-auto rounded-xl border border-slate-200 bg-white p-2 text-slate-800 shadow-xl"><p className="px-3 py-2 text-xs font-bold uppercase tracking-wide text-slate-400">Categorías</p>{['Todas', ...categorias].map((categoria) => <button key={categoria} type="button" onClick={() => seleccionarCategoria(categoria)} className={`block w-full rounded-lg px-3 py-2.5 text-left text-sm transition ${categoriaActiva === categoria ? 'bg-slate-900 font-semibold text-white' : 'text-slate-700 hover:bg-slate-100'}`}>{categoria}</button>)}</div></>}
+          </div>
+        </div>
+        {catalogo.descripcion && <p className="mt-2 max-w-2xl text-slate-300">{catalogo.descripcion}</p>}{catalogo.bienvenida && <p className="mt-3 text-sm text-slate-200">{catalogo.bienvenida}</p>}
+        <div className="mt-5 flex max-w-xl items-center gap-2 rounded-xl bg-white px-3 py-2 text-slate-500"><Search size={18}/><input value={busqueda} onChange={(e)=>setBusqueda(e.target.value)} placeholder="Buscar productos..." className="w-full text-sm outline-none"/></div>
+      </div>
+    </header>
+    <nav aria-label="Deslizador de categorías" className="sticky top-0 z-20 border-b border-slate-200 bg-white/95 shadow-sm backdrop-blur">
+      <div className="mx-auto flex max-w-6xl items-center gap-2 px-3 py-2">
+        <button type="button" aria-label="Deslizar categorías a la izquierda" onClick={() => moverSliderCategorias(-1)} className="grid h-9 w-9 shrink-0 place-items-center rounded-full border border-slate-200 text-slate-600 hover:bg-slate-100"><ChevronLeft size={18}/></button>
+        <div ref={sliderCategoriasRef} className="flex min-w-0 flex-1 snap-x gap-2 overflow-x-auto scroll-smooth [&::-webkit-scrollbar]:hidden" style={{ scrollbarWidth: 'none' }}>
+          {['Todas', ...categorias].map((categoria) => <button key={categoria} type="button" onClick={() => seleccionarCategoria(categoria)} className={`shrink-0 snap-start rounded-full border px-4 py-2 text-sm font-semibold transition-colors ${categoriaActiva === categoria ? 'border-slate-900 bg-slate-900 text-white' : 'border-slate-200 bg-white text-slate-700 hover:border-slate-400'}`}>{categoria}</button>)}
+        </div>
+        <button type="button" aria-label="Deslizar categorías a la derecha" onClick={() => moverSliderCategorias(1)} className="grid h-9 w-9 shrink-0 place-items-center rounded-full border border-slate-200 text-slate-600 hover:bg-slate-100"><ChevronRight size={18}/></button>
+      </div>
+    </nav>
+    <section ref={productosRef} className="mx-auto max-w-6xl scroll-mt-16 px-4 py-7">
+      <p className="mb-4 text-sm text-slate-500">{productosFiltrados.length} productos{categoriaActiva !== 'Todas' ? ` · ${categoriaActiva}` : ''}</p>
+      <div key={categoriaActiva} className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+        {productosFiltrados.map((p)=><article key={p.id} className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm transition duration-200 hover:-translate-y-0.5 hover:shadow-md"><div className="grid h-48 place-items-center bg-slate-100">{p.imagen ? <img src={p.imagen} alt={p.nombre} className="h-full w-full object-contain"/> : <QrCode className="text-slate-300" size={44}/>}</div><div className="p-4"><div className="text-xs font-semibold uppercase tracking-wide text-slate-400">{p.categoria || p.marca || 'Producto'}</div><h2 className="mt-1 line-clamp-2 min-h-12 font-bold text-slate-800">{p.nombre}</h2>{p.codigo && <p className="text-xs text-slate-400">Código: {p.codigo}</p>}<div className="mt-3 flex items-end justify-between gap-2"><span className="text-lg font-extrabold text-slate-900">{moneda(p.precio)}</span><span className={`text-xs font-semibold ${p.disponible?'text-emerald-700':'text-slate-400'}`}>{p.disponible?'Disponible':'Consultar disponibilidad'}</span></div>{whatsapp && <a target="_blank" rel="noreferrer" href={`https://wa.me/${whatsapp}?text=${encodeURIComponent(`Hola, consulto por ${p.nombre}${p.codigo ? ` (${p.codigo})` : ''}.`)}`} className="mt-4 block rounded-lg bg-emerald-600 px-3 py-2 text-center text-sm font-bold text-white hover:bg-emerald-700">Consultar por WhatsApp</a>}</div></article>)}
+      </div>
+      {productosFiltrados.length===0 && <div className="rounded-xl border border-dashed p-12 text-center text-slate-400">No hay productos en esta categoría o que coincidan con la búsqueda.</div>}
+    </section>
+    <footer className="pb-8 text-center text-xs text-slate-400">Catálogo digital · {catalogo.empresa}</footer>
+  </main>;
 }
