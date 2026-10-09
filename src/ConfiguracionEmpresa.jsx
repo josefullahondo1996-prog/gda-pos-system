@@ -81,6 +81,7 @@ export default function ConfiguracionEmpresa({ perfilUsuario }) {
   const empresaId = perfilUsuario?.empresa_id;
   const [empresa, setEmpresa] = useState({ nombre: '', ruc: '', direccion: '', telefono: '', logo_url: '' });
   const [valores, setValores] = useState(() => getDefaults());
+  const [configuracionExtra, setConfiguracionExtra] = useState({});
   const [seccionActiva, setSeccionActiva] = useState('empresa');
   const [cargando, setCargando] = useState(true);
   const [guardando, setGuardando] = useState(false);
@@ -109,6 +110,7 @@ export default function ConfiguracionEmpresa({ perfilUsuario }) {
           try {
             const saved = JSON.parse(localStorage.getItem(`pypos-config-empresa-${empresaId}`) || '{}');
             setValores({ ...getDefaults(), ...(saved.ajustes || {}) });
+            setConfiguracionExtra(saved.extra && typeof saved.extra === 'object' ? saved.extra : {});
           } catch { setValores(getDefaults()); }
           setAvisoLocal(true);
         }
@@ -116,6 +118,7 @@ export default function ConfiguracionEmpresa({ perfilUsuario }) {
         setEmpresa({ nombre: data.nombre || '', ruc: data.ruc || '', direccion: data.direccion || '', telefono: data.telefono || '', logo_url: data.logo_url || '' });
         const saved = data.configuracion && typeof data.configuracion === 'object' ? data.configuracion : {};
         setValores({ ...getDefaults(), ...(saved.ajustes || {}) });
+        setConfiguracionExtra(saved.modulos && typeof saved.modulos === 'object' ? saved.modulos : {});
         setAvisoLocal(false);
       } else setErrorCarga('No se encontraron los datos de la empresa.');
       setCargando(false);
@@ -133,7 +136,7 @@ export default function ConfiguracionEmpresa({ perfilUsuario }) {
     setGuardando(true);
     setMensaje('');
     const datosEmpresa = { nombre: empresa.nombre.trim(), ruc: empresa.ruc.trim() || null, direccion: empresa.direccion.trim() || null, telefono: empresa.telefono.trim() || null, logo_url: empresa.logo_url || null };
-    const { error: errorCompleto } = await supabase.from('empresas').update({ ...datosEmpresa, configuracion: { version: 1, ajustes: valores } }).eq('id', empresaId);
+    const { error: errorCompleto } = await supabase.from('empresas').update({ ...datosEmpresa, configuracion: { version: 1, ...configuracionExtra, ajustes: valores } }).eq('id', empresaId);
     if (errorCompleto) {
       const { error: errorBase } = await supabase.from('empresas').update(datosEmpresa).eq('id', empresaId);
       if (errorBase) {
@@ -143,7 +146,7 @@ export default function ConfiguracionEmpresa({ perfilUsuario }) {
         return;
       }
       setGuardando(false);
-      try { localStorage.setItem(`pypos-config-empresa-${empresaId}`, JSON.stringify({ version: 1, ajustes: valores })); } catch { /* el servidor conserva los datos principales */ }
+      try { localStorage.setItem(`pypos-config-empresa-${empresaId}`, JSON.stringify({ version: 1, extra: configuracionExtra, ajustes: valores })); } catch { /* el servidor conserva los datos principales */ }
       setAvisoLocal(true);
       setMensaje('Se guardaron los datos principales. Para guardar todas las pestañas en Supabase, aplicá database/migration_configuracion_empresa.sql; por ahora los ajustes se guardaron en este navegador.');
     } else {

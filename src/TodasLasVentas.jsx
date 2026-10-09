@@ -12,6 +12,15 @@ import { useNotificacion } from './NotificacionContext';
 
 const formatGs = (v) => `Gs ${Number(v || 0).toLocaleString('es-PY')}`;
 const formatFecha = (f) => (f ? new Date(f).toLocaleDateString('es-PY') + ' ' + new Date(f).toLocaleTimeString('es-PY', { hour: '2-digit', minute: '2-digit' }) : '—');
+const totalPagadoVenta = (venta) => venta.monto_pagado != null ? Number(venta.monto_pagado) || 0 : Math.max(0, (Number(venta.total) || 0) - (Number(venta.saldo_pendiente) || 0));
+const plantillaVentaPredeterminada = (canal) => ({
+    canal,
+    asunto: canal === 'email' ? 'Comprobante de compra {invoice_number} · {business_name}' : '',
+    contenido: canal === 'whatsapp'
+        ? '*Hola {contact_name}, gracias por comprar en {business_name}. Comprobante {invoice_number}: {total_amount}. Pagado: {paid_amount}. Saldo: {due_amount}. {invoice_url}*'
+        : 'Hola {contact_name}, gracias por comprar en {business_name}. Comprobante {invoice_number}: {total_amount}. Pagado: {paid_amount}. Saldo: {due_amount}. {invoice_url}',
+    activo: true,
+});
 
 const badgeEstado = (estado) => {
     const base = 'px-2 py-1 rounded-full text-[10px] font-bold';
@@ -28,14 +37,14 @@ export default function TodasLasVentas({ onNuevaVenta, perfilUsuario }) {
     const puedeVerPermisos = esAdmin || !perfilUsuario?.roles?.permisos;
     const puedeAnular = puedeVerPermisos || permisosVentas['Anular venta'] === true;
     const puedeEmitirRemision = puedeVerPermisos || permisosVentas['Acceder al Punto de Venta'] === true;
-    // La RPC disponible solo repone existencias y cambia estado; no registra
-    // un documento de devolución ni revierte pagos/caja. No se ofrece desde
-    // esta pantalla hasta contar con el flujo contable completo.
-    const puedeDevolver = false;
+    const puedeDevolver = puedeVerPermisos || permisosVentas['Devolver venta'] === true;
     const puedeBorrar = esAdmin || permisosVentas['Borrar venta'] === true;
     const [ventas, setVentas] = useState([]);
     const [ubicaciones, setUbicaciones] = useState({});
     const [celularesPorCliente, setCelularesPorCliente] = useState({});
+    const [emailsPorCliente, setEmailsPorCliente] = useState({});
+    const [enviosPorVenta, setEnviosPorVenta] = useState({});
+    const [creditosPorDevolucion, setCreditosPorDevolucion] = useState({});
     const [cargando, setCargando] = useState(true);
     const [busqueda, setBusqueda] = useState('');
     const [menuAbiertoId, setMenuAbiertoId] = useState(null);
@@ -58,6 +67,10 @@ export default function TodasLasVentas({ onNuevaVenta, perfilUsuario }) {
     const [filtroCliente, setFiltroCliente] = useState('');
     const [filtroEstadoPago, setFiltroEstadoPago] = useState('');
     const [filtroUsuario, setFiltroUsuario] = useState('');
+    const [filtroPersonalServicio, setFiltroPersonalServicio] = useState('');
+    const [filtroEstadoEnvio, setFiltroEstadoEnvio] = useState('');
+    const [filtroSifen, setFiltroSifen] = useState('');
+    const [filtroSoloSuscripciones, setFiltroSoloSuscripciones] = useState(false);
     const [rangoFecha, setRangoFecha] = useState({ desde: null, hasta: null, label: 'Todo' });
 
     const [ventaDetalle, setVentaDetalle] = useState(null); // { venta, items, modo: 'ver'|'pagos' }
@@ -70,6 +83,15 @@ export default function TodasLasVentas({ onNuevaVenta, perfilUsuario }) {
     const [ventaAAnular, setVentaAAnular] = useState(null);
     const [motivoAnulacion, setMotivoAnulacion] = useState('');
     const [anulando, setAnulando] = useState(false);
+    const [ventaADevolver, setVentaADevolver] = useState(null);
+    const [motivoDevolucion, setMotivoDevolucion] = useState('');
+    const [devolviendo, setDevolviendo] = useState(false);
+    const [ventaNotificacion, setVentaNotificacion] = useState(null);
+    const [canalNotificacion, setCanalNotificacion] = useState('whatsapp');
+    const [destinoNotificacion, setDestinoNotificacion] = useState('');
+    const [plantillasVenta, setPlantillasVenta] = useState({});
+    const [cargandoPlantillaVenta, setCargandoPlantillaVenta] = useState(false);
+    const [errorPlantillaVenta, setErrorPlantillaVenta] = useState('');
     const [rucPorCliente, setRucPorCliente] = useState({});
 
     useEffect(() => {
@@ -77,15 +99,47 @@ export default function TodasLasVentas({ onNuevaVenta, perfilUsuario }) {
     }, [empresaId]);
 
     useEffect(() => {
+        if (!empresaId || !ventaNotificacion) return undefined;
+        let vigente = true;
+        const cargarPlantillaVenta = async () => {
+            setCargandoPlantillaVenta(true);
+            setErrorPlantillaVenta('');
+            const { data, error } = await supabase.from('plantillas_notificacion')
+                .select('canal, asunto, cc, bcc, contenido, activo')
+                .eq('empresa_id', empresaId)
+                .eq('evento', 'new_sale');
+            if (!vigente) return;
+            const plantillas = Object.fromEntries(['whatsapp', 'email'].map((canal) => [canal, plantillaVentaPredeterminada(canal)]));
+            (data || []).forEach((fila) => { plantillas[fila.canal] = { ...plantillas[fila.canal], ...fila }; });
+            setPlantillasVenta(plantillas);
+            if (error) setErrorPlantillaVenta('No se pudo cargar la plantilla guardada. Podés corregir el texto antes de abrir el borrador.');
+            setCargandoPlantillaVenta(false);
+        };
+        cargarPlantillaVenta();
+        return () => { vigente = false; };
+    }, [empresaId, ventaNotificacion]);
+
+    useEffect(() => {
         setPaginaActual(1);
-    }, [filtroUbicacion, filtroCliente, filtroEstadoPago, filtroUsuario, rangoFecha]);
+    }, [filtroUbicacion, filtroCliente, filtroEstadoPago, filtroUsuario, filtroPersonalServicio, filtroEstadoEnvio, filtroSifen, filtroSoloSuscripciones, rangoFecha]);
 
     const cargarTodo = async () => {
         setCargando(true);
-        const [resVentas, resUbicaciones, resClientes] = await Promise.all([
-            supabase.from('ventas').select('*').eq('empresa_id', empresaId).order('fecha', { ascending: false }).limit(300),
+        const [resVentas, resUbicaciones, resClientes, resEnvios, resDevoluciones] = await Promise.all([
+            (async () => {
+                const filas = [];
+                for (let desde = 0; desde < 20000; desde += 500) {
+                    const { data, error } = await supabase.from('ventas').select('*').eq('empresa_id', empresaId).order('fecha', { ascending: false }).range(desde, desde + 499);
+                    if (error) return { data: null, error };
+                    filas.push(...(data || []));
+                    if (!data || data.length < 500) break;
+                }
+                return { data: filas, error: null };
+            })(),
             supabase.from('ubicaciones_comerciales').select('id, nombre').eq('empresa_id', empresaId),
-            supabase.from('clientes').select('nombre, nombre_empresa, celular, documento_nro').eq('empresa_id', empresaId),
+            supabase.from('clientes').select('nombre, nombre_empresa, celular, email, documento_nro').eq('empresa_id', empresaId),
+            supabase.from('envios_ventas').select('venta_id, estado').eq('empresa_id', empresaId),
+            supabase.from('devoluciones_ventas').select('venta_id, credito_cliente').eq('empresa_id', empresaId),
         ]);
         if (!resVentas.error && resVentas.data) setVentas(resVentas.data);
         if (!resUbicaciones.error && resUbicaciones.data) {
@@ -95,52 +149,71 @@ export default function TodasLasVentas({ onNuevaVenta, perfilUsuario }) {
         }
         if (!resClientes.error && resClientes.data) {
             const mapaCelulares = {};
+            const mapaEmails = {};
             const mapaRuc = {};
             resClientes.data.forEach((c) => {
-                if (c.nombre)        { mapaCelulares[c.nombre]        = c.celular; mapaRuc[c.nombre]        = c.documento_nro || ''; }
-                if (c.nombre_empresa){ mapaCelulares[c.nombre_empresa] = c.celular; mapaRuc[c.nombre_empresa] = c.documento_nro || ''; }
+                if (c.nombre)        { mapaCelulares[c.nombre] = c.celular; mapaEmails[c.nombre] = c.email; mapaRuc[c.nombre] = c.documento_nro || ''; }
+                if (c.nombre_empresa){ mapaCelulares[c.nombre_empresa] = c.celular; mapaEmails[c.nombre_empresa] = c.email; mapaRuc[c.nombre_empresa] = c.documento_nro || ''; }
             });
             setCelularesPorCliente(mapaCelulares);
+            setEmailsPorCliente(mapaEmails);
             setRucPorCliente(mapaRuc);
         }
+        if (!resEnvios.error && resEnvios.data) {
+            const mapa = {};
+            resEnvios.data.forEach((envio) => { mapa[String(envio.venta_id)] = envio.estado || ''; });
+            setEnviosPorVenta(mapa);
+        } else setEnviosPorVenta({});
+        if (!resDevoluciones.error && resDevoluciones.data) {
+            const mapa = {};
+            resDevoluciones.data.forEach((devolucion) => { mapa[String(devolucion.venta_id)] = Number(devolucion.credito_cliente) || 0; });
+            setCreditosPorDevolucion(mapa);
+        } else setCreditosPorDevolucion({});
         setCargando(false);
     };
 
     const ventasFiltradas = ventas.filter((v) => {
-        const coincideBusqueda = [v.cliente, v.metodo_pago, v.estado_pago].join(' ').toLowerCase().includes(busqueda.toLowerCase());
+        const envioEstado = enviosPorVenta[String(v.id)] || '';
+        const coincideBusqueda = [v.id, v.numero_factura, v.cliente, celularesPorCliente[v.cliente], v.metodo_pago, v.estado_pago, v.usuario_nombre, v.personal_servicio, v.tipo_servicio, v.nota_venta, v.nota_personal, v.detalles_envio, envioEstado, v.estado_sifen].join(' ').toLowerCase().includes(busqueda.trim().toLowerCase());
         const coincideUbicacion = !filtroUbicacion || String(v.ubicacion_id) === filtroUbicacion;
         const coincideCliente = !filtroCliente || v.cliente === filtroCliente;
         const coincideEstadoPago = !filtroEstadoPago || v.estado_pago === filtroEstadoPago;
         const coincideUsuario = !filtroUsuario || v.usuario_nombre === filtroUsuario;
+        const coincidePersonal = !filtroPersonalServicio || v.personal_servicio === filtroPersonalServicio;
+        const coincideEnvio = !filtroEstadoEnvio || (filtroEstadoEnvio === '__sin_envio' ? !envioEstado : envioEstado === filtroEstadoEnvio);
+        const estadoSifen = String(v.estado_sifen || '').toLowerCase();
+        const coincideSifen = !filtroSifen || (filtroSifen === '__sin_factura' ? !v.goekua_id : !!v.goekua_id && estadoSifen === filtroSifen);
+        const coincideSuscripcion = !filtroSoloSuscripciones || Boolean(v.es_suscripcion || v.suscripcion_id || v.subscription_id);
         const fechaVenta = v.fecha ? new Date(v.fecha) : null;
         const coincideDesde = !rangoFecha.desde || (fechaVenta && fechaVenta >= rangoFecha.desde);
         const coincideHasta = !rangoFecha.hasta || (fechaVenta && fechaVenta <= rangoFecha.hasta);
-        return coincideBusqueda && coincideUbicacion && coincideCliente && coincideEstadoPago && coincideUsuario && coincideDesde && coincideHasta;
+        return coincideBusqueda && coincideUbicacion && coincideCliente && coincideEstadoPago && coincideUsuario && coincidePersonal && coincideEnvio && coincideSifen && coincideSuscripcion && coincideDesde && coincideHasta;
     });
 
     // Opciones de los desplegables, calculadas a partir de los datos ya cargados (sin pedir nada nuevo al servidor)
     const clientesUnicos = [...new Set(ventas.map((v) => v.cliente).filter(Boolean))].sort();
     const usuariosUnicos = [...new Set(ventas.map((v) => v.usuario_nombre).filter(Boolean))].sort();
+    const personalServicioUnico = [...new Set(ventas.map((v) => v.personal_servicio).filter(Boolean))].sort();
     const estadosPagoUnicos = [...new Set(ventas.map((v) => v.estado_pago).filter(Boolean))].sort();
 
     // Tarjetas de resumen ("Cobrado PYG" / "Total ventas") sobre lo ya filtrado
-    const totalCobrado = ventasFiltradas.reduce((acc, v) => acc + Number(v.monto_pagado || 0), 0);
+    const totalCobrado = ventasFiltradas.reduce((acc, v) => acc + totalPagadoVenta(v), 0);
     const totalVentasFiltradas = ventasFiltradas.length;
 
     const limpiarFiltros = () => {
         setFiltroUbicacion(''); setFiltroCliente(''); setFiltroEstadoPago('');
-        setFiltroUsuario(''); setRangoFecha({ desde: null, hasta: null, label: 'Todo' });
+        setFiltroUsuario(''); setFiltroPersonalServicio(''); setFiltroEstadoEnvio(''); setFiltroSifen(''); setFiltroSoloSuscripciones(false); setRangoFecha({ desde: null, hasta: null, label: 'Todo' });
         setBusqueda('');
     };
 
     const totalPaginas = Math.max(1, Math.ceil(ventasFiltradas.length / entradasPorPagina));
     const paginaSegura = Math.min(paginaActual, totalPaginas);
-    const ventasPagina = ventasFiltradas.slice((paginaSegura - 1) * entradasPorPagina, paginaSegura * entradasPorPagina);
+    const ventasPagina = entradasPorPagina === 0 ? ventasFiltradas : ventasFiltradas.slice((paginaSegura - 1) * entradasPorPagina, paginaSegura * entradasPorPagina);
 
     const cambiarBusqueda = (valor) => { setBusqueda(valor); setPaginaActual(1); };
 
     const cargarDetalleVenta = async (venta) => {
-        const { data } = await supabase.from('detalle_ventas').select('*').eq('venta_id', venta.id);
+        const { data } = await supabase.from('detalle_ventas').select('*').eq('empresa_id', empresaId).eq('venta_id', venta.id);
         return data || [];
     };
 
@@ -170,15 +243,30 @@ export default function TodasLasVentas({ onNuevaVenta, perfilUsuario }) {
         }
     };
 
-    const devolverVenta = async (venta) => {
-        if (venta.estado_pago === 'Anulada' || venta.estado_pago === 'Devuelta') return alert('Esta venta ya fue anulada/devuelta.');
-        if (!confirm(`¿Registrar devolución completa de la venta #${venta.id}? Se repondrá el stock de todos los productos.`)) return;
-        const { error } = await supabase.rpc('devolver_venta', {
-            p_venta_id: venta.id,
-            p_empresa_id: empresaId,
-        });
-        if (error) return alert('Error al registrar la devolución: ' + error.message);
-        cargarTodo();
+    const devolverVenta = (venta) => {
+        setMenuAbiertoId(null);
+        if (['Anulada', 'Devuelta', 'Cotizacion', 'Cotización'].includes(venta.estado_pago)) return alert('Esta venta no admite una devolución en su estado actual.');
+        if (creditosPorDevolucion[String(venta.id)] !== undefined) return alert('Esta venta ya tiene una devolución registrada.');
+        setMotivoDevolucion('');
+        setVentaADevolver(venta);
+    };
+
+    const confirmarDevolucion = async () => {
+        if (!ventaADevolver || motivoDevolucion.trim().length < 3) return alert('Especificá un motivo de al menos 3 caracteres.');
+        setDevolviendo(true);
+        try {
+            const { error } = await supabase.rpc('registrar_devolucion_venta', {
+                p_venta_id: ventaADevolver.id,
+                p_motivo: motivoDevolucion.trim(),
+            });
+            if (error) throw error;
+            setVentaADevolver(null);
+            await cargarTodo();
+        } catch (error) {
+            alert('No se pudo registrar la devolución: ' + error.message);
+        } finally {
+            setDevolviendo(false);
+        }
     };
 
     const borrarVenta = async (venta) => {
@@ -216,9 +304,10 @@ export default function TodasLasVentas({ onNuevaVenta, perfilUsuario }) {
         setVentaDetalle({ venta, items, modo: 'ver' });
     };
 
-    const verPagos = (venta) => {
+    const verPagos = async (venta) => {
         setMenuAbiertoId(null);
-        setVentaDetalle({ venta, items: [], modo: 'pagos' });
+        const { data, error } = await supabase.from('detalle_pagos_venta').select('monto, metodo_pago, nota, cuenta_id').eq('empresa_id', empresaId).eq('venta_id', venta.id).order('id');
+        setVentaDetalle({ venta, items: [], pagos: error ? [] : (data || []), pagosNoDisponibles: Boolean(error), modo: 'pagos' });
     };
 
     const abrirEditar = (venta) => {
@@ -289,10 +378,45 @@ export default function TodasLasVentas({ onNuevaVenta, perfilUsuario }) {
         }
     };
 
-    const nuevaNotificacion = () => {
+    const nuevaNotificacion = (venta) => {
         setMenuAbiertoId(null);
-        alert('Todavía no tenés un canal de notificaciones conectado (email / WhatsApp) para avisarle al cliente sobre esta venta. Avisame si querés que lo armemos.');
+        const canalInicial = celularesPorCliente[venta.cliente] ? 'whatsapp' : 'email';
+        setCanalNotificacion(canalInicial);
+        setDestinoNotificacion(canalInicial === 'whatsapp' ? celularesPorCliente[venta.cliente] || '' : emailsPorCliente[venta.cliente] || '');
+        setPlantillasVenta({});
+        setErrorPlantillaVenta('');
+        setVentaNotificacion(venta);
     };
+
+    const plantillaActivaVenta = plantillasVenta[canalNotificacion] || plantillaVentaPredeterminada(canalNotificacion);
+    const valoresPlantillaVenta = ventaNotificacion ? {
+        business_name: nombreEmpresa || 'Mi negocio',
+        contact_name: ventaNotificacion.cliente || 'Cliente Ocasional',
+        invoice_number: ventaNotificacion.numero_factura || String(ventaNotificacion.id),
+        invoice_url: ventaNotificacion.kude_url || '',
+        total_amount: formatGs(ventaNotificacion.total),
+        paid_amount: formatGs(totalPagadoVenta(ventaNotificacion)),
+        due_amount: formatGs(ventaNotificacion.saldo_pendiente),
+        cumulative_due_amount: formatGs(ventaNotificacion.saldo_pendiente),
+        due_date: ventaNotificacion.fecha_vencimiento ? formatFecha(ventaNotificacion.fecha_vencimiento) : '',
+        location_name: ubicaciones[ventaNotificacion.ubicacion_id] || nombreEmpresa || '',
+        location_phone: telefonoEmpresa || '',
+    } : {};
+    const rellenarPlantillaVenta = (texto) => String(texto || '').replace(/\{([a-z_]+)\}/gi, (coincidencia, etiqueta) => valoresPlantillaVenta[etiqueta] ?? coincidencia);
+    const cuerpoNotificacionVenta = rellenarPlantillaVenta(plantillaActivaVenta.contenido);
+    const asuntoNotificacionVenta = rellenarPlantillaVenta(plantillaActivaVenta.asunto);
+    const destinoCorreoValido = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(destinoNotificacion.trim());
+    const digitosDestino = destinoNotificacion.replace(/\D/g, '');
+    const numeroWhatsApp = digitosDestino.startsWith('595') ? digitosDestino : digitosDestino.startsWith('0') ? `595${digitosDestino.slice(1)}` : `595${digitosDestino}`;
+    const destinoWhatsAppValido = digitosDestino.length >= 8;
+    const parametrosCorreo = new URLSearchParams({ subject: asuntoNotificacionVenta, body: cuerpoNotificacionVenta });
+    if (plantillaActivaVenta.cc) parametrosCorreo.set('cc', plantillaActivaVenta.cc);
+    if (plantillaActivaVenta.bcc) parametrosCorreo.set('bcc', plantillaActivaVenta.bcc);
+    const enlaceNotificacion = canalNotificacion === 'email'
+        ? `mailto:${encodeURIComponent(destinoNotificacion.trim())}?${parametrosCorreo.toString()}`
+        : `https://wa.me/${numeroWhatsApp}?text=${encodeURIComponent(cuerpoNotificacionVenta)}`;
+    const puedeAbrirBorrador = plantillaActivaVenta.activo !== false && cuerpoNotificacionVenta.trim().length > 0
+        && (canalNotificacion === 'email' ? destinoCorreoValido : destinoWhatsAppValido);
 
     // === Datos calculados para exportación / columnas ===
     const columnasVentasExport = [
@@ -302,6 +426,7 @@ export default function TodasLasVentas({ onNuevaVenta, perfilUsuario }) {
         { key: 'numeroContacto', label: 'Numero de Contacto' },
         { key: 'ubicacion', label: 'Ubicacion' },
         { key: 'estado_pago', label: 'Estado de Pago' },
+        { key: 'sifen', label: 'SIFEN' },
         { key: 'metodo_pago', label: 'Metodo de Pago' },
         { key: 'total', label: 'Cantidad Total' },
         { key: 'total_pagado', label: 'Total Pagado' },
@@ -320,17 +445,18 @@ export default function TodasLasVentas({ onNuevaVenta, perfilUsuario }) {
 
     const filaExport = (v) => ({
         fecha: formatFecha(v.fecha),
-        facturaNo: String(v.id).slice(0, 8).toUpperCase(),
+        facturaNo: v.numero_factura || String(v.id).slice(0, 8).toUpperCase(),
         cliente: v.cliente || 'Cliente Ocasional',
         numeroContacto: celularesPorCliente[v.cliente] || '',
         ubicacion: ubicaciones[v.ubicacion_id] || nombreEmpresa || '',
         estado_pago: v.estado_pago || '',
+        sifen: v.goekua_id ? (v.estado_sifen || 'Factura electrónica') : 'Sin factura',
         metodo_pago: v.metodo_pago || '',
         total: v.total ?? 0,
-        total_pagado: (Number(v.total) || 0) - (Number(v.saldo_pendiente) || 0),
+        total_pagado: totalPagadoVenta(v),
         creditosOtorgados: v.saldo_pendiente ?? 0,
-        creditoDevolucion: 0,
-        estadoEnvio: '',
+        creditoDevolucion: creditosPorDevolucion[String(v.id)] || 0,
+        estadoEnvio: enviosPorVenta[String(v.id)] || 'Sin envío',
         articulos: v.articulos ?? 0,
         tipoServicio: v.tipo_servicio || '',
         campoPersonalizado1: v.campo_personalizado_1 || '',
@@ -397,7 +523,7 @@ export default function TodasLasVentas({ onNuevaVenta, perfilUsuario }) {
         return acc;
     }, {});
     const totalCantidad = ventasFiltradas.reduce((acc, v) => acc + (Number(v.total) || 0), 0);
-    const totalPagadoGeneral = ventasFiltradas.reduce((acc, v) => acc + ((Number(v.total) || 0) - (Number(v.saldo_pendiente) || 0)), 0);
+    const totalPagadoGeneral = ventasFiltradas.reduce((acc, v) => acc + totalPagadoVenta(v), 0);
     const totalCreditosGeneral = ventasFiltradas.reduce((acc, v) => acc + (Number(v.saldo_pendiente) || 0), 0);
     const totalArticulosGeneral = ventasFiltradas.reduce((acc, v) => acc + (Number(v.articulos) || 0), 0);
 
@@ -461,17 +587,29 @@ export default function TodasLasVentas({ onNuevaVenta, perfilUsuario }) {
                             </select>
                         </div>
                         <div>
-                            <label className="block text-xs font-bold text-gray-500 mb-1" title="Aún no hay módulo de envíos conectado">Estado del envío:</label>
-                            <select className="border rounded p-2 w-full text-xs text-gray-400" disabled>
-                                <option>Todos</option>
+                            <label className="block text-xs font-bold text-gray-500 mb-1">Personal de servicio:</label>
+                            <select className="border rounded p-2 w-full text-xs" value={filtroPersonalServicio} onChange={(e) => setFiltroPersonalServicio(e.target.value)}>
+                                <option value="">Todos</option>
+                                {personalServicioUnico.map((persona) => <option key={persona} value={persona}>{persona}</option>)}
                             </select>
                         </div>
                         <div>
-                            <label className="block text-xs font-bold text-gray-500 mb-1" title="Aún no tenés facturación electrónica SIFEN conectada">SIFEN:</label>
-                            <select className="border rounded p-2 w-full text-xs text-gray-400" disabled>
-                                <option>Todos</option>
+                            <label className="block text-xs font-bold text-gray-500 mb-1">Estado del envío:</label>
+                            <select className="border rounded p-2 w-full text-xs" value={filtroEstadoEnvio} onChange={(e) => setFiltroEstadoEnvio(e.target.value)}>
+                                <option value="">Todos</option>
+                                <option value="__sin_envio">Sin envío asociado</option>
+                                {[...new Set(Object.values(enviosPorVenta).filter(Boolean))].sort().map((estado) => <option key={estado} value={estado}>{estado}</option>)}
                             </select>
                         </div>
+                        <div>
+                            <label className="block text-xs font-bold text-gray-500 mb-1">SIFEN:</label>
+                            <select className="border rounded p-2 w-full text-xs" value={filtroSifen} onChange={(e) => setFiltroSifen(e.target.value)}>
+                                <option value="">Todos</option>
+                                <option value="__sin_factura">Sin factura electrónica</option>
+                                {[...new Set(ventas.filter((venta) => venta.goekua_id && venta.estado_sifen).map((venta) => String(venta.estado_sifen).toLowerCase()))].sort().map((estado) => <option key={estado} value={estado}>{estado}</option>)}
+                            </select>
+                        </div>
+                        <label className="flex items-center gap-2 self-end pb-2 text-xs font-semibold text-gray-600"><input type="checkbox" checked={filtroSoloSuscripciones} onChange={(e) => setFiltroSoloSuscripciones(e.target.checked)} /> Solo suscripciones</label>
                         <div className="flex items-end">
                             <button onClick={limpiarFiltros} className="text-xs font-bold text-orange-600 hover:text-orange-700 border border-orange-200 rounded px-3 py-2 w-full">
                                 ✕ Limpiar filtros
@@ -514,6 +652,10 @@ export default function TodasLasVentas({ onNuevaVenta, perfilUsuario }) {
                             <option value={25}>25</option>
                             <option value={50}>50</option>
                             <option value={100}>100</option>
+                            <option value={200}>200</option>
+                            <option value={500}>500</option>
+                            <option value={1000}>1.000</option>
+                            <option value={0}>Todas</option>
                         </select>
                         <span>entradas</span>
                     </div>
@@ -596,7 +738,7 @@ export default function TodasLasVentas({ onNuevaVenta, perfilUsuario }) {
                                 <tr><td colSpan={23} className="text-center py-8 text-gray-400 font-medium">No hay datos disponibles en la tabla</td></tr>
                             ) : (
                                 ventasPagina.map((venta) => {
-                                    const totalPagadoReal = (Number(venta.total) || 0) - (Number(venta.saldo_pendiente) || 0);
+                                    const totalPagadoReal = totalPagadoVenta(venta);
                                     return (
                                         <tr key={venta.id} className="border-b hover:bg-gray-50">
                                             <td className="p-3 relative" onClick={(e) => e.stopPropagation()}>
@@ -630,7 +772,7 @@ export default function TodasLasVentas({ onNuevaVenta, perfilUsuario }) {
                                                 )}
                                             </td>
                                             <td className="p-3 text-gray-600">{formatFecha(venta.fecha)}</td>
-                                            {columnasVisibles.facturaNo && <td className="p-3 font-mono text-gray-500">{String(venta.id).slice(0, 8).toUpperCase()}</td>}
+                                            {columnasVisibles.facturaNo && <td className="p-3 font-mono text-gray-500">{venta.numero_factura || String(venta.id).slice(0, 8).toUpperCase()}</td>}
                                             <td className="p-3 font-medium text-gray-700">{venta.cliente || 'Cliente Ocasional'}</td>
                                             {columnasVisibles.numeroContacto && <td className="p-3 text-gray-500">{celularesPorCliente[venta.cliente] || '—'}</td>}
                                             {columnasVisibles.ubicacion && <td className="p-3 text-gray-500">{ubicaciones[venta.ubicacion_id] || nombreEmpresa}</td>}
@@ -654,10 +796,10 @@ export default function TodasLasVentas({ onNuevaVenta, perfilUsuario }) {
                                             {columnasVisibles.metodoPago && <td className="p-3 text-gray-500">{venta.metodo_pago || '—'}</td>}
                                             <td className="p-3 text-right font-bold text-gray-700">{formatGs(venta.total)}</td>
                                             <td className="p-3 text-right text-gray-600">{formatGs(totalPagadoReal)}</td>
-                                            {columnasVisibles.gsPyg && <td className="p-3 text-gray-400">-</td>}
+                                            {columnasVisibles.gsPyg && <td className="p-3 text-gray-500">{formatGs(totalPagadoReal)}</td>}
                                             {columnasVisibles.creditosOtorgados && <td className="p-3 text-right font-bold text-red-600">{formatGs(venta.saldo_pendiente)}</td>}
-                                            {columnasVisibles.creditoDevolucion && <td className="p-3 text-right text-gray-400">{formatGs(0)}</td>}
-                                            {columnasVisibles.estadoEnvio && <td className="p-3 text-gray-400">—</td>}
+                                            {columnasVisibles.creditoDevolucion && <td className="p-3 text-right text-gray-600">{formatGs(creditosPorDevolucion[String(venta.id)] || 0)}</td>}
+                                            {columnasVisibles.estadoEnvio && <td className="p-3 text-gray-600">{enviosPorVenta[String(venta.id)] || 'Sin envío'}</td>}
                                             {columnasVisibles.totalArticulos && <td className="p-3 text-right">{venta.articulos ?? 0}</td>}
                                             {columnasVisibles.tipoServicio && <td className="p-3 text-gray-500">{venta.tipo_servicio || '—'}</td>}
                                             {columnasVisibles.campoPersonalizado1 && <td className="p-3 text-gray-500">{venta.campo_personalizado_1 || '—'}</td>}
@@ -770,6 +912,20 @@ export default function TodasLasVentas({ onNuevaVenta, perfilUsuario }) {
                                     )}
                                 </div>
                             )}
+                            {ventaDetalle.modo === 'pagos' && (
+                                <div className="mt-2">
+                                    <p className="mb-2 font-bold text-gray-600">Desglose registrado:</p>
+                                    {ventaDetalle.pagosNoDisponibles ? (
+                                        <p className="text-xs text-amber-700">No se pudo cargar el desglose de pagos. Si esta venta usó pago múltiple, verifica que esté aplicada la migración de detalle de pagos.</p>
+                                    ) : ventaDetalle.pagos?.length ? (
+                                        <div className="overflow-x-auto rounded border">
+                                            <table className="w-full text-xs"><thead className="bg-gray-50"><tr><th className="p-2 text-left">Método</th><th className="p-2 text-left">Cuenta</th><th className="p-2 text-left">Nota</th><th className="p-2 text-right">Monto</th></tr></thead><tbody>
+                                                {ventaDetalle.pagos.map((pago, index) => <tr key={`${pago.cuenta_id || 'pago'}-${index}`} className="border-t"><td className="p-2">{pago.metodo_pago || '—'}</td><td className="p-2">{pago.cuenta_id || '—'}</td><td className="p-2">{pago.nota || '—'}</td><td className="p-2 text-right font-semibold">{formatGs(pago.monto)}</td></tr>)}
+                                            </tbody></table>
+                                        </div>
+                                    ) : <p className="text-xs text-gray-500">{ventaDetalle.venta.nota_venta?.toLowerCase().includes('pago múltiple') ? `El POS guardó este resumen en la nota: ${ventaDetalle.venta.nota_venta}. No hay un desglose por cuenta disponible para esta venta.` : `Esta venta no tiene filas de pago múltiple. Total pagado registrado: ${formatGs(totalPagadoVenta(ventaDetalle.venta))} · Método: ${ventaDetalle.venta.metodo_pago || '—'}.`}</p>}
+                                </div>
+                            )}
                         </div>
                     </div>
                 </div>
@@ -862,6 +1018,21 @@ export default function TodasLasVentas({ onNuevaVenta, perfilUsuario }) {
                             >
                                 {anulando ? 'Anulando...' : 'Sí, anular'}
                             </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+            {ventaADevolver && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={() => !devolviendo && setVentaADevolver(null)}>
+                    <div role="dialog" aria-modal="true" className="w-full max-w-md rounded-xl bg-white p-6 shadow-2xl" onClick={(e) => e.stopPropagation()}>
+                        <h3 className="mb-2 text-lg font-bold text-gray-800">Registrar devolución completa</h3>
+                        <p className="mb-4 text-sm text-gray-600">Venta #{ventaADevolver.id} · {formatGs(ventaADevolver.total)}. Se registrará la trazabilidad de la devolución y se repondrá el stock mediante el flujo transaccional existente. El reembolso en efectivo se gestiona por separado.</p>
+                        <label className="mb-4 block text-sm font-semibold text-gray-700">Motivo
+                            <textarea autoFocus rows={3} minLength={3} maxLength={500} value={motivoDevolucion} onChange={(e) => setMotivoDevolucion(e.target.value)} className="mt-1 w-full rounded border p-2.5 font-normal" placeholder="Describe el motivo de la devolución" />
+                        </label>
+                        <div className="flex justify-end gap-2">
+                            <button type="button" disabled={devolviendo} onClick={() => setVentaADevolver(null)} className="rounded border px-4 py-2 text-sm font-semibold">Cancelar</button>
+                            <button type="button" disabled={devolviendo || motivoDevolucion.trim().length < 3} onClick={confirmarDevolucion} className="rounded bg-orange-600 px-4 py-2 text-sm font-bold text-white disabled:opacity-50">{devolviendo ? 'Registrando…' : 'Confirmar devolución'}</button>
                         </div>
                     </div>
                 </div>

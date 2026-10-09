@@ -46,6 +46,7 @@ const PuntoDeVenta = ({ cajaInfo, session, perfilUsuario, onVolver, onSolicitarC
     return Number(producto.stock_actual) || 0;
   };
   const [mostrarCierreCaja, setMostrarCierreCaja] = useState(false);
+  const [mostrarConfigBusqueda, setMostrarConfigBusqueda] = useState(false);
   const [mostrarNuevoCliente, setMostrarNuevoCliente] = useState(false);
   const [mostrarPagoMultiple, setMostrarPagoMultiple] = useState(false);
   const [mostrarFormularioProducto, setMostrarFormularioProducto] = useState(false);
@@ -63,11 +64,14 @@ const PuntoDeVenta = ({ cajaInfo, session, perfilUsuario, onVolver, onSolicitarC
   const [usuariosServicio, setUsuariosServicio] = useState([]);
   // === ESTADOS PRINCIPALES ===
   const [productos, setProductos] = useState([]);
+  const [marcasEmpresa, setMarcasEmpresa] = useState([]);
   const [carrito, setCarrito] = useState([]);
   const [cotizacionCargada, setCotizacionCargada] = useState(false);
   const [busqueda, setBusqueda] = useState('');
+  const [camposBusqueda, setCamposBusqueda] = useState(['nombre', 'codigo']);
   const [cargando, setCargando] = useState(true);
   const [categoriaActiva, setCategoriaActiva] = useState('Todas las categorías');
+  const [marcaActiva, setMarcaActiva] = useState('');
 
   const [cliente, setCliente] = useState('Cliente Ocasional');
   const [metodoPago, setMetodoPago] = useState('Efectivo');
@@ -281,6 +285,32 @@ const PuntoDeVenta = ({ cajaInfo, session, perfilUsuario, onVolver, onSolicitarC
   }, [empresaId]);
 
   useEffect(() => {
+    let vigente = true;
+    const cargarMarcas = async () => {
+      if (!empresaId) return;
+      const { data, error } = await supabase
+        .from('marcas')
+        .select('id, nombre')
+        .eq('empresa_id', empresaId)
+        .order('nombre', { ascending: true });
+      if (vigente && !error) setMarcasEmpresa(data || []);
+    };
+    cargarMarcas();
+    return () => { vigente = false; };
+  }, [empresaId]);
+
+  useEffect(() => {
+    if (!empresaId) return;
+    try {
+      const guardados = JSON.parse(localStorage.getItem(`gda_pos_campos_busqueda_${empresaId}`) || 'null');
+      const validos = Array.isArray(guardados) ? guardados.filter((campo) => ['nombre', 'codigo'].includes(campo)) : [];
+      if (validos.length) setCamposBusqueda(validos);
+    } catch {
+      setCamposBusqueda(['nombre', 'codigo']);
+    }
+  }, [empresaId]);
+
+  useEffect(() => {
     if (cargando || cotizacionCargada) return;
     const pendiente = sessionStorage.getItem('pypos_cotizacion_pendiente');
     if (!pendiente) {
@@ -336,6 +366,22 @@ const PuntoDeVenta = ({ cajaInfo, session, perfilUsuario, onVolver, onSolicitarC
     const unicas = Array.from(new Set(productos.filter((p) => p.tipo_producto !== 'Variable').map((p) => p.categoria).filter(Boolean)));
     return ['Todas las categorías', ...unicas];
   }, [productos]);
+
+  const marcasPorId = useMemo(() => new Map(marcasEmpresa.map((marca) => [String(marca.id), marca.nombre])), [marcasEmpresa]);
+  const marcas = useMemo(() => {
+    const opciones = marcasEmpresa
+      .filter((marca) => marca.nombre)
+      .map((marca) => ({ valor: String(marca.id), nombre: marca.nombre }));
+    const nombresExistentes = new Set(opciones.map((marca) => marca.nombre.trim().toLocaleLowerCase('es')));
+    productos.forEach((producto) => {
+      const nombre = String(producto.marca || producto.marca_nombre || '').trim();
+      if (nombre && !nombresExistentes.has(nombre.toLocaleLowerCase('es'))) {
+        opciones.push({ valor: `nombre:${nombre}`, nombre });
+        nombresExistentes.add(nombre.toLocaleLowerCase('es'));
+      }
+    });
+    return opciones.sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'));
+  }, [marcasEmpresa, productos]);
 
   const clienteSeleccionado = useMemo(() => clientesDisponibles.find(
     (item) => (item.nombre_empresa || item.nombre) === cliente
@@ -752,14 +798,22 @@ const PuntoDeVenta = ({ cajaInfo, session, perfilUsuario, onVolver, onSolicitarC
     }
   };
 
+  const marcaSeleccionada = marcas.find((marca) => marca.valor === marcaActiva);
   const productosFiltrados = productos.filter((p) => {
     if (p.tipo_producto === 'Variable' || p.activo === false) return false;
-    const coincideBusqueda =
-      p.nombre?.toLowerCase().includes(busqueda.toLowerCase()) ||
-      p.codigo?.toLowerCase().includes(busqueda.toLowerCase());
+    const termino = busqueda.trim().toLocaleLowerCase('es');
+    const coincideBusqueda = !termino || (
+      (camposBusqueda.includes('nombre') && p.nombre?.toLocaleLowerCase('es').includes(termino)) ||
+      (camposBusqueda.includes('codigo') && p.codigo?.toLocaleLowerCase('es').includes(termino))
+    );
     const coincideCategoria =
       categoriaActiva === 'Todas las categorías' || p.categoria === categoriaActiva;
-    return coincideBusqueda && coincideCategoria;
+    const marcaId = String(p.marca_id || '');
+    const marcaProducto = String(p.marca || p.marca_nombre || marcasPorId.get(marcaId) || '').trim();
+    const coincideMarca = !marcaActiva || (marcaActiva.startsWith('nombre:')
+      ? marcaProducto.toLocaleLowerCase('es') === marcaActiva.slice(7).toLocaleLowerCase('es')
+      : marcaId === marcaActiva || (!marcaId && marcaSeleccionada && marcaProducto.toLocaleLowerCase('es') === marcaSeleccionada.nombre.toLocaleLowerCase('es')));
+    return coincideBusqueda && coincideCategoria && coincideMarca;
   });
 
   // Al escanear un código de barras (o tipear y apretar Enter), busca y agrega directo
@@ -769,7 +823,7 @@ const PuntoDeVenta = ({ cajaInfo, session, perfilUsuario, onVolver, onSolicitarC
     if (!termino) return;
 
     // 1) Coincidencia exacta por código (así funciona como lector de código de barras)
-    const porCodigo = productos.find((p) => p.tipo_producto !== 'Variable' && p.activo !== false && p.codigo && p.codigo.toLowerCase() === termino.toLowerCase());
+    const porCodigo = camposBusqueda.includes('codigo') && productos.find((p) => p.tipo_producto !== 'Variable' && p.activo !== false && p.codigo && p.codigo.toLowerCase() === termino.toLowerCase());
     if (porCodigo) {
       agregarAlCarrito(porCodigo);
       setBusqueda('');
@@ -777,7 +831,7 @@ const PuntoDeVenta = ({ cajaInfo, session, perfilUsuario, onVolver, onSolicitarC
     }
 
     // 2) Coincidencia exacta por nombre completo
-    const porNombre = productos.find((p) => p.tipo_producto !== 'Variable' && p.activo !== false && p.nombre && p.nombre.toLowerCase() === termino.toLowerCase());
+    const porNombre = camposBusqueda.includes('nombre') && productos.find((p) => p.tipo_producto !== 'Variable' && p.activo !== false && p.nombre && p.nombre.toLowerCase() === termino.toLowerCase());
     if (porNombre) {
       agregarAlCarrito(porNombre);
       setBusqueda('');
@@ -879,13 +933,23 @@ const PuntoDeVenta = ({ cajaInfo, session, perfilUsuario, onVolver, onSolicitarC
             >
               + Producto
             </button>
+            <button
+              type="button"
+              onClick={() => setMostrarConfigBusqueda(true)}
+              className="h-9 w-9 shrink-0 rounded-lg border border-gray-300 bg-white text-gray-600 hover:border-orange-400 hover:text-orange-600"
+              title="Configurar campos de búsqueda"
+              aria-label="Configurar campos de búsqueda"
+            >
+              ⚙
+            </button>
             <input
               type="text"
               placeholder={t('searchProductSku')}
               value={busqueda}
               onChange={(e) => setBusqueda(e.target.value)}
               onKeyDown={buscarYAgregarPorCodigo}
-              className="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
+              aria-label="Buscar productos por nombre o código"
+              className="min-w-0 flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
             />
           </div>
 
@@ -1143,6 +1207,21 @@ const PuntoDeVenta = ({ cajaInfo, session, perfilUsuario, onVolver, onSolicitarC
             ))}
           </div>
 
+          <div className="pb-3">
+            <label className="sr-only" htmlFor="pos-filtro-marca">Filtrar productos por marca</label>
+            <select
+              id="pos-filtro-marca"
+              aria-label="Filtrar productos por marca"
+              value={marcaActiva}
+              onChange={(e) => setMarcaActiva(e.target.value)}
+              className="h-10 w-full max-w-xs rounded-lg border border-gray-200 bg-white px-3 text-sm text-gray-700 shadow-sm focus:border-orange-400 focus:outline-none focus:ring-2 focus:ring-orange-100"
+            >
+              <option value="">Todas las marcas</option>
+              {marcas.length === 0 && <option disabled value="sin-marcas">No hay marcas registradas</option>}
+              {marcas.map((marca) => <option key={marca.valor} value={marca.valor}>{marca.nombre}</option>)}
+            </select>
+          </div>
+
           <div className="flex-1 overflow-y-auto pr-1">
             {cargando ? (
               <div className="flex justify-center items-center h-full">
@@ -1255,6 +1334,36 @@ const PuntoDeVenta = ({ cajaInfo, session, perfilUsuario, onVolver, onSolicitarC
             if (onSolicitarCierre) onSolicitarCierre(reporte);
           }}
         />
+      )}
+      {mostrarConfigBusqueda && (
+        <div className="fixed inset-0 z-[10000] flex items-center justify-center bg-black/50 p-4" onClick={() => setMostrarConfigBusqueda(false)}>
+          <section role="dialog" aria-modal="true" aria-label="Configurar búsqueda de productos" className="w-full max-w-md rounded-2xl bg-white p-5 shadow-2xl" onClick={(eventClick) => eventClick.stopPropagation()}>
+            <div className="mb-4 flex items-center justify-between"><div><p className="text-xs font-bold uppercase text-orange-600">Preferencias</p><h2 className="text-lg font-black">Buscar productos por</h2></div><button onClick={() => setMostrarConfigBusqueda(false)} className="rounded-lg px-3 py-1 text-xl text-slate-500 hover:bg-slate-100" aria-label="Cerrar">×</button></div>
+            <div className="space-y-3">
+              {[['nombre', 'Nombre del producto'], ['codigo', 'SKU / Código de barras']].map(([campo, etiqueta]) => (
+                <label key={campo} className="flex cursor-pointer items-center gap-3 rounded-lg border border-slate-200 p-3 text-sm font-medium text-slate-700 hover:bg-slate-50">
+                  <input
+                    type="checkbox"
+                    checked={camposBusqueda.includes(campo)}
+                    disabled={camposBusqueda.length === 1 && camposBusqueda.includes(campo)}
+                    onChange={(eventChange) => {
+                      const nuevosCampos = eventChange.target.checked
+                        ? [...new Set([...camposBusqueda, campo])]
+                        : camposBusqueda.filter((item) => item !== campo);
+                      if (!nuevosCampos.length) return;
+                      setCamposBusqueda(nuevosCampos);
+                      if (empresaId) localStorage.setItem(`gda_pos_campos_busqueda_${empresaId}`, JSON.stringify(nuevosCampos));
+                    }}
+                    className="h-4 w-4 accent-orange-500"
+                  />
+                  {etiqueta}
+                </label>
+              ))}
+            </div>
+            <p className="mt-4 text-xs text-slate-500">Se usa esta selección para filtrar productos y para leer códigos de barras con Enter. Dejá al menos un campo activo.</p>
+            <div className="mt-5 flex justify-end"><button onClick={() => setMostrarConfigBusqueda(false)} className="rounded-lg bg-orange-500 px-4 py-2 text-sm font-bold text-white hover:bg-orange-600">Listo</button></div>
+          </section>
+        </div>
       )}
     </div>
   );

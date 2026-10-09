@@ -760,20 +760,25 @@ const Inicio = ({ perfilUsuario, accionInicial }) => {
     info: 'bg-blue-50 border-blue-100 text-blue-700',
   }[tipo] || 'bg-gray-50 border-gray-100 text-gray-700');
 
-  const CardKpi = ({ icon: Icon, gradient, label, value, sublabel, trend }) => (
-    <div className="bg-white p-5 rounded-2xl shadow-sm border border-gray-100 flex items-center gap-4 hover:shadow-md transition-shadow">
-      <div className={`bg-gradient-to-br ${gradient} p-3.5 rounded-2xl text-white shadow-lg`}>
+  const CardKpi = ({ icon: Icon, gradient, label, value, sublabel, trend, compact = false }) => (
+    <div className={`${compact ? 'min-h-[72px] p-4' : 'min-h-[112px] lg:min-h-[132px] p-5 lg:p-6'} bg-white rounded-2xl shadow-sm border border-slate-100 flex items-center gap-4`}>
+      <div className={`bg-gradient-to-br ${gradient} ${compact ? 'p-3' : 'p-3.5'} rounded-2xl text-white shadow-md`}>
         <Icon size={24} strokeWidth={2.2} />
       </div>
       <div className="flex-1 min-w-0">
         <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wider">{label}</p>
-        <h3 className="text-xl font-black text-gray-800 tracking-tight">{formatCurrency(value)}</h3>
-        {trend !== undefined && trend !== null ? (
+        <h3 className={`${compact ? 'text-xl' : 'text-xl lg:text-2xl'} font-black text-gray-800 tracking-tight`}>{formatCurrency(value)}</h3>
+        {!compact && trend !== undefined && trend !== null ? (
           <p className={`text-xs font-bold flex items-center gap-1 ${trend < 0 ? 'text-red-500' : 'text-green-500'}`}>
             {trend < 0 ? '↓' : '↑'} {Math.abs(trend).toFixed(1)}% <span className="text-gray-400 font-normal">{t('vsPreviousPeriod')}</span>
           </p>
-        ) : sublabel && <p className="text-xs text-gray-400">{sublabel}</p>}
+        ) : !compact && sublabel && <p className="text-xs text-gray-400">{sublabel}</p>}
       </div>
+      {compact && trend !== undefined && trend !== null && (
+        <p className={`shrink-0 text-right text-xs font-bold ${trend < 0 ? 'text-red-500' : 'text-green-500'}`}>
+          {trend < 0 ? '↓' : '↑'} {Math.abs(trend).toFixed(1)}% <span className="font-normal text-gray-400">{t('vsPreviousPeriod')}</span>
+        </p>
+      )}
     </div>
   );
 
@@ -969,19 +974,19 @@ const Inicio = ({ perfilUsuario, accionInicial }) => {
       <div className="bg-[#f4f7fa] min-h-screen w-full">
 
         {/* HEADER */}
-        <div className="bg-[#1e293b] p-4 sm:p-6 lg:p-8 rounded-3xl text-white mb-6 relative overflow-hidden shadow-xl">
-          <div className="relative z-10 flex flex-col sm:flex-row sm:flex-wrap justify-between sm:items-end gap-4">
+        <div className="relative -mx-6 -mt-6 mb-0 min-h-[176px] overflow-hidden bg-[#1e3a5f] px-6 pb-6 pt-3 text-white">
+          <div className="relative z-10 flex flex-col items-start gap-3">
             <div>
-              <h1 className="text-2xl sm:text-3xl font-extrabold mb-1 break-words">{saludo}, {perfilUsuario?.empresas?.nombre || 'tu negocio'} 👋</h1>
+              <h1 className="text-2xl font-extrabold mb-1 break-words">{saludo}, {perfilUsuario?.empresas?.nombre || 'tu negocio'} 👋</h1>
               <p className="text-slate-400 text-sm font-medium">{t('businessSummary')} — <span className="capitalize">{fechaHoy}</span></p>
             </div>
             <FiltroFecha value={rango} onChange={(nuevoRango) => setRango(nuevoRango)} />
           </div>
-          <div className="absolute top-0 right-0 w-64 h-64 bg-white/5 rounded-full -mr-20 -mt-20 blur-3xl"></div>
+          <div className="pointer-events-none absolute -right-16 -top-28 h-72 w-72 rounded-full bg-sky-300/10 blur-3xl"></div>
         </div>
 
         {/* KPIs FILA 1 */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-6">
+        <div className="relative z-10 -mt-12 grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4 mb-4">
           <CardKpi icon={ShoppingCart} gradient="from-blue-500 to-blue-700" label={t('totalSales')} value={totalVentas} trend={variacionVsAnterior} />
           <CardKpi icon={TrendingUp} gradient="from-teal-400 to-emerald-600" label="Neto" value={neto} sublabel={t('salesMinusCosts')} />
           <CardKpi icon={FileWarning} gradient="from-orange-400 to-amber-600" label={t('billToPay')} value={deudaCompras} sublabel={t('pendingSuppliers')} />
@@ -989,22 +994,22 @@ const Inicio = ({ perfilUsuario, accionInicial }) => {
         </div>
 
         {/* KPIs FILA 2 */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
-          <div className="bg-white p-4 rounded-2xl flex items-center gap-4 shadow-sm border border-gray-50 hover:shadow-md transition-shadow">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+          <div className="bg-white p-4 rounded-2xl flex items-center gap-4 shadow-sm border border-slate-100">
             <div className="bg-indigo-50 text-indigo-600 p-2.5 rounded-xl"><Package size={20} strokeWidth={2.2} /></div>
             <div>
               <p className="text-[10px] font-bold text-gray-400 uppercase">{t('totalPurchases')}</p>
               <h4 className="font-bold text-gray-800">{formatCurrency(totalCompras)}</h4>
             </div>
           </div>
-          <div className="bg-white p-4 rounded-2xl flex items-center gap-4 shadow-sm border border-gray-50 hover:shadow-md transition-shadow">
+          <div className="bg-white p-4 rounded-2xl flex items-center gap-4 shadow-sm border border-slate-100">
             <div className="bg-orange-50 text-orange-600 p-2.5 rounded-xl"><AlertTriangle size={20} strokeWidth={2.2} /></div>
             <div>
               <p className="text-[10px] font-bold text-gray-400 uppercase">{t('purchaseDebt')}</p>
               <h4 className="font-bold text-gray-800">{formatCurrency(deudaCompras)}</h4>
             </div>
           </div>
-          <div className="bg-white p-4 rounded-2xl flex items-center justify-between shadow-sm border border-gray-50 hover:shadow-md transition-shadow">
+          <div className="bg-white p-4 rounded-2xl flex items-center justify-between shadow-sm border border-slate-100">
             <div className="flex items-center gap-4">
               <div className="bg-purple-50 text-purple-600 p-2.5 rounded-xl"><Handshake size={20} strokeWidth={2.2} /></div>
               <div>
@@ -1019,53 +1024,53 @@ const Inicio = ({ perfilUsuario, accionInicial }) => {
         </div>
 
         {/* CAJAS ABIERTAS */}
-        <div className="bg-white p-4 rounded-3xl shadow-sm border border-gray-50 mb-6 transition-all duration-300 hover:shadow-xl hover:border-gray-200">
-          <h3 className="font-black text-gray-800 mb-0.5 flex items-center gap-2">
+        <div className="min-h-[204px] bg-teal-50/70 p-5 rounded-2xl shadow-sm border-y border-r border-slate-100 border-l-4 border-l-teal-400 mb-4">
+          <h3 className="font-bold text-base text-slate-800 mb-2 flex items-center gap-2">
             <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 inline-block animate-pulse" />
-            <Wallet size={20} className="text-emerald-600" /> {t('openRegisters')}
+            <Wallet size={18} className="text-teal-600" /> {t('openRegisters')}
             {cajasAbiertasConDatos.length > 0 && (
-              <span className="bg-emerald-100 text-emerald-700 text-xs font-black px-2 py-0.5 rounded-full">{cajasAbiertasConDatos.length}</span>
+              <span className="bg-teal-100 text-teal-700 text-xs font-bold px-2.5 py-0.5 rounded-full">{cajasAbiertasConDatos.length}</span>
             )}
           </h3>
-          <p className="text-[10px] text-gray-400 mb-2">{t('autoRefresh')}</p>
+          <p className="text-[11px] text-slate-500 mb-2">{t('autoRefresh')}</p>
           {cajasAbiertasConDatos.length === 0 ? (
-            <p className="text-center text-gray-400 text-sm py-3">{t('noOpenRegisters')}</p>
+            <p className="flex min-h-[128px] items-center justify-center text-center text-slate-500 text-sm py-3">{t('noOpenRegisters')}</p>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {cajasAbiertasConDatos.map((caja) => (
-                <div key={caja.id} className="border border-emerald-100 bg-emerald-50/40 rounded-2xl p-3">
-                  <p className="font-bold text-gray-800 text-sm flex items-center gap-1.5">
+                <div key={caja.id} className="min-h-[132px] w-full max-w-[310px] border border-slate-100 bg-white rounded-xl p-4 shadow-sm">
+                  <p className="font-bold text-slate-800 text-sm flex items-center gap-1.5">
                     <span className="text-emerald-600">👤</span> {caja.usuarioMostrado}
                   </p>
                   <div className="flex justify-between items-start mt-0.5">
                     <div>
-                      <p className="text-xs text-gray-500 flex items-center gap-1">📍 {caja.ubicacionNombre}</p>
-                      <p className="text-[11px] text-gray-400 mt-1">⏱ {caja.duracion}</p>
+                      <p className="text-xs text-slate-600 flex items-center gap-1">📍 {caja.ubicacionNombre}</p>
+                      <p className="text-[11px] font-semibold text-teal-600 mt-1">⏱ {caja.duracion}</p>
                     </div>
                     <button 
                       onClick={() => forzarCierreCaja(caja.id)}
-                      className="text-[10px] bg-red-100 text-red-600 px-2 py-1 rounded hover:bg-red-200 transition-colors font-bold"
+                      className="text-[10px] bg-red-50 text-red-600 px-2 py-1 rounded hover:bg-red-100 transition-colors font-semibold"
                       title={t('forceCloseHelp')}
                     >
                       {t('forceClose')}
                     </button>
                   </div>
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mt-3 pt-3 border-t border-emerald-100">
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mt-2 pt-2 border-t border-slate-100">
                     <div>
-                      <p className="text-[9px] font-bold text-gray-400 uppercase">{t('sales')}</p>
-                      <p className="text-xs font-bold text-gray-800">{formatCurrency(caja.totalVentasCaja)}</p>
+                      <p className="text-[10px] font-medium text-slate-500">{t('sales')}</p>
+                      <p className="text-xs font-bold text-slate-800">{formatCurrency(caja.totalVentasCaja)}</p>
                     </div>
                     <div>
-                      <p className="text-[9px] font-bold text-gray-400 uppercase">{t('cash')}</p>
-                      <p className="text-xs font-bold text-gray-800">{formatCurrency(caja.totalEfectivo)}</p>
+                      <p className="text-[10px] font-medium text-slate-500">{t('cash')}</p>
+                      <p className="text-xs font-bold text-slate-800">{formatCurrency(caja.totalEfectivo)}</p>
                     </div>
                     <div>
-                      <p className="text-[9px] font-bold text-gray-400 uppercase">{t('card')}</p>
-                      <p className="text-xs font-bold text-gray-800">{formatCurrency(caja.totalTarjeta)}</p>
+                      <p className="text-[10px] font-medium text-slate-500">{t('card')}</p>
+                      <p className="text-xs font-bold text-slate-800">{formatCurrency(caja.totalTarjeta)}</p>
                     </div>
                     <div>
-                      <p className="text-[9px] font-bold text-gray-400 uppercase">Transacc.</p>
-                      <p className="text-xs font-bold text-gray-800">{caja.transacciones}</p>
+                      <p className="text-[10px] font-medium text-slate-500">Transacc.</p>
+                      <p className="text-xs font-bold text-slate-800">{caja.transacciones}</p>
                     </div>
                   </div>
                 </div>
@@ -1075,14 +1080,14 @@ const Inicio = ({ perfilUsuario, accionInicial }) => {
         </div>
 
         {/* RESUMEN DE VENTAS */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
-          <CardKpi icon={CalendarDays} gradient="from-slate-500 to-slate-700" label="Ventas esta semana" value={ventasSemana} trend={variacionVentasSemana} />
-          <CardKpi icon={CalendarDays} gradient="from-slate-500 to-slate-700" label="Ventas este mes" value={ventasMes} trend={variacionVentasMes} />
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+          <CardKpi compact icon={CalendarDays} gradient="from-slate-500 to-slate-700" label="Ventas esta semana" value={ventasSemana} trend={variacionVentasSemana} />
+          <CardKpi compact icon={CalendarDays} gradient="from-slate-500 to-slate-700" label="Ventas este mes" value={ventasMes} trend={variacionVentasMes} />
         </div>
 
         {/* GRÁFICO ÚLTIMOS DÍAS + COMPOSICIÓN */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
-          <div className="lg:col-span-2 bg-white p-6 rounded-3xl shadow-sm border border-gray-50 transition-all duration-300 hover:shadow-xl hover:border-gray-200">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-4">
+          <div className="lg:col-span-2 bg-white p-5 rounded-2xl shadow-sm border border-slate-100">
             <h3 className="font-black text-gray-800 mb-6 flex items-center gap-2"><LineChart size={20} className="text-blue-500" /> Ventas últimos 30 días</h3>
             <div className="h-[240px] sm:h-[300px] w-full min-w-0">
               {datosUltimos30Dias.some((d) => d.total > 0) ? (
@@ -1094,7 +1099,7 @@ const Inicio = ({ perfilUsuario, accionInicial }) => {
                         <stop offset="95%" stopColor="#3b82f6" stopOpacity={0} />
                       </linearGradient>
                     </defs>
-                    <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 10 }} interval="preserveStartEnd" />
+                    <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: '#64748b' }} interval="preserveStartEnd" />
                     <Tooltip formatter={(value) => formatCurrency(value)} />
                     <Area type="monotone" dataKey="total" stroke="#3b82f6" strokeWidth={3} fillOpacity={1} fill="url(#colorUv)" />
                   </AreaChart>
@@ -1105,7 +1110,7 @@ const Inicio = ({ perfilUsuario, accionInicial }) => {
             </div>
           </div>
 
-          <div className="bg-white p-6 rounded-3xl shadow-sm border border-gray-50 transition-all duration-300 hover:shadow-xl hover:border-gray-200">
+          <div className="bg-white p-5 rounded-2xl shadow-sm border border-slate-100">
             <div className="flex items-start justify-between gap-3 mb-4">
               <div>
                 <h3 className="font-black text-gray-800 flex items-center gap-2"><PieChartIcon size={20} className="text-blue-500" /> Composición de pagos</h3>
@@ -1159,14 +1164,14 @@ const Inicio = ({ perfilUsuario, accionInicial }) => {
         </div>
 
         {/* VENTAS VS COMPRAS VS GASTOS + TOP PRODUCTOS */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
-          <div className="lg:col-span-2 bg-white p-6 rounded-3xl shadow-sm border border-gray-50 transition-all duration-300 hover:shadow-xl hover:border-gray-200">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-4">
+          <div className="lg:col-span-2 bg-white p-5 rounded-2xl shadow-sm border border-slate-100">
             <h3 className="font-black text-gray-800 mb-6 flex items-center gap-2"><BarChart3 size={20} className="text-blue-500" /> {t('salesPurchasesExpenses')} (6 meses)</h3>
             <div className="h-[230px] sm:h-[280px] w-full min-w-0">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={datos6meses}>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                  <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 11 }} />
+                  <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: '#64748b' }} />
                   <Tooltip formatter={(value) => formatCurrency(value)} />
                   <Legend />
                   <Bar dataKey="Ventas" fill="#3b82f6" radius={[4, 4, 0, 0]} />
@@ -1177,7 +1182,7 @@ const Inicio = ({ perfilUsuario, accionInicial }) => {
             </div>
           </div>
 
-          <div className="bg-white p-6 rounded-3xl shadow-sm border border-gray-50 transition-all duration-300 hover:shadow-xl hover:border-gray-200">
+          <div className="bg-white p-5 rounded-2xl shadow-sm border border-slate-100">
             <h3 className="font-black text-gray-800 mb-4 flex items-center gap-2"><Trophy size={20} className="text-yellow-500" /> {t('topProducts')}</h3>
             {!hayDetalleVentas || topProductos.length === 0 ? (
               <div className="text-center text-gray-400 text-sm py-10">
@@ -1200,7 +1205,7 @@ const Inicio = ({ perfilUsuario, accionInicial }) => {
 
         {/* RECOMENDACIONES */}
         {recomendaciones.length > 0 && (
-          <div className="bg-white p-6 rounded-3xl shadow-sm border border-gray-50 mb-6 transition-all duration-300 hover:shadow-xl hover:border-gray-200">
+          <div className="bg-white p-5 rounded-2xl shadow-sm border border-slate-100 mb-4">
             <h3 className="font-black text-gray-800 mb-4 flex items-center gap-2"><Lightbulb size={20} className="text-amber-500" /> {t('recommendations')}</h3>
             <div className="flex flex-col gap-2">
               {recomendaciones.map((r, i) => (
@@ -1214,13 +1219,13 @@ const Inicio = ({ perfilUsuario, accionInicial }) => {
         )}
 
         {/* AÑO FISCAL ACTUAL */}
-        <div className="bg-white p-6 rounded-3xl shadow-sm border border-gray-50 mb-6 transition-all duration-300 hover:shadow-xl hover:border-gray-200">
+        <div className="bg-white p-5 rounded-2xl shadow-sm border border-slate-100 mb-4">
           <h3 className="font-black text-gray-800 mb-6 flex items-center gap-2"><CalendarRange size={20} className="text-blue-500" /> {t('currentFiscalYear')}</h3>
           <div className="h-[280px] w-full">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={datosAnioFiscal}>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 10 }} />
+                <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: '#64748b' }} />
                 <Tooltip formatter={(value) => formatCurrency(value)} />
                 <Bar dataKey="total" fill="#3b82f6" radius={[4, 4, 0, 0]} />
               </BarChart>
@@ -1229,7 +1234,7 @@ const Inicio = ({ perfilUsuario, accionInicial }) => {
         </div>
 
         {/* TABS: DEUDAS POR COBRAR / PAGAR / STOCK BAJO */}
-        <div className="bg-white p-6 rounded-3xl shadow-sm border border-gray-50 mb-6 transition-all duration-300 hover:shadow-xl hover:border-gray-200">
+        <div className="bg-white p-5 rounded-2xl shadow-sm border border-slate-100 mb-4">
           <div className="flex gap-2 mb-4 border-b border-gray-100">
             {[
               { key: 'cobrar', label: t('accountsReceivable'), icon: Wallet, count: deudasCobrar.length },
@@ -1325,7 +1330,7 @@ const Inicio = ({ perfilUsuario, accionInicial }) => {
         </div>
 
         {/* ALERTA DE CADUCIDAD */}
-        <div className="bg-white p-6 rounded-3xl shadow-sm border border-gray-50 mb-6 transition-all duration-300 hover:shadow-xl hover:border-gray-200">
+        <div className="bg-white p-5 rounded-2xl shadow-sm border border-slate-100 mb-4">
           <h3 className="font-black text-gray-800 mb-4 flex items-center gap-2"><Clock size={20} className="text-orange-500" /> Alerta de caducidad</h3>
           {!hayCaducidad ? (
             <p className="text-center text-gray-400 text-sm py-8">
