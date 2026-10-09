@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 
 const DIAS_SEMANA = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'];
 const MESES_NOMBRE = [
@@ -30,11 +31,9 @@ const generarPresets = () => {
   // Ejercicio actual: enero del año fiscal hasta hoy
   const inicioEjercicio = new Date(hoy.getFullYear(), 0, 1);
 
-  // Último ejercicio trimestral: trimestre anterior
-  const mesActual = hoy.getMonth();
-  const trimestreActual = Math.floor(mesActual / 3);
-  const inicioTrimAnterior = new Date(hoy.getFullYear(), (trimestreActual - 1) * 3, 1);
-  const finTrimAnterior = new Date(hoy.getFullYear(), trimestreActual * 3, 0);
+  // Ejercicio financiero anterior (año calendario, como configuración predeterminada).
+  const inicioEjercicioAnterior = new Date(hoy.getFullYear() - 1, 0, 1);
+  const finEjercicioAnterior = new Date(hoy.getFullYear(), 0, 0);
 
   return [
     { label: 'Hoy', desde: hoy, hasta: hoy },
@@ -43,17 +42,17 @@ const generarPresets = () => {
     { label: 'Últimos 30 días', desde: hace30, hasta: hoy },
     { label: 'Este mes', desde: inicioMes, hasta: hoy },
     { label: 'El mes pasado', desde: inicioMesPasado, hasta: finMesPasado },
-    { label: 'Este mes al año pasado', desde: inicioMesAnioPasado, hasta: finMesAnioPasado },
+    { label: 'Este mes el año pasado', desde: inicioMesAnioPasado, hasta: finMesAnioPasado },
     { label: 'Este año', desde: inicioAnio, hasta: hoy },
     { label: 'El año pasado', desde: inicioAnioPasado, hasta: finAnioPasado },
-    { label: 'Todo', desde: null, hasta: null },
     { label: 'Ejercicio actual', desde: inicioEjercicio, hasta: hoy },
-    { label: 'Último ejercicio trimestral', desde: inicioTrimAnterior, hasta: finTrimAnterior },
+    { label: 'Último ejercicio financiero', desde: inicioEjercicioAnterior, hasta: finEjercicioAnterior },
   ];
 };
 
 const FiltroFecha = ({ value, onChange }) => {
   const [abierto, setAbierto] = useState(false);
+  const [mostrarCalendarios, setMostrarCalendarios] = useState(false);
   const [panelPos, setPanelPos] = useState({ top: 0, left: 0 });
   const [mesBase, setMesBase] = useState(() => {
     const hoy = new Date();
@@ -63,13 +62,14 @@ const FiltroFecha = ({ value, onChange }) => {
   const [selFin, setSelFin] = useState(value?.hasta || null);
   const contenedorRef = useRef(null);
   const buttonRef = useRef(null);
+  const panelRef = useRef(null);
   const presets = generarPresets();
 
   useEffect(() => {
     const cerrar = (e) => {
       if (
         contenedorRef.current && !contenedorRef.current.contains(e.target) &&
-        buttonRef.current && !buttonRef.current.contains(e.target)
+        !panelRef.current?.contains(e.target)
       ) setAbierto(false);
     };
     document.addEventListener('mousedown', cerrar);
@@ -79,10 +79,16 @@ const FiltroFecha = ({ value, onChange }) => {
   const abrirPanel = () => {
     if (buttonRef.current) {
       const rect = buttonRef.current.getBoundingClientRect();
+      const anchoPanel = Math.min(640, window.innerWidth - 16);
       setPanelPos({
-        top: rect.bottom + window.scrollY + 6,
-        right: window.innerWidth - rect.right,
+        top: Math.max(8, Math.min(rect.bottom + 6, window.innerHeight - 448)),
+        left: Math.max(8, Math.min(rect.left, window.innerWidth - anchoPanel - 8)),
       });
+      setSelInicio(value?.desde || null);
+      setSelFin(value?.hasta || null);
+      const fechaBase = value?.desde || new Date();
+      setMesBase(new Date(fechaBase.getFullYear(), fechaBase.getMonth(), 1));
+      setMostrarCalendarios(false);
     }
     setAbierto((prev) => !prev);
   };
@@ -217,11 +223,6 @@ const FiltroFecha = ({ value, onChange }) => {
     );
   };
 
-  // Etiqueta del botón
-  const labelBoton = value?.label && value.label !== 'Todo'
-    ? value.label
-    : 'Filtrar por fecha';
-
   return (
     <div className="relative inline-block" ref={contenedorRef}>
       {/* Botón trigger */}
@@ -233,28 +234,28 @@ const FiltroFecha = ({ value, onChange }) => {
         <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
         </svg>
-        {labelBoton}
+        Filtrar por fecha
         <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" d={abierto ? 'M5 15l7-7 7 7' : 'M19 9l-7 7-7-7'} />
         </svg>
       </button>
 
       {/* Panel desplegable — fixed para escapar de cualquier overflow:hidden del padre */}
-      {abierto && (
+      {abierto && createPortal(
         <div
-          ref={contenedorRef}
-          className="fixed z-[9999] bg-white rounded-xl shadow-2xl border border-gray-200 flex overflow-hidden"
-          style={{ minWidth: '560px', top: panelPos.top, right: panelPos.right }}
+          ref={panelRef}
+          className="fixed z-[10000] bg-white rounded-xl shadow-2xl border border-gray-200 flex overflow-auto"
+          style={{ width: mostrarCalendarios ? 'min(640px, calc(100vw - 16px))' : 'min(240px, calc(100vw - 16px))', maxHeight: 'min(440px, calc(100vh - 16px))', top: panelPos.top, left: panelPos.left }}
         >
           {/* Columna de presets */}
-          <div className="w-44 border-r border-gray-100 py-1 flex-shrink-0 overflow-y-auto">
+          <div className={`${mostrarCalendarios ? 'w-36 border-r' : 'w-full'} border-gray-100 py-1 flex-shrink-0 overflow-y-auto`}>
             {presets.map((p) => {
               const activo = value?.label === p.label;
               return (
                 <button
                   key={p.label}
                   onClick={() => aplicarPreset(p)}
-                  className={`w-full text-left px-4 py-2 text-[13px] transition-colors ${
+                  className={`w-full text-left px-3 py-1.5 text-xs transition-colors ${
                     activo
                       ? 'bg-blue-50 text-blue-600 font-semibold'
                       : 'text-gray-600 hover:bg-gray-50'
@@ -267,8 +268,8 @@ const FiltroFecha = ({ value, onChange }) => {
             {/* Separador + Rango personalizado */}
             <div className="border-t border-gray-100 mt-1 pt-1">
               <button
-                onClick={() => {}} // El rango personalizado se selecciona con los calendarios
-                className="w-full text-left px-4 py-2 text-[13px] text-gray-600 hover:bg-gray-50 transition-colors"
+                onClick={() => setMostrarCalendarios(true)}
+                className="w-full text-left px-3 py-1.5 text-xs text-gray-600 hover:bg-gray-50 transition-colors"
               >
                 Rango personalizado
               </button>
@@ -276,7 +277,7 @@ const FiltroFecha = ({ value, onChange }) => {
           </div>
 
           {/* Área de calendarios */}
-          <div className="flex flex-col p-4 flex-1">
+          {mostrarCalendarios && <div className="flex flex-col p-4 flex-1">
             {/* Dos calendarios lado a lado */}
             <div className="flex gap-6">
               {renderCalendario(mesBase, true, false)}
@@ -306,9 +307,9 @@ const FiltroFecha = ({ value, onChange }) => {
                 </button>
               </div>
             </div>
-          </div>
+          </div>}
         </div>
-      )}
+      , document.body)}
     </div>
   );
 };

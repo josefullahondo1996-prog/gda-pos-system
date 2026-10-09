@@ -39,7 +39,12 @@ const getTextValue = (row, keys, fallback = '—') => {
 };
 
 const toDate = (value) => {
-  const date = value ? new Date(value) : null;
+  // Las columnas tipo DATE llegan como YYYY-MM-DD. JavaScript las interpreta
+  // como UTC y en Paraguay caen en el día local anterior; conservar el día calendario.
+  const soloFecha = typeof value === 'string' && /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+  const date = soloFecha
+    ? new Date(Number(soloFecha[1]), Number(soloFecha[2]) - 1, Number(soloFecha[3]))
+    : value ? new Date(value) : null;
   return date && !Number.isNaN(date.getTime()) ? date : null;
 };
 
@@ -977,7 +982,7 @@ const Inicio = ({ perfilUsuario, accionInicial }) => {
         <div className="relative -mx-6 -mt-6 mb-0 min-h-[176px] overflow-hidden bg-[#1e3a5f] px-6 pb-6 pt-3 text-white">
           <div className="relative z-10 flex flex-col items-start gap-3">
             <div>
-              <h1 className="text-2xl font-extrabold mb-1 break-words">{saludo}, {perfilUsuario?.empresas?.nombre || 'tu negocio'} 👋</h1>
+              <h1 className="text-2xl font-extrabold mb-1 break-words">{saludo}, {nombreDelNegocio || perfilUsuario?.empresas?.nombre || 'Mi negocio'} 👋</h1>
               <p className="text-slate-400 text-sm font-medium">{t('businessSummary')} — <span className="capitalize">{fechaHoy}</span></p>
             </div>
             <FiltroFecha value={rango} onChange={(nuevoRango) => setRango(nuevoRango)} />
