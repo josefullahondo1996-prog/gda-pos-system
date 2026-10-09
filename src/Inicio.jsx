@@ -355,9 +355,9 @@ const Inicio = ({ perfilUsuario, accionInicial }) => {
       setCargando(true);
       setError(null);
       try {
-        let qVentas = supabase.from('ventas').select('*').eq('empresa_id', empresaId);
-        let qGastos = supabase.from('gastos').select('*').eq('empresa_id', empresaId);
-        let qCompras = supabase.from('compras').select('*').eq('empresa_id', empresaId);
+        let qVentas = supabase.from('ventas').select('id, cliente, cliente_nombre, total, estado_pago, monto_pagado, saldo_pendiente, articulos, nota_venta, fecha, caja_id, metodo_pago').eq('empresa_id', empresaId);
+        let qGastos = supabase.from('gastos').select('id, monto, fecha').eq('empresa_id', empresaId);
+        let qCompras = supabase.from('compras').select('id, proveedor_nombre, nro_factura, total, saldo_pendiente, fecha').eq('empresa_id', empresaId);
         if (filtroUbicacion) {
           qVentas = qVentas.eq('ubicacion_id', filtroUbicacion);
           qGastos = qGastos.eq('ubicacion_id', filtroUbicacion);
@@ -369,9 +369,9 @@ const Inicio = ({ perfilUsuario, accionInicial }) => {
           qVentas,
           qGastos,
           qCompras,
-          supabase.from('productos').select('*').eq('empresa_id', empresaId),
-          supabase.from('detalle_ventas').select('*').eq('empresa_id', empresaId),
-          qCajas,
+          supabase.from('productos').select('id, nombre, sku, codigo, stock_actual, fecha_vencimiento, ubicacion').eq('empresa_id', empresaId),
+          supabase.from('detalle_ventas').select('venta_id, nombre_producto, cantidad').eq('empresa_id', empresaId),
+          qCajas.select('id, estado, fecha_apertura, ubicacion_id, usuario'),
           supabase.from('ubicaciones_comerciales').select('id, nombre').eq('empresa_id', empresaId),
         ]);
         if (!isMounted) return;
@@ -410,7 +410,7 @@ const Inicio = ({ perfilUsuario, accionInicial }) => {
     let cancelado = false;
 
     const actualizarCajasEnVivo = async () => {
-      let q = supabase.from('caja_registros').select('*').eq('empresa_id', empresaId).eq('estado', 'Abierta');
+      let q = supabase.from('caja_registros').select('id, estado, fecha_apertura, ubicacion_id, usuario').eq('empresa_id', empresaId).eq('estado', 'Abierta');
       if (filtroUbicacion) q = q.eq('ubicacion_id', filtroUbicacion);
       const { data: cajas } = await q;
       if (cancelado) return;
@@ -421,7 +421,7 @@ const Inicio = ({ perfilUsuario, accionInicial }) => {
       if (cajas && cajas.length > 0) {
         const { data: ventasDeCajas } = await supabase
           .from('ventas')
-          .select('*')
+          .select('id, cliente, cliente_nombre, total, estado_pago, monto_pagado, saldo_pendiente, articulos, nota_venta, fecha, caja_id, metodo_pago')
           .in('caja_id', cajas.map((c) => c.id));
         if (cancelado || !ventasDeCajas) return;
         setVentas((prev) => {

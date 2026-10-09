@@ -30,7 +30,7 @@ function App() {
     try {
       const { data, error } = await supabase
         .from('usuarios')
-        .select('*, roles(nombre, permisos), empresas(id, nombre, ruc, direccion, telefono, logo_url, estado)')
+        .select('id, auth_user_id, empresa_id, nombre, apellido, nombre_usuario, email, activo, permitir_acceso, caja_actual, roles(nombre, permisos), empresas(id, nombre, ruc, direccion, telefono, logo_url, estado)')
         .eq('auth_user_id', session.user.id)
         .maybeSingle();
 
