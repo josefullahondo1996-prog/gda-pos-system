@@ -1082,8 +1082,9 @@ export default function Clientes() {
   };
 
   return (
-    <div className="bg-transparent text-sm text-gray-700 relative h-full">
+    <div className={`bg-transparent text-sm text-gray-700 relative ${clienteLibroMayor ? 'min-h-full' : 'h-full'}`}>
 
+      {!clienteLibroMayor && <>
       <h2 className="text-2xl font-bold mb-4 text-gray-800">
         {t('customers')} <span className="text-sm font-normal text-gray-500">{t('manageCustomers')}</span>
       </h2>
@@ -1247,7 +1248,7 @@ export default function Clientes() {
                               setMenuAccionesAbierto(null);
                             } else {
                               const rect = e.currentTarget.getBoundingClientRect();
-                              const anchoMenu = 176; // w-44
+                              const anchoMenu = 192; // w-48
                               const alturaEstimadaMenu = 320; // 8 ítems + un divisor
                               const espacioAbajo = window.innerHeight - rect.bottom;
                               const abrirHaciaArriba = espacioAbajo < alturaEstimadaMenu && rect.top > alturaEstimadaMenu;
@@ -1259,7 +1260,9 @@ export default function Clientes() {
                               setMenuAccionesAbierto(cliente.id);
                             }
                           }}
-                          className="bg-[#17a2b8] text-white px-2 py-1 rounded font-bold text-[10px]"
+                          aria-haspopup="menu"
+                          aria-expanded={menuAccionesAbierto === cliente.id}
+                          className="min-h-9 min-w-[104px] rounded-md bg-[#2f829c] px-4 py-2 text-sm font-semibold leading-5 text-white shadow-sm transition-colors hover:bg-[#286f86] focus:outline-none focus:ring-2 focus:ring-[#2f829c]/30"
                         >
                           Acciones ▾
                         </button>
@@ -1268,36 +1271,42 @@ export default function Clientes() {
                             {/* Fondo invisible para cerrar el menú al hacer clic afuera */}
                             <div className="fixed inset-0 z-[9998]" onClick={() => setMenuAccionesAbierto(null)} />
                             <div
-                              className="fixed z-[9999] bg-white border rounded shadow-lg w-44 text-[11px] py-1"
+                              role="menu"
+                              className="fixed z-[9999] w-48 overflow-y-auto rounded border border-slate-200 bg-white py-1 text-sm text-slate-700 shadow-[0_5px_18px_rgba(15,23,42,0.2)]"
                               style={{ top: menuAccionesPos.top, left: menuAccionesPos.left, maxHeight: 'calc(100vh - 16px)', overflowY: 'auto' }}
                             >
                               <button
                                 onClick={() => { setMenuAccionesAbierto(null); abrirModalPagar(cliente); }}
-                                className="w-full text-left px-3 py-2 hover:bg-gray-100 text-gray-700 flex items-center gap-2"
+                                role="menuitem"
+                                className="flex min-h-9 w-full items-center gap-2 px-3 py-2 text-left text-sm text-gray-700 transition-colors hover:bg-[#f1f4f7]"
                               >
                                 💳 Pagar
                               </button>
                               <button
                                 onClick={() => { setMenuAccionesAbierto(null); setClienteVer(cliente); }}
-                                className="w-full text-left px-3 py-2 hover:bg-gray-100 text-gray-700 flex items-center gap-2"
+                                role="menuitem"
+                                className="flex min-h-9 w-full items-center gap-2 px-3 py-2 text-left text-sm text-gray-700 transition-colors hover:bg-[#f1f4f7]"
                               >
                                 👁️ Ver
                               </button>
                               <button
                                 onClick={() => { setMenuAccionesAbierto(null); abrirEdicionCliente(cliente); }}
-                                className="w-full text-left px-3 py-2 hover:bg-gray-100 text-gray-700 flex items-center gap-2"
+                                role="menuitem"
+                                className="flex min-h-9 w-full items-center gap-2 px-3 py-2 text-left text-sm text-gray-700 transition-colors hover:bg-[#f1f4f7]"
                               >
                                 ✏️ Editar
                               </button>
                               <button
                                 onClick={() => { setMenuAccionesAbierto(null); handleEliminarCliente(cliente); }}
-                                className="w-full text-left px-3 py-2 hover:bg-gray-100 text-red-600 flex items-center gap-2"
+                                role="menuitem"
+                                className="flex min-h-9 w-full items-center gap-2 px-3 py-2 text-left text-sm text-red-600 transition-colors hover:bg-red-50"
                               >
                                 🗑️ Borrar
                               </button>
                               <button
                                 onClick={() => { setMenuAccionesAbierto(null); handleDesactivarCliente(cliente); }}
-                                className="w-full text-left px-3 py-2 hover:bg-gray-100 text-gray-700 flex items-center gap-2"
+                                role="menuitem"
+                                className="flex min-h-9 w-full items-center gap-2 px-3 py-2 text-left text-sm text-gray-700 transition-colors hover:bg-[#f1f4f7]"
                               >
                                 ⏻ {cliente.estado === 'Inactivo' ? 'Activar' : 'Desactivar'}
                               </button>
@@ -1318,19 +1327,22 @@ export default function Clientes() {
                                   setLibroMayorUbicacion('Todas');
                                   setClienteLibroMayor(cliente);
                                 }}
-                                className="w-full text-left px-3 py-2 hover:bg-gray-100 text-gray-700 flex items-center gap-2"
+                                role="menuitem"
+                                className="flex min-h-9 w-full items-center gap-2 px-3 py-2 text-left text-sm text-gray-700 transition-colors hover:bg-[#f1f4f7]"
                               >
                                 📒 Libro mayor
                               </button>
                               <button
                                 onClick={() => { setMenuAccionesAbierto(null); setClienteVentas(cliente); }}
-                                className="w-full text-left px-3 py-2 hover:bg-gray-100 text-gray-700 flex items-center gap-2"
+                                role="menuitem"
+                                className="flex min-h-9 w-full items-center gap-2 px-3 py-2 text-left text-sm text-gray-700 transition-colors hover:bg-[#f1f4f7]"
                               >
                                 🧾 Ventas
                               </button>
                               <button
                                 onClick={() => { abrirDocumentosNotas(cliente); }}
-                                className="w-full text-left px-3 py-2 hover:bg-gray-100 text-gray-700 flex items-center gap-2"
+                                role="menuitem"
+                                className="flex min-h-9 w-full items-center gap-2 px-3 py-2 text-left text-sm text-gray-700 transition-colors hover:bg-[#f1f4f7]"
                               >
                                 📎 Documentos y notas
                               </button>
@@ -1417,6 +1429,7 @@ export default function Clientes() {
           </div>
         </div>
       </div>
+      </>}
 
       {/* ======================================================================= */}
       {/* MODAL AVANZADO DE APERTURA: CLON TOTAL PYpos                            */}
@@ -2114,11 +2127,14 @@ export default function Clientes() {
         };
 
         return (
-          <div className="libro-mayor-scroll absolute inset-x-0 top-14 md:top-16 bottom-16 md:bottom-0 bg-white z-[9999] overflow-y-auto overflow-x-hidden flex flex-col">
+          <div className="libro-mayor-scroll relative min-h-full w-full bg-transparent overflow-visible flex flex-col">
               <style>{`
                 .libro-mayor-table th, .libro-mayor-table td { padding: 10px; }
                 .libro-mayor-table[data-formato="Format 2"] th,
                 .libro-mayor-table[data-formato="Format 2"] td { padding: 5px 7px; }
+                .libro-mayor-scroll [class*="text-[10px]"] { font-size: 12px !important; line-height: 1.4 !important; }
+                .libro-mayor-scroll [class*="text-[11px]"] { font-size: 13px !important; line-height: 1.45 !important; }
+                .libro-mayor-scroll [class*="text-xs"] { font-size: 14px !important; line-height: 1.45 !important; }
                 @media print {
                   body * { visibility: hidden !important; }
                   .libro-mayor-scroll, .libro-mayor-scroll * { visibility: visible !important; }
@@ -2138,84 +2154,76 @@ export default function Clientes() {
                 </div>
               </div>
 
-              <div className="p-4 md:p-6 max-w-[1400px] w-full mx-auto">
-                {/* Avatar independiente y tarjeta de datos del contacto */}
-                <div className="flex items-center gap-4 md:gap-6 mb-5">
-                  <div className="relative flex-shrink-0 flex flex-col items-center">
+              <div className="p-4 md:p-6 w-full mx-auto">
+                {/* Ficha amplia del cliente, siguiendo la tarjeta de contacto de Micdepos */}
+                <section className="mb-7 flex min-h-[220px] flex-col gap-5 rounded-xl border border-slate-200 bg-white p-5 shadow-[0_5px_16px_rgba(15,23,42,0.14)] sm:flex-row sm:items-start sm:gap-6 md:p-6">
+                  <div className="relative flex flex-shrink-0 flex-col items-center sm:items-start">
+                    <div className="h-28 w-28 overflow-hidden rounded-full border border-slate-200 bg-slate-100 shadow-sm md:h-32 md:w-32">
                       {cliente.imagen_url ? (
                         <img
                           src={cliente.imagen_url}
                           alt={cliente.nombre}
-                          className="w-20 h-20 md:w-24 md:h-24 rounded-full object-cover border-2 border-gray-200 shadow-sm cursor-zoom-in hover:opacity-90 transition-opacity"
+                          className="h-full w-full cursor-zoom-in object-cover transition-opacity hover:opacity-90"
                           onClick={() => setFotoAmpliada(cliente.imagen_url)}
                           title="Clic para ampliar foto"
                           onError={(e) => { e.target.onerror = null; e.target.style.display = 'none'; e.target.nextSibling.style.display = 'flex'; }}
                         />
                       ) : null}
                       <div
-                        className="w-20 h-20 md:w-24 md:h-24 rounded-full bg-gray-200 text-gray-500 flex items-center justify-center font-bold text-2xl shadow-sm"
+                        className="h-full w-full items-center justify-center bg-slate-100 text-slate-400"
                         style={{ display: cliente.imagen_url ? 'none' : 'flex' }}
+                        aria-label="Cliente sin foto"
                       >
-                        {iniciales}
+                        <span className="text-5xl">👤</span>
                       </div>
-                      <span className="mt-1 bg-orange-500 text-white text-[9px] font-bold px-2 py-0.5 rounded-full whitespace-nowrap shadow-sm">
-                        {cliente.tipo_contacto || 'Cliente'}
-                      </span>
-                  </div>
-                  <div className="border border-gray-200 rounded-lg p-4 md:p-5 flex flex-1 flex-wrap justify-between items-start gap-4 shadow-sm bg-white min-h-[104px]">
-                    {/* Info del contacto */}
-                    <div className="pt-1">
-                      <h4 className="font-bold text-gray-900 text-lg leading-tight">{cliente.nombre} <span className="font-normal text-xs text-gray-500">{cliente.tipo_contacto || 'Cliente'}</span></h4>
-                      <p className="text-xs text-gray-500 mt-0.5">
-                        <span className="inline-block w-2 h-2 rounded-full bg-orange-400 mr-1"></span>
-                        {cliente.nombre}
-                      </p>
-                      <p className="text-xs text-gray-500">{cliente.direccion || 'SIN DIRECCION'},</p>
-                      <p className="text-xs text-gray-500">{cliente.departamento || 'Paraguay'},</p>
-                      <p className="text-xs text-gray-500">{cliente.cod_postal || '0000'}</p>
-                      {cliente.celular && (
-                        <p className="text-xs text-gray-600 flex items-center gap-1 mt-1">
-                          <span className="inline-block w-3 h-3 bg-red-500 rounded-sm"></span> {cliente.celular}
-                        </p>
-                      )}
                     </div>
                   </div>
-                </div>
+                  <div className="min-w-0 flex-1 pt-1">
+                    <h4 className="text-xl font-semibold leading-tight text-slate-800 md:text-[22px]">
+                      {cliente.nombre} <span className="text-sm font-normal text-slate-500">{cliente.tipo_contacto || 'Cliente'}</span>
+                    </h4>
+                    <div className="mt-3 space-y-1 text-sm leading-5 text-slate-600">
+                      <p className="flex items-start gap-2"><span className="mt-0.5 text-orange-500">📍</span><span>{cliente.nombre}{cliente.nombre_empresa ? ` · ${cliente.nombre_empresa}` : ''},<br />{cliente.direccion || 'SIN DIRECCION'}, {cliente.departamento || 'Paraguay'},<br />{cliente.cod_postal || '0000'}</span></p>
+                      {cliente.celular && <p className="flex items-center gap-2"><span className="text-orange-500">▮</span>{cliente.celular}</p>}
+                      {cliente.documento_nro && <p className="text-xs text-slate-500">Documento: {cliente.documento_nro}</p>}
+                    </div>
+                  </div>
+                </section>
 
                 {/* Pestañas - estilo CDEpos con iconos */}
-                <div className="libro-mayor-tabs flex gap-0 border-b border-gray-200 mb-4 text-sm font-bold text-gray-500 overflow-x-auto">
+                <div className="libro-mayor-tabs flex gap-0 border-b border-gray-200 mb-4 text-base font-bold text-gray-500 overflow-x-auto">
                   <button
                     onClick={() => setLibroMayorTab('libro')}
-                    className={`whitespace-nowrap pb-3 px-4 flex items-center gap-2 transition-colors ${libroMayorTab === 'libro' ? 'text-[#004284] border-b-3 border-[#004284]' : 'hover:text-gray-700'}`}
-                    style={libroMayorTab === 'libro' ? { borderBottomWidth: '3px' } : {}}
+                    className={`min-w-max flex-1 justify-center whitespace-nowrap border-t-2 px-3 py-3 flex items-center gap-2 transition-colors ${libroMayorTab === 'libro' ? 'text-[#004284] border-t-[#4b9bb8]' : 'border-t-transparent hover:text-gray-700'}`}
+                    style={libroMayorTab === 'libro' ? { borderTopWidth: '3px' } : {}}
                   >
                     📒 Libro mayor
                   </button>
                   <button
                     onClick={() => setLibroMayorTab('ventas')}
-                    className={`whitespace-nowrap pb-3 px-4 flex items-center gap-2 transition-colors ${libroMayorTab === 'ventas' ? 'text-[#004284] border-b-3 border-[#004284]' : 'hover:text-gray-700'}`}
-                    style={libroMayorTab === 'ventas' ? { borderBottomWidth: '3px' } : {}}
+                    className={`min-w-max flex-1 justify-center whitespace-nowrap border-t-2 px-3 py-3 flex items-center gap-2 transition-colors ${libroMayorTab === 'ventas' ? 'text-[#004284] border-t-[#4b9bb8]' : 'border-t-transparent hover:text-gray-700'}`}
+                    style={libroMayorTab === 'ventas' ? { borderTopWidth: '3px' } : {}}
                   >
                     💰 Ventas
                   </button>
                   <button
                     onClick={() => setLibroMayorTab('documentos')}
-                    className={`whitespace-nowrap pb-3 px-4 flex items-center gap-2 transition-colors ${libroMayorTab === 'documentos' ? 'text-[#004284] border-b-3 border-[#004284]' : 'hover:text-gray-700'}`}
-                    style={libroMayorTab === 'documentos' ? { borderBottomWidth: '3px' } : {}}
+                    className={`min-w-max flex-1 justify-center whitespace-nowrap border-t-2 px-3 py-3 flex items-center gap-2 transition-colors ${libroMayorTab === 'documentos' ? 'text-[#004284] border-t-[#4b9bb8]' : 'border-t-transparent hover:text-gray-700'}`}
+                    style={libroMayorTab === 'documentos' ? { borderTopWidth: '3px' } : {}}
                   >
                     📎 Documentos y notas
                   </button>
                   <button
                     onClick={() => setLibroMayorTab('pagos')}
-                    className={`whitespace-nowrap pb-3 px-4 flex items-center gap-2 transition-colors ${libroMayorTab === 'pagos' ? 'text-[#004284] border-b-3 border-[#004284]' : 'hover:text-gray-700'}`}
-                    style={libroMayorTab === 'pagos' ? { borderBottomWidth: '3px' } : {}}
+                    className={`min-w-max flex-1 justify-center whitespace-nowrap border-t-2 px-3 py-3 flex items-center gap-2 transition-colors ${libroMayorTab === 'pagos' ? 'text-[#004284] border-t-[#4b9bb8]' : 'border-t-transparent hover:text-gray-700'}`}
+                    style={libroMayorTab === 'pagos' ? { borderTopWidth: '3px' } : {}}
                   >
                     💳 Pagos
                   </button>
                   <button
                     onClick={() => setLibroMayorTab('historial')}
-                    className={`whitespace-nowrap pb-3 px-4 flex items-center gap-2 transition-colors ${libroMayorTab === 'historial' ? 'text-[#004284] border-b-3 border-[#004284]' : 'hover:text-gray-700'}`}
-                    style={libroMayorTab === 'historial' ? { borderBottomWidth: '3px' } : {}}
+                    className={`min-w-max flex-1 justify-center whitespace-nowrap border-t-2 px-3 py-3 flex items-center gap-2 transition-colors ${libroMayorTab === 'historial' ? 'text-[#004284] border-t-[#4b9bb8]' : 'border-t-transparent hover:text-gray-700'}`}
+                    style={libroMayorTab === 'historial' ? { borderTopWidth: '3px' } : {}}
                   >
                     🕘 Historial de cambios
                   </button>

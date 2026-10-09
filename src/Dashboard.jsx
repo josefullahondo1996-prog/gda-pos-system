@@ -70,6 +70,10 @@ const FlujoFondos = lazy(() => import('./FlujoFondos'));
 const Envios = lazy(() => import('./Envios'));
 const RemisionesElectronicas = lazy(() => import('./RemisionesElectronicas'));
 const CatalogoQR = lazy(() => import('./CatalogoQR'));
+const ImprimirEtiquetasProductos = lazy(() => import('./ModulosProductos').then((m) => ({ default: m.ImprimirEtiquetasProductos })));
+const ImportarStockInicial = lazy(() => import('./ModulosProductos').then((m) => ({ default: m.ImportarStockInicial })));
+const GruposPreciosVenta = lazy(() => import('./ModulosProductos').then((m) => ({ default: m.GruposPreciosVenta })));
+const GarantiasProductos = lazy(() => import('./ModulosProductos').then((m) => ({ default: m.GarantiasProductos })));
 
 export default function Dashboard({ session, perfilUsuario, initialView = 'inicio' }) {
   const { t, locale } = useLanguage();
@@ -115,6 +119,7 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
       transferencias_stock: 'productos',
       ajustes_stock: 'productos',
       importar_productos: 'productos',
+      imprimir_etiquetas: 'productos', importar_stock_inicial: 'productos', grupos_precios_venta: 'productos', garantias_productos: 'productos',
       importar_contactos: 'clientes_proveedores',
       fabricacion: 'productos',
     };
@@ -128,6 +133,9 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
       return permisosRol.productos['Transferir stock'] === true;
     }
     if (vista === 'ajustes_stock' && !esAdmin && permisosRol?.productos) {
+      return permisosRol.productos['Ajustar stock'] === true;
+    }
+    if (vista === 'importar_stock_inicial' && !esAdmin && permisosRol?.productos) {
       return permisosRol.productos['Ajustar stock'] === true;
     }
     if (vista === 'fabricacion' && !esAdmin && permisosRol?.productos) {
@@ -421,6 +429,23 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
         break;
       case '/variaciones-productos':
         setVistaActiva('variaciones_productos');
+        setMenuExpandido('productos');
+        break;
+      case '/imprimir-etiquetas':
+        setVistaActiva('imprimir_etiquetas');
+        setMenuExpandido('productos');
+        break;
+      case '/importar-stock-inicial':
+        setVistaActiva('importar_stock_inicial');
+        setMenuExpandido('productos');
+        break;
+      case '/grupos-precios-venta':
+        setVistaActiva('grupos_precios_venta');
+        setMenuExpandido('productos');
+        break;
+      case '/garantias':
+        setVistaActiva('garantias_productos');
+        setMenuExpandido('productos');
         break;
       case '/agregar_producto':
         setVistaActiva('agregar_producto');
@@ -614,6 +639,18 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
       case 'unidades':
         return <Unidades />;
 
+      case 'imprimir_etiquetas':
+        return <ImprimirEtiquetasProductos key={refreshKey} />;
+
+      case 'importar_stock_inicial':
+        return <ImportarStockInicial key={refreshKey} />;
+
+      case 'grupos_precios_venta':
+        return <GruposPreciosVenta key={refreshKey} />;
+
+      case 'garantias_productos':
+        return <GarantiasProductos key={refreshKey} />;
+
       case 'usuarios':
         return <Usuarios />;
 
@@ -724,23 +761,23 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
   // Estilos de los botones del Sidebar
   const estiloBotonSimple = (vista) => `
     group relative w-full min-h-[42px] text-left text-[14px] font-semibold tracking-[0.01em] transition-all duration-300 ease-out flex items-center gap-3 overflow-hidden
-    ${sidebarColapsado ? 'justify-center px-2 mx-1.5 rounded-2xl' : 'justify-start px-3 py-2.5 mx-2 rounded-2xl'}
+    ${sidebarColapsado ? 'justify-center px-2 mx-1.5 rounded-xl' : 'justify-start px-3 py-2.5 mx-2 rounded-xl'}
     ${vistaActiva === vista
-      ? 'text-white bg-gradient-to-r from-[#1f2937] via-[#1d2434] to-[#111827] shadow-[0_16px_32px_rgba(15,23,42,0.28)] ring-1 ring-[#f59e0b]/40 before:absolute before:left-0 before:top-1.5 before:bottom-1.5 before:w-1 before:rounded-r-full before:bg-gradient-to-b before:from-[#fbbf24] before:to-[#f59e0b]'
-      : 'text-slate-600 hover:text-[#f59e0b] hover:bg-gradient-to-r hover:from-white hover:to-slate-50 hover:shadow-[0_8px_20px_rgba(15,23,42,0.08)] active:bg-slate-100'}
+      ? 'text-[#ff4d00] bg-[#1e1f35] shadow-[0_8px_18px_rgba(15,23,42,0.16)]'
+      : 'text-slate-600 hover:text-[#ff4d00] hover:bg-[#fff1e8] hover:shadow-sm active:bg-[#ffe3d4]'}
   `;
 
   const estiloBotonDesplegable = (menuName) => `
     group relative w-full min-h-[42px] text-left text-[14px] font-semibold tracking-[0.01em] transition-all duration-300 ease-out flex items-center justify-between overflow-hidden
-    ${sidebarColapsado ? 'justify-center px-2 mx-1.5 rounded-2xl' : 'px-3 py-2.5 mx-2 rounded-2xl'}
+    ${sidebarColapsado ? 'justify-center px-2 mx-1.5 rounded-xl' : 'px-3 py-2.5 mx-2 rounded-xl'}
     ${menuExpandido === menuName
-      ? 'text-white bg-gradient-to-r from-[#1f2937] via-[#1d2434] to-[#111827] shadow-[0_16px_32px_rgba(15,23,42,0.28)] ring-1 ring-[#f59e0b]/40 before:absolute before:left-0 before:top-1.5 before:bottom-1.5 before:w-1 before:rounded-r-full before:bg-gradient-to-b before:from-[#fbbf24] before:to-[#f59e0b]'
-      : 'text-slate-600 hover:text-[#f59e0b] hover:bg-gradient-to-r hover:from-white hover:to-slate-50 hover:shadow-[0_8px_20px_rgba(15,23,42,0.08)] active:bg-slate-100'}
+      ? 'text-[#ff4d00] bg-[#1e1f35] shadow-[0_8px_18px_rgba(15,23,42,0.16)]'
+      : 'text-slate-600 hover:text-[#ff4d00] hover:bg-[#fff1e8] hover:shadow-sm active:bg-[#ffe3d4]'}
   `;
 
   const estiloSubItem = (vista, ruta) => `
-    w-full text-left pl-10 pr-3 py-1.5 text-[13px] font-medium transition-all duration-300 ease-out flex items-center gap-2 rounded-xl mx-2 border border-transparent
-    ${(ruta ? location.pathname === ruta || (ruta === '/informes/stock' && location.pathname === '/informes-operativos') : vistaActiva === vista) ? 'text-white font-bold bg-gradient-to-r from-[#1f2937] to-[#111827] shadow-[0_8px_16px_rgba(15,23,42,0.15)] border-[#374151] ring-1 ring-[#f59e0b]/30' : 'text-slate-500 hover:text-[#f59e0b] hover:bg-white hover:border-slate-200 hover:shadow-[0_4px_12px_rgba(15,23,42,0.05)]'}
+    w-full text-left pl-6 pr-3 py-2 text-[13px] font-medium transition-colors duration-200 flex items-center gap-2 rounded-none mx-0 border-0
+    ${(ruta ? location.pathname === ruta || (ruta === '/informes/stock' && location.pathname === '/informes-operativos') : vistaActiva === vista) ? 'text-[#ff4d00] font-semibold bg-white/5' : 'text-slate-400 hover:text-[#ff4d00] hover:bg-[#ff4d00]/10'}
   `;
 
   return (
@@ -875,11 +912,11 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
                 <button onClick={() => toggleMenu('usuarios')} className={estiloBotonDesplegable('usuarios')} title={t('userManagement')}>
                   <div className="flex items-center gap-3"><Users size={18} strokeWidth={2} /> {!sidebarColapsado && t('userManagement')}</div>
                   {!sidebarColapsado && (
-                    <span className="ml-auto inline-flex shrink-0 items-center text-slate-500"><ChevronLeft size={14} strokeWidth={2} /></span>
+                    <span className="ml-auto inline-flex shrink-0 items-center text-slate-500 group-hover:text-[#ff4d00]"><ChevronLeft size={14} strokeWidth={2} /></span>
                   )}
                 </button>
                 {menuExpandido === 'usuarios' && !sidebarColapsado && (
-                  <div className="bg-transparent py-1 flex flex-col border-l border-slate-200 ml-5">
+                  <div className="mx-1.5 flex flex-col rounded-b bg-[#1e1f35] py-1.5">
                     {tieneCategoria('usuarios') && (
                       <Link to="/usuarios" onClick={() => irA('usuarios', '/usuarios')} className={estiloSubItem('usuarios')}>🠖 {t('users')}</Link>
                     )}
@@ -897,11 +934,11 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
                 <button onClick={() => toggleMenu('contactos')} className={estiloBotonDesplegable('contactos')} title={t('contacts')}>
                   <div className="flex items-center gap-3"><Contact size={18} strokeWidth={2} /> {!sidebarColapsado && t('contacts')}</div>
                   {!sidebarColapsado && (
-                    <span className="ml-auto inline-flex shrink-0 items-center text-slate-500"><ChevronLeft size={14} strokeWidth={2} /></span>
+                    <span className="ml-auto inline-flex shrink-0 items-center text-slate-500 group-hover:text-[#ff4d00]"><ChevronLeft size={14} strokeWidth={2} /></span>
                   )}
                 </button>
                 {menuExpandido === 'contactos' && !sidebarColapsado && (
-                  <div className="bg-transparent py-1 flex flex-col border-l border-slate-200 ml-5">
+                  <div className="mx-1.5 flex flex-col rounded-b bg-[#1e1f35] py-1.5">
                     <Link to="/proveedores" onClick={() => irA('proveedores', '/proveedores')} className={estiloSubItem('proveedores')}>🠖 {t('suppliers')}</Link>
                     <Link to="/clientes" onClick={() => irA('clientes', '/clientes')} className={estiloSubItem('clientes')}>🠖 {t('customers')}</Link>
                     <Link to="/grupos_clientes" onClick={() => irA('grupos_clientes', '/grupos_clientes')} className={estiloSubItem('grupos_clientes')}>🠖 {t('customerGroups')}</Link>
@@ -917,18 +954,22 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
                 <button onClick={() => toggleMenu('productos')} className={estiloBotonDesplegable('productos')} title={t('products')}>
                   <div className="flex items-center gap-3"><Package size={18} strokeWidth={2} /> {!sidebarColapsado && t('products')}</div>
                   {!sidebarColapsado && (
-                    <span className="ml-auto inline-flex shrink-0 items-center text-slate-500"><ChevronLeft size={14} strokeWidth={2} /></span>
+                    <span className="ml-auto inline-flex shrink-0 items-center text-slate-500 group-hover:text-[#ff4d00]"><ChevronLeft size={14} strokeWidth={2} /></span>
                   )}
                 </button>
                 {menuExpandido === 'productos' && !sidebarColapsado && (
-                  <div className="bg-transparent py-1 flex flex-col border-l border-slate-200 ml-5">
+                  <div className="mx-1.5 flex flex-col rounded-b bg-[#1e1f35] py-1.5">
                     <Link to="/catalogo" onClick={() => irA('catalogo', '/catalogo')} className={estiloSubItem('catalogo')}>🠖 {t('productList')}</Link>
                     <Link to="/agregar_producto" onClick={() => irA('agregar_producto', '/agregar_producto')} className={estiloSubItem('agregar_producto')}>🠖 {t('addProduct')}</Link>
+                    <Link to="/imprimir-etiquetas" onClick={() => irA('imprimir_etiquetas', '/imprimir-etiquetas')} className={estiloSubItem('imprimir_etiquetas')}>🠖 Imprimir etiquetas</Link>
                     <Link to="/variaciones-productos" onClick={() => irA('variaciones_productos', '/variaciones-productos')} className={estiloSubItem('variaciones_productos')}>🠖 Variaciones</Link>
-                    <Link to="/marcas" onClick={() => irA('marcas', '/marcas')} className={estiloSubItem('marcas')}>🠖 {t('brands')}</Link>
-                    <Link to="/categorias" onClick={() => irA('categorias', '/categorias')} className={estiloSubItem('categorias')}>🠖 {t('categories')}</Link>
-                    <Link to="/unidades" onClick={() => irA('unidades', '/unidades')} className={estiloSubItem('unidades')}>🠖 {t('units')}</Link>
                     {(esAdmin || !permisosRol || permisosRol.productos?.['Agregar producto'] === true) && <Link to="/importar-productos" onClick={() => irA('importar_productos', '/importar-productos')} className={estiloSubItem('importar_productos')}>🠖 Importar productos</Link>}
+                    {(esAdmin || !permisosRol || permisosRol.productos?.['Ajustar stock'] === true) && <Link to="/importar-stock-inicial" onClick={() => irA('importar_stock_inicial', '/importar-stock-inicial')} className={estiloSubItem('importar_stock_inicial')}>🠖 Importar stock inicial</Link>}
+                    <Link to="/grupos-precios-venta" onClick={() => irA('grupos_precios_venta', '/grupos-precios-venta')} className={estiloSubItem('grupos_precios_venta')}>🠖 Grupo de precios de venta</Link>
+                    <Link to="/unidades" onClick={() => irA('unidades', '/unidades')} className={estiloSubItem('unidades')}>🠖 {t('units')}</Link>
+                    <Link to="/categorias" onClick={() => irA('categorias', '/categorias')} className={estiloSubItem('categorias')}>🠖 {t('categories')}</Link>
+                    <Link to="/marcas" onClick={() => irA('marcas', '/marcas')} className={estiloSubItem('marcas')}>🠖 {t('brands')}</Link>
+                    <Link to="/garantias" onClick={() => irA('garantias_productos', '/garantias')} className={estiloSubItem('garantias_productos')}>🠖 Garantías</Link>
                   </div>
                 )}
               </>
@@ -942,9 +983,9 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
               <>
                 <button onClick={() => toggleMenu('control_stock')} className={estiloBotonDesplegable('control_stock')} title="Control de stock">
                   <div className="flex items-center gap-3"><ClipboardCheck size={18} strokeWidth={2} /> {!sidebarColapsado && 'Control de stock'}</div>
-                  {!sidebarColapsado && <span className="ml-auto inline-flex shrink-0 items-center text-slate-500"><ChevronLeft size={14} strokeWidth={2} /></span>}
+                  {!sidebarColapsado && <span className="ml-auto inline-flex shrink-0 items-center text-slate-500 group-hover:text-[#ff4d00]"><ChevronLeft size={14} strokeWidth={2} /></span>}
                 </button>
-                {menuExpandido === 'control_stock' && !sidebarColapsado && <div className="bg-transparent py-1 flex flex-col border-l border-slate-200 ml-5">
+                {menuExpandido === 'control_stock' && !sidebarColapsado && <div className="mx-1.5 flex flex-col rounded-b bg-[#1e1f35] py-1.5">
                   <Link to="/control-stock" onClick={() => irA('ajustes_stock', '/control-stock')} className={estiloSubItem('ajustes_stock', '/control-stock')}>🠖 Listar controles de stock</Link>
                   <Link to="/control-stock/nuevo" onClick={() => irA('ajustes_stock', '/control-stock/nuevo')} className={estiloSubItem('', '/control-stock/nuevo')}>🠖 Nuevo control de stock</Link>
                 </div>}
@@ -955,9 +996,9 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
               <>
                 <button onClick={() => toggleMenu('transferencias_stock')} className={estiloBotonDesplegable('transferencias_stock')} title="Transferencias de stock">
                   <div className="flex items-center gap-3"><ArrowRightLeft size={18} strokeWidth={2} /> {!sidebarColapsado && 'Transferencias de stock'}</div>
-                  {!sidebarColapsado && <span className="ml-auto inline-flex shrink-0 items-center text-slate-500"><ChevronLeft size={14} strokeWidth={2} /></span>}
+                  {!sidebarColapsado && <span className="ml-auto inline-flex shrink-0 items-center text-slate-500 group-hover:text-[#ff4d00]"><ChevronLeft size={14} strokeWidth={2} /></span>}
                 </button>
-                {menuExpandido === 'transferencias_stock' && !sidebarColapsado && <div className="bg-transparent py-1 flex flex-col border-l border-slate-200 ml-5">
+                {menuExpandido === 'transferencias_stock' && !sidebarColapsado && <div className="mx-1.5 flex flex-col rounded-b bg-[#1e1f35] py-1.5">
                   <Link to="/transferencias-stock" onClick={() => irA('transferencias_stock', '/transferencias-stock')} className={estiloSubItem('transferencias_stock', '/transferencias-stock')}>🠖 Listar transferencias</Link>
                   <Link to="/transferencias-stock/nuevo" onClick={() => irA('transferencias_stock', '/transferencias-stock/nuevo')} className={estiloSubItem('', '/transferencias-stock/nuevo')}>🠖 Agregar transferencia</Link>
                 </div>}
@@ -977,11 +1018,11 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
                 <button onClick={() => toggleMenu('compras')} className={estiloBotonDesplegable('compras')} title={t('purchases')}>
                   <div className="flex items-center gap-3"><ArrowDownToLine size={18} strokeWidth={2} /> {!sidebarColapsado && t('purchases')}</div>
                   {!sidebarColapsado && (
-                    <span className="ml-auto inline-flex shrink-0 items-center text-slate-500"><ChevronLeft size={14} strokeWidth={2} /></span>
+                    <span className="ml-auto inline-flex shrink-0 items-center text-slate-500 group-hover:text-[#ff4d00]"><ChevronLeft size={14} strokeWidth={2} /></span>
                   )}
                 </button>
                 {menuExpandido === 'compras' && !sidebarColapsado && (
-                  <div className="bg-transparent py-1 flex flex-col border-l border-slate-200 ml-5">
+                  <div className="mx-1.5 flex flex-col rounded-b bg-[#1e1f35] py-1.5">
                     <Link to="/compras" onClick={() => irA('compras', '/compras')} className={estiloSubItem('compras')}>🠖 {t('purchaseList')}</Link>
                     <Link to="/agregar_compra" onClick={() => irA('agregar_compra', '/agregar_compra')} className={estiloSubItem('agregar_compra')}>🠖 {t('addPurchase')}</Link>
                     <Link to="/devoluciones_compra" onClick={() => irA('devoluciones_compra', '/devoluciones_compra')} className={estiloSubItem('devoluciones_compra')}>🠖 {t('purchaseReturns')}</Link>
@@ -996,11 +1037,11 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
                 <button onClick={() => toggleMenu('gastos')} className={estiloBotonDesplegable('gastos')} title={t('expenses')}>
                   <div className="flex items-center gap-3"><ArrowDownToLine size={18} strokeWidth={2} /> {!sidebarColapsado && t('expenses')}</div>
                   {!sidebarColapsado && (
-                    <span className="ml-auto inline-flex shrink-0 items-center text-slate-500"><ChevronLeft size={14} strokeWidth={2} /></span>
+                    <span className="ml-auto inline-flex shrink-0 items-center text-slate-500 group-hover:text-[#ff4d00]"><ChevronLeft size={14} strokeWidth={2} /></span>
                   )}
                 </button>
                 {menuExpandido === 'gastos' && !sidebarColapsado && (
-                  <div className="bg-transparent py-1 flex flex-col border-l border-slate-200 ml-5">
+                  <div className="mx-1.5 flex flex-col rounded-b bg-[#1e1f35] py-1.5">
                     <Link to="/gastos" onClick={() => irA('gastos', '/gastos')} className={estiloSubItem('gastos')}>🠖 {t('expenseList')}</Link>
                     <Link to="/gastos/agregar" onClick={() => irA('agregar_gasto', '/gastos/agregar')} className={estiloSubItem('agregar_gasto')}>🠖 {t('addExpense')}</Link>
                     <Link to="/gastos/categorias" onClick={() => irA('categorias_gastos', '/gastos/categorias')} className={estiloSubItem('categorias_gastos')}>🠖 {t('expenseCategories')}</Link>
@@ -1015,11 +1056,11 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
                 <button onClick={() => toggleMenu('ventas')} className={estiloBotonDesplegable('ventas')} title={t('sales')}>
                   <div className="flex items-center gap-3"><ArrowUpFromLine size={18} strokeWidth={2} /> {!sidebarColapsado && t('sales')}</div>
                   {!sidebarColapsado && (
-                    <span className="ml-auto inline-flex shrink-0 items-center text-slate-500"><ChevronLeft size={14} strokeWidth={2} /></span>
+                    <span className="ml-auto inline-flex shrink-0 items-center text-slate-500 group-hover:text-[#ff4d00]"><ChevronLeft size={14} strokeWidth={2} /></span>
                   )}
                 </button>
                 {menuExpandido === 'ventas' && !sidebarColapsado && (
-                  <div className="bg-transparent py-1 flex flex-col border-l border-slate-200 ml-5">
+                  <div className="mx-1.5 flex flex-col rounded-b bg-[#1e1f35] py-1.5">
                     <Link to="/todas_ventas" onClick={() => irA('todas_ventas', '/todas_ventas')} className={estiloSubItem('todas_ventas')}>🠖 {t('allSales')}</Link>
                     <Link to="/pos" onClick={() => irA('pos', '/pos')} className={estiloSubItem('pos')}>🠖 {t('pos')}</Link>
                     <Link to="/cobros" onClick={() => irA('cobros', '/cobros')} className={estiloSubItem('cobros')}>🠖 {t('pendingOrders')}</Link>
@@ -1053,11 +1094,11 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
                 <button onClick={() => toggleMenu('caja_banco')} className={estiloBotonDesplegable('caja_banco')} title="Caja / Banco">
                   <div className="flex items-center gap-3"><CreditCard size={18} strokeWidth={2} /> {!sidebarColapsado && t('cashBank')}</div>
                   {!sidebarColapsado && (
-                    <span className="ml-auto inline-flex shrink-0 items-center text-slate-500"><ChevronLeft size={14} strokeWidth={2} /></span>
+                    <span className="ml-auto inline-flex shrink-0 items-center text-slate-500 group-hover:text-[#ff4d00]"><ChevronLeft size={14} strokeWidth={2} /></span>
                   )}
                 </button>
                 {menuExpandido === 'caja_banco' && !sidebarColapsado && (
-                  <div className="bg-transparent py-1 flex flex-col border-l border-slate-200 ml-5">
+                  <div className="mx-1.5 flex flex-col rounded-b bg-[#1e1f35] py-1.5">
                     <Link to="/cajas" onClick={() => irA('cajas', '/cajas')} className={estiloSubItem('cajas')}>🠖 {t('cashRegisters')}</Link>
                     <Link to="/informe-caja-pago" onClick={() => irA('informe_caja-pago', '/informe-caja-pago')} className={estiloSubItem('informe_caja_pago')}>🠖 {t('paymentReport')}</Link>
                   </div>
@@ -1070,9 +1111,9 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
               <>
                 <button onClick={() => toggleMenu('informes')} className={estiloBotonDesplegable('informes')} title="Informes">
                   <div className="flex items-center gap-3"><BarChart3 size={18} strokeWidth={2} /> {!sidebarColapsado && t('reports')}</div>
-                  {!sidebarColapsado && <span className="ml-auto inline-flex shrink-0 items-center text-slate-500"><ChevronLeft size={14} strokeWidth={2} /></span>}
+                  {!sidebarColapsado && <span className="ml-auto inline-flex shrink-0 items-center text-slate-500 group-hover:text-[#ff4d00]"><ChevronLeft size={14} strokeWidth={2} /></span>}
                 </button>
-                {menuExpandido === 'informes' && !sidebarColapsado && <div className="bg-transparent py-1 flex flex-col border-l border-slate-200 ml-5">
+                {menuExpandido === 'informes' && !sidebarColapsado && <div className="mx-1.5 flex flex-col rounded-b bg-[#1e1f35] py-1.5">
                   <Link to="/ganancias_perdidas" onClick={() => irA('ganancias_perdidas', '/ganancias_perdidas')} className={estiloSubItem('', '/ganancias_perdidas')}>🠖 Ganancias y Pérdidas</Link>
                   <Link to="/informes/compras-ventas" onClick={() => irA('informes_micdepos', '/informes/compras-ventas')} className={estiloSubItem('', '/informes/compras-ventas')}>🠖 Compras y Ventas</Link>
                   <Link to="/informes/iva" onClick={() => irA('informes_operativos', '/informes/iva')} className={estiloSubItem('', '/informes/iva')}>🠖 Informe Fiscal (IVA)</Link>
@@ -1107,11 +1148,11 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
                 <button onClick={() => toggleMenu('configuraciones')} className={estiloBotonDesplegable('configuraciones')} title="Configuraciones">
                   <div className="flex items-center gap-3"><Settings size={18} strokeWidth={2} /> {!sidebarColapsado && t('settings')}</div>
                   {!sidebarColapsado && (
-                    <span className="ml-auto inline-flex shrink-0 items-center text-slate-500"><ChevronLeft size={14} strokeWidth={2} /></span>
+                    <span className="ml-auto inline-flex shrink-0 items-center text-slate-500 group-hover:text-[#ff4d00]"><ChevronLeft size={14} strokeWidth={2} /></span>
                   )}
                 </button>
                 {menuExpandido === 'configuraciones' && !sidebarColapsado && (
-                  <div className="bg-transparent py-1 flex flex-col border-l border-slate-200 ml-5">
+                  <div className="mx-1.5 flex flex-col rounded-b bg-[#1e1f35] py-1.5">
                     <Link to="/config_empresa" onClick={() => irA('config_empresa', '/config_empresa')} className={estiloSubItem('config_empresa')}>🠖 {t('companySettings')}</Link>
                     <Link to="/ubicaciones_comerciales" onClick={() => irA('ubicaciones_comerciales', '/ubicaciones_comerciales')} className={estiloSubItem('ubicaciones_comerciales')}>🠖 {t('commercialLocations')}</Link>
                     <Link to="/invoice-schemes" onClick={() => irA('config_modulos', '/invoice-schemes')} className={estiloSubItem('config_modulos', '/invoice-schemes')}>🠖 Configuración de factura</Link>
@@ -1187,6 +1228,10 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
                 {vistaActiva === 'transferencias_stock' && 'Transferencias de stock'}
                 {vistaActiva === 'ajustes_stock' && 'Control de stock'}
                 {vistaActiva === 'agregar_producto' && t('addProduct')}
+                {vistaActiva === 'imprimir_etiquetas' && 'Imprimir etiquetas'}
+                {vistaActiva === 'importar_stock_inicial' && 'Importar stock inicial'}
+                {vistaActiva === 'grupos_precios_venta' && 'Grupo de precios de venta'}
+                {vistaActiva === 'garantias_productos' && 'Garantías'}
                 {vistaActiva === 'marcas' && t('brands')}
                 {vistaActiva === 'unidades' && t('units')}
                 {vistaActiva === 'clientes' && t('customers')}

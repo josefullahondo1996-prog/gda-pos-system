@@ -21,11 +21,11 @@ const crearFilaVacia = (producto) => ({
     nota: '',
 });
 
-const AperturaStock = ({ producto, onGuardado, onCancelar, ubicacionId: ubicacionIdProp, compacto = false }) => {
+const AperturaStock = ({ producto, onGuardado, onCancelar, ubicacionId: ubicacionIdProp, compacto = false, filasIniciales = [] }) => {
     const { id: empresaId, nombre: nombreEmpresa } = useEmpresaInfo();
     const { id: ubicacionUsuarioId, nombre: nombreUbicacionUsuario, codigo: codigoUbicacionUsuario } = useUbicacionUsuario();
     const ubicacionId = ubicacionIdProp || ubicacionUsuarioId;
-    const [filas, setFilas] = useState([crearFilaVacia(producto)]);
+    const [filas, setFilas] = useState(() => filasIniciales.length ? filasIniciales : [crearFilaVacia(producto)]);
     const [guardando, setGuardando] = useState(false);
 
     const actualizarFila = (id, campo, valor) => {

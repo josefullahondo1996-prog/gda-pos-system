@@ -126,7 +126,7 @@ export function CatalogoQRPublico() {
   const moverSliderCategorias = (direccion) => sliderCategoriasRef.current?.scrollBy({ left: direccion * 240, behavior: 'smooth' });
   if (cargando) return <main className="grid min-h-screen place-items-center bg-slate-50 text-slate-500">Cargando catálogo...</main>;
   if (!catalogo) return <main className="grid min-h-screen place-items-center bg-slate-50 p-6 text-center"><div><QrCode className="mx-auto mb-3 text-slate-300" size={44}/><h1 className="text-xl font-bold text-slate-800">Este catálogo no está disponible</h1><p className="mt-1 text-sm text-slate-500">El enlace pudo haber vencido o el catálogo fue pausado.</p></div></main>;
-  return <main className="min-h-screen bg-slate-50" style={{'--catalog-color':catalogo.color || '#f59e0b'}}>
+  return <main className="fixed inset-0 z-10 min-h-screen overflow-x-hidden overflow-y-auto overscroll-y-contain bg-slate-50 touch-pan-y" style={{'--catalog-color':catalogo.color || '#f59e0b', WebkitOverflowScrolling: 'touch'}}>
     <header className="relative z-30 bg-slate-950 px-5 py-7 text-white" style={{borderBottom:`5px solid ${catalogo.color || '#f59e0b'}`}}>
       <div className="mx-auto max-w-6xl">
         <div className="flex items-start justify-between gap-4">
