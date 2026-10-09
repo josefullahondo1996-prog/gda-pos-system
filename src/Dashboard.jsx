@@ -764,7 +764,7 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
     ${sidebarColapsado ? 'justify-center px-2 mx-1.5 rounded-xl' : 'justify-start px-3 py-2.5 mx-2 rounded-xl'}
     ${vistaActiva === vista
       ? 'text-[#ff4d00] bg-[#1e1f35] shadow-[0_8px_18px_rgba(15,23,42,0.16)]'
-      : 'text-slate-600 hover:text-[#ff4d00] hover:bg-[#fff1e8] hover:shadow-sm active:bg-[#ffe3d4]'}
+      : 'text-slate-600 hover:text-[#ff4d00] hover:bg-[#1e1f35] hover:shadow-[0_8px_18px_rgba(15,23,42,0.16)] active:bg-[#1e1f35]'}
   `;
 
   const estiloBotonDesplegable = (menuName) => `
@@ -772,7 +772,7 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
     ${sidebarColapsado ? 'justify-center px-2 mx-1.5 rounded-xl' : 'px-3 py-2.5 mx-2 rounded-xl'}
     ${menuExpandido === menuName
       ? 'text-[#ff4d00] bg-[#1e1f35] shadow-[0_8px_18px_rgba(15,23,42,0.16)]'
-      : 'text-slate-600 hover:text-[#ff4d00] hover:bg-[#fff1e8] hover:shadow-sm active:bg-[#ffe3d4]'}
+      : 'text-slate-600 hover:text-[#ff4d00] hover:bg-[#1e1f35] hover:shadow-[0_8px_18px_rgba(15,23,42,0.16)] active:bg-[#1e1f35]'}
   `;
 
   const estiloSubItem = (vista, ruta) => `
