@@ -3,7 +3,8 @@ import react from '@vitejs/plugin-react'
 
 export default defineConfig({
   plugins: [react()],
-  base: './',
+  // Root-relative assets keep SPA deep links (for example /catalogo-qr/:id) loading chunks from /assets.
+  base: '/',
   build: {
     rollupOptions: {
       output: {
