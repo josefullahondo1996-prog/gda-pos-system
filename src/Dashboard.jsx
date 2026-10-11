@@ -8,6 +8,7 @@ import {
   Menu, X, DollarSign, BookOpen, Truck, ShoppingBag, Clock3, Building2, CircleHelp, CalendarDays, ShieldCheck, Mail, ClipboardCheck, QrCode
 } from 'lucide-react';
 import { LanguageSelector, useLanguage } from './LanguageContext';
+import LogoPyPos from './LogoPyPos';
 
 import { useUbicacionUsuario } from './utils/useUbicacion';
 
@@ -925,13 +926,7 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
           {/* Logo Superior con botón de cerrar para móvil */}
           <div className="h-16 flex items-center justify-between px-4 border-b border-gradient-to-r from-slate-200 via-slate-150 to-slate-200 bg-gradient-to-r from-white via-slate-50/50 to-white backdrop-blur-sm overflow-hidden">
             <div className="flex-1 flex justify-center">
-              <h1 className="text-[1.7rem] font-black tracking-[0.18em] whitespace-nowrap text-slate-800">
-                {sidebarColapsado ? (
-                  <span className="inline-flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-[#f59e0b] via-[#fb923c] to-[#f97316] text-white shadow-[0_10px_20px_rgba(245,158,11,0.35)] text-lg tracking-normal">P</span>
-                ) : (
-                  <span className="tracking-[0.14em]">PY<span className="text-transparent bg-clip-text bg-gradient-to-r from-[#f59e0b] to-[#f97316]">POS</span></span>
-                )}
-              </h1>
+              <LogoPyPos variant={sidebarColapsado ? 'icon' : 'full'} size={sidebarColapsado ? 42 : 46} />
             </div>
             <button
               onClick={() => setMenuMovilAbierto(false)}
