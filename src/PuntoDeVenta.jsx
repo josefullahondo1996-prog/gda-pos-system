@@ -16,6 +16,7 @@ import { cargarMapaStockPorUbicacion } from './utils/stockUbicacion';
 import { useNotificacion } from './NotificacionContext';
 import { cantidadInicial, pasoCantidad, cantidadValida, cantidadVisible, cantidadInterna, pasoVisible, etiquetaCantidad, formatearStock } from './utils/cantidadProducto';
 import { useLanguage } from './LanguageContext';
+import LogoPyPos from './LogoPyPos';
 
 const formatGs = (valor) => `Gs ${Number(valor || 0).toLocaleString('es-PY')}`;
 
@@ -24,6 +25,38 @@ const PuntoDeVenta = ({ cajaInfo, session, perfilUsuario, onVolver, onSolicitarC
   const { id: empresaId, nombre: nombreEmpresa, direccion: direccionEmpresa, telefono: telefonoEmpresa, ruc: rucEmpresa } = useEmpresaInfo();
   const { notificar } = useNotificacion();
   const [formatoTicket, setFormatoTicket] = useState(() => localStorage.getItem('gda_formato_ticket') || '80mm');
+  const [balanzaConfig, setBalanzaConfig] = useState(null);
+  const [mostrarBalanza, setMostrarBalanza] = useState(false);
+  const [productoBalanzaId, setProductoBalanzaId] = useState('');
+  const [codigoBalanza, setCodigoBalanza] = useState('');
+  const [lecturaBalanza, setLecturaBalanza] = useState(null);
+  const [leyendoBalanza, setLeyendoBalanza] = useState(false);
+  const [errorBalanza, setErrorBalanza] = useState('');
+
+  // El perfil de la impresora configurada para la empresa determina el ancho
+  // usado por el ticket. Si no hay impresora registrada, se conserva el ajuste
+  // local anterior del POS.
+  useEffect(() => {
+    if (!empresaId) return;
+    let activo = true;
+    (async () => {
+      const { data, error } = await supabase.from('empresas').select('configuracion').eq('id', empresaId).maybeSingle();
+      if (!activo) return;
+      let configuracion = data?.configuracion;
+      if (error || !configuracion) {
+        try { configuracion = JSON.parse(localStorage.getItem(`pypos-config-empresa-${empresaId}`) || '{}'); } catch { configuracion = {}; }
+      }
+      const impresoras = configuracion?.modulos?.printers || configuracion?.extra?.printers;
+      const balanzas = configuracion?.modulos?.scales || configuracion?.extra?.scales;
+      setBalanzaConfig(Array.isArray(balanzas) ? (balanzas.find((scale) => scale.is_default) || balanzas[0] || null) : null);
+      const predeterminada = Array.isArray(impresoras) ? (impresoras.find((p) => p.is_default) || impresoras[0]) : null;
+      if (!predeterminada) return;
+      const formato = Number(predeterminada.characters || 42) <= 32 ? '58mm' : '80mm';
+      setFormatoTicket(formato);
+      localStorage.setItem('gda_formato_ticket', formato);
+    })();
+    return () => { activo = false; };
+  }, [empresaId]);
 
   const cambiarFormatoTicket = (formato) => {
     setFormatoTicket(formato);
@@ -66,6 +99,9 @@ const PuntoDeVenta = ({ cajaInfo, session, perfilUsuario, onVolver, onSolicitarC
   const [productos, setProductos] = useState([]);
   const [marcasEmpresa, setMarcasEmpresa] = useState([]);
   const [carrito, setCarrito] = useState([]);
+  const [productoImagenAmpliada, setProductoImagenAmpliada] = useState(null);
+  const [productoAgregadoId, setProductoAgregadoId] = useState(null);
+  const [cicloResaltadoCarrito, setCicloResaltadoCarrito] = useState(0);
   const [cotizacionCargada, setCotizacionCargada] = useState(false);
   const [busqueda, setBusqueda] = useState('');
   const [camposBusqueda, setCamposBusqueda] = useState(['nombre', 'codigo']);
@@ -137,6 +173,13 @@ const PuntoDeVenta = ({ cajaInfo, session, perfilUsuario, onVolver, onSolicitarC
   const [descuento, setDescuento] = useState('');
   const [cargoEmbalaje, setCargoEmbalaje] = useState('');
   const [notaVenta, setNotaVenta] = useState('');
+  const [fechaVencimientoPresupuesto, setFechaVencimientoPresupuesto] = useState('');
+  const [notaRemision, setNotaRemision] = useState('');
+  const [mostrarTransaccionesRecientes, setMostrarTransaccionesRecientes] = useState(false);
+  const [transaccionesRecientes, setTransaccionesRecientes] = useState([]);
+  const [cargandoTransaccionesRecientes, setCargandoTransaccionesRecientes] = useState(false);
+  const [errorTransaccionesRecientes, setErrorTransaccionesRecientes] = useState('');
+  const [guardandoPresupuesto, setGuardandoPresupuesto] = useState(false);
 
   const [fechaHora, setFechaHora] = useState(new Date());
 
@@ -337,6 +380,8 @@ const PuntoDeVenta = ({ cajaInfo, session, perfilUsuario, onVolver, onSolicitarC
         setCarrito(filas);
         setCliente(cotizacion.cliente || 'Cliente Ocasional');
         setDescuento(String(Number(cotizacion.descuento) || ''));
+      setFechaVencimientoPresupuesto(cotizacion.fecha_vencimiento || '');
+      setCargoEmbalaje(String(Number(cotizacion.cargo_embalaje) || 0) || '');
         setNotaVenta([cotizacion.referencia, cotizacion.notas].filter(Boolean).join(' · '));
         if (filas.length !== (cotizacion.items || []).length) notificar.info('Se omitieron productos que ya no están en el catálogo.');
         else notificar.info(`Cotización ${cotizacion.referencia} cargada. Revisa stock y confirma la venta.`);
@@ -441,19 +486,23 @@ const PuntoDeVenta = ({ cajaInfo, session, perfilUsuario, onVolver, onSolicitarC
       const precioBase = Number(producto.precio_venta ?? producto.precio) || 0;
       const precioGrupo = precioDelGrupo(producto);
       const precioAplicado = precioGrupo ?? precioBase;
-      setCarrito([...carrito, {
+      setCarrito([{
         ...producto,
         precio_lista_base: precioBase,
         precio_venta: precioAplicado,
         precio: precioAplicado,
         grupo_precio_aplicado: precioGrupo === null ? null : nombreGrupoPrecioActivo || null,
         cantidad: cantidadInicial(producto.unidad, stockDisponible),
-      }]);
+      }, ...carrito]);
     }
+    setProductoAgregadoId(producto.id);
+    setCicloResaltadoCarrito((ciclo) => ciclo + 1);
   };
 
   const eliminarDelCarrito = (id) => {
-    setCarrito(carrito.filter((item) => item.id !== id));
+    const carritoRestante = carrito.filter((item) => item.id !== id);
+    setCarrito(carritoRestante);
+    if (productoAgregadoId === id) setProductoAgregadoId(null);
   };
 
   const cambiarCantidad = (id, nuevaCantidad) => {
@@ -469,6 +518,47 @@ const PuntoDeVenta = ({ cajaInfo, session, perfilUsuario, onVolver, onSolicitarC
     setCarrito(carrito.map((item) =>
       item.id === id ? { ...item, cantidad: nuevaCantidad } : item
     ));
+  };
+
+  const productosPesables = productos.filter((producto) => /^(kg|kilo|kilos|kilogramo|kilogramos|g|gr|gramo|gramos)$/i.test(String(producto.unidad || '').trim()) && producto.tipo_producto !== 'Variable' && producto.activo !== false);
+  const unidadEnGramos = (unidad) => /^(g|gr|gramo|gramos)$/i.test(String(unidad || '').trim());
+  const productoPesado = productosPesables.find((producto) => String(producto.id) === String(productoBalanzaId));
+  const seleccionarProductoPorCodigo = () => {
+    const codigo = codigoBalanza.trim().toLocaleLowerCase('es');
+    if (!codigo) { setErrorBalanza('Ingresá o escaneá el código del producto.'); return; }
+    const producto = productosPesables.find((item) => String(item.codigo || '').trim().toLocaleLowerCase('es') === codigo);
+    if (!producto) { setProductoBalanzaId(''); setLecturaBalanza(null); setErrorBalanza('No se encontró un producto pesable (kg/g) con ese código.'); return; }
+    setProductoBalanzaId(String(producto.id)); setErrorBalanza(''); setLecturaBalanza(null);
+  };
+  const leerPesoBalanza = async () => {
+    if (!balanzaConfig) { setErrorBalanza('Primero configurá una balanza en Configuración → Balanza por red.'); return; }
+    setLeyendoBalanza(true); setErrorBalanza(''); setLecturaBalanza(null);
+    try {
+      const response = await fetch('http://127.0.0.1:8765/api/scale/read', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ip: balanzaConfig.ip, port: balanzaConfig.port || 502, unitId: balanzaConfig.unitId ?? 1 }), signal: AbortSignal.timeout(5000) });
+      const result = await response.json();
+      if (!response.ok || !result.ok) throw new Error(result.error || 'No se pudo leer la balanza.');
+      setLecturaBalanza(result);
+    } catch (error) {
+      setErrorBalanza(error.name === 'TypeError' ? 'No responde el puente local de balanza. Iniciá scale-bridge en esta computadora y revisá que la página permita acceder a localhost.' : error.message || 'Falló la lectura de la balanza.');
+    } finally { setLeyendoBalanza(false); }
+  };
+  const agregarPesoAlCarrito = () => {
+    if (!productoPesado || !lecturaBalanza) return;
+    const unidad = String(productoPesado.unidad || '').trim().toLowerCase();
+    const cantidad = unidad === 'g' || unidad === 'gr' || unidad.startsWith('gram') ? lecturaBalanza.kilograms * 1000 : lecturaBalanza.kilograms;
+    const disponible = stockEnSucursal(productoPesado);
+    const existente = carrito.find((item) => item.id === productoPesado.id);
+    const cantidadFinal = cantidad + (existente ? Number(existente.cantidad) : 0);
+    if (disponible !== null && disponible !== undefined && cantidadFinal > Number(disponible)) { setErrorBalanza(`Stock insuficiente. Disponible: ${disponible} ${productoPesado.unidad}.`); return; }
+    const precioBase = Number(productoPesado.precio_venta ?? productoPesado.precio) || 0;
+    const precioGrupo = precioDelGrupo(productoPesado);
+    const precioAplicado = precioGrupo ?? precioBase;
+    setCarrito((actual) => {
+      const index = actual.findIndex((item) => item.id === productoPesado.id);
+      if (index >= 0) return actual.map((item, i) => i === index ? { ...item, cantidad: Number((Number(item.cantidad) + cantidad).toFixed(4)) } : item);
+      return [...actual, { ...productoPesado, precio_lista_base: precioBase, precio_venta: precioAplicado, precio: precioAplicado, grupo_precio_aplicado: precioGrupo === null ? null : nombreGrupoPrecioActivo || null, cantidad: Number(cantidad.toFixed(4)) }];
+    });
+    setLecturaBalanza(null); setMostrarBalanza(false); setProductoBalanzaId(''); setCodigoBalanza('');
   };
 
   const cambiarPrecioUnitario = (id, nuevoPrecio) => {
@@ -495,6 +585,8 @@ const PuntoDeVenta = ({ cajaInfo, session, perfilUsuario, onVolver, onSolicitarC
     setDescuento('');
     setCargoEmbalaje('');
     setNotaVenta('');
+    setFechaVencimientoPresupuesto('');
+    setNotaRemision('');
     setPersonalServicio('');
   };
 
@@ -583,9 +675,14 @@ const PuntoDeVenta = ({ cajaInfo, session, perfilUsuario, onVolver, onSolicitarC
     }
 
     const metodoPagoFinal = datosPagoMultiple ? datosPagoMultiple.metodoPago : (metodoForzado || metodoPago);
-    const notaVentaFinal = datosPagoMultiple
+    const notaBase = datosPagoMultiple
       ? [notaVenta, datosPagoMultiple.notaPagos].filter(Boolean).join(' | ')
       : (notaForzada || notaVenta);
+    const notaVentaFinal = [
+      notaBase,
+      notaRemision.trim() ? `Nota remisión: ${notaRemision.trim()}` : '',
+      fechaVencimientoPresupuesto ? `Vencimiento: ${fechaVencimientoPresupuesto}` : '',
+    ].filter(Boolean).join(' | ');
 
     // Verificación final de stock antes de cobrar (por si cambió algo mientras armabas el carrito)
     const sinStockSuficiente = carrito.filter((item) => {
@@ -748,6 +845,35 @@ const PuntoDeVenta = ({ cajaInfo, session, perfilUsuario, onVolver, onSolicitarC
     const contacto = window.prompt('Teléfono o referencia (opcional):') || '';
     const notaDelivery = `Delivery · Dirección: ${direccion}${contacto ? ` · Contacto: ${contacto}` : ''}`;
     procesarVenta('pendiente', null, metodoPago, [notaVenta, notaDelivery].filter(Boolean).join(' | '));
+  };
+
+  const guardarPresupuestoDesdePOS = async () => {
+    if (guardandoPresupuesto) return;
+    if (!carrito.length) { notificar.error('Agregá productos antes de guardar el presupuesto.'); return; }
+    if (!empresaId) { notificar.error('No se encontró la empresa asociada a esta sesión.'); return; }
+    setGuardandoPresupuesto(true);
+    const referencia = `COT-${new Date().toISOString().replace(/[-:TZ.]/g, '').slice(0, 14)}-${Math.floor(Math.random() * 90 + 10)}`;
+    const notas = [notaVenta.trim(), notaRemision.trim() ? `Nota de remisión: ${notaRemision.trim()}` : '', cargoEmbalajeAplicado > 0 ? `Cargo de embalaje: ${formatGs(cargoEmbalajeAplicado)}` : ''].filter(Boolean).join(' | ');
+    const items = carrito.map((item, index) => ({ producto_id: item.id, nombre_producto: item.nombre, codigo: item.codigo || '', unidad: item.unidad || '', cantidad: Number(item.cantidad), precio_unitario: Number(item.precio_venta || item.precio) || 0, cargo_embalaje: index === 0 ? cargoEmbalajeAplicado : 0 }));
+    const fecha = new Intl.DateTimeFormat('sv-SE', { timeZone: 'America/Asuncion' }).format(new Date());
+    try {
+      const { error } = await supabase.from('cotizaciones_ventas').insert([{ empresa_id: empresaId, referencia, cliente: cliente.trim() || 'Cliente Ocasional', fecha, fecha_vencimiento: fechaVencimientoPresupuesto || null, estado: 'Pendiente', items, subtotal, descuento: descuentoAplicado, total: totalConAjustes, notas: notas || null }]);
+      if (error) { notificar.error(`No se pudo guardar el presupuesto: ${error.message}`); return; }
+      notificar.info(`Presupuesto ${referencia} guardado sin afectar el stock.`);
+      vaciarCarrito();
+      setCliente('Cliente Ocasional');
+    } catch (error) {
+      notificar.error(`No se pudo guardar el presupuesto: ${error.message || 'error inesperado'}`);
+    } finally { setGuardandoPresupuesto(false); }
+  };
+
+  const abrirTransaccionesRecientes = async () => {
+    setMostrarTransaccionesRecientes(true); setCargandoTransaccionesRecientes(true); setErrorTransaccionesRecientes('');
+    if (!empresaId) { setErrorTransaccionesRecientes('No se encontró la empresa asociada a esta sesión.'); setCargandoTransaccionesRecientes(false); return; }
+    const { data, error } = await supabase.from('ventas').select('id,fecha,cliente,total,estado_pago,metodo_pago').eq('empresa_id', empresaId).order('fecha', { ascending: false }).limit(10);
+    setCargandoTransaccionesRecientes(false);
+    if (error) { setErrorTransaccionesRecientes(`No se pudieron cargar las transacciones: ${error.message}`); return; }
+    setTransaccionesRecientes(data || []);
   };
 
   // El modal de Pago Múltiple ya calculó cuánto se pagó, con qué método(s) y
@@ -951,6 +1077,8 @@ const PuntoDeVenta = ({ cajaInfo, session, perfilUsuario, onVolver, onSolicitarC
               aria-label="Buscar productos por nombre o código"
               className="min-w-0 flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
             />
+            <button type="button" onClick={() => { setMostrarBalanza(true); setLecturaBalanza(null); setCodigoBalanza(''); setProductoBalanzaId(''); setErrorBalanza(''); }} className="shrink-0 rounded-lg border border-sky-200 bg-sky-50 px-3 py-2 text-sm font-bold text-sky-800 hover:bg-sky-100" title="Leer el peso estable desde la balanza por red">⚖️ Balanza</button>
+            {mostrarBalanza && <div className="fixed inset-0 z-[90] flex items-center justify-center bg-black/50 p-4" role="dialog" aria-modal="true" aria-labelledby="pos-balanza-titulo"><div className="w-full max-w-md rounded-2xl bg-white p-5 shadow-2xl"><div className="flex items-start justify-between gap-3"><div><h2 id="pos-balanza-titulo" className="text-lg font-black text-slate-900">Venta por peso</h2><p className="mt-1 text-sm text-slate-500">{balanzaConfig ? `${balanzaConfig.name}: ${balanzaConfig.ip}:${balanzaConfig.port || 502}` : 'Balanza de red no configurada'}</p></div><button type="button" onClick={() => setMostrarBalanza(false)} className="rounded-lg px-3 py-1 text-xl text-slate-500 hover:bg-slate-100" aria-label="Cerrar">×</button></div><label className="mt-4 block text-sm font-bold text-slate-700">Código del producto<input type="text" inputMode="text" autoComplete="off" placeholder="Escribí o escaneá el código y presioná Enter" value={codigoBalanza} onChange={(event) => { const codigo = event.target.value; setCodigoBalanza(codigo); setLecturaBalanza(null); const encontrado = productosPesables.find((producto) => String(producto.codigo || '').trim().toLocaleLowerCase('es') === codigo.trim().toLocaleLowerCase('es')); setProductoBalanzaId(encontrado ? String(encontrado.id) : ''); setErrorBalanza(''); }} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); seleccionarProductoPorCodigo(); } }} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2.5 font-normal" /></label><label className="mt-4 block text-sm font-bold text-slate-700">Producto cárnico<select className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5" value={productoBalanzaId} onChange={(event) => { setProductoBalanzaId(event.target.value); const producto = productosPesables.find((item) => String(item.id) === event.target.value); setCodigoBalanza(producto?.codigo || ''); setLecturaBalanza(null); setErrorBalanza(''); }}><option value="">Elegí carne vendida por kg o g</option>{productosPesables.map((producto) => <option key={producto.id} value={producto.id}>{producto.nombre} · {producto.unidad} · {formatGs(precioParaCliente(producto))}/{producto.unidad}</option>)}</select></label>{lecturaBalanza && <div className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50 p-4"><p className="text-xs font-bold uppercase tracking-wide text-emerald-800">Peso estable leído</p><p className="mt-1 text-3xl font-black text-emerald-950">{lecturaBalanza.kilograms.toLocaleString('es-PY', { minimumFractionDigits: 3, maximumFractionDigits: 3 })} kg</p>{productoPesado && <p className="mt-1 text-sm text-emerald-900">Importe estimado: {formatGs(precioParaCliente(productoPesado) * (unidadEnGramos(productoPesado.unidad) ? lecturaBalanza.kilograms * 1000 : lecturaBalanza.kilograms))}</p>}</div>}{errorBalanza && <p role="alert" className="mt-3 rounded-lg bg-red-50 p-3 text-sm text-red-700">{errorBalanza}</p>}<div className="mt-5 flex flex-wrap justify-end gap-2"><button type="button" disabled={leyendoBalanza} onClick={leerPesoBalanza} className="rounded-lg bg-sky-700 px-4 py-2.5 font-bold text-white disabled:opacity-60">{leyendoBalanza ? 'Leyendo…' : 'Leer peso estable'}</button><button type="button" disabled={!lecturaBalanza || !productoPesado} onClick={agregarPesoAlCarrito} className="rounded-lg bg-orange-500 px-4 py-2.5 font-bold text-white disabled:opacity-40">Agregar al carrito</button></div><p className="mt-3 text-xs text-slate-500">La lectura solo prepara la línea de venta. Revisá el producto y el importe en el carrito antes de cobrar.</p></div></div>}
           </div>
 
           {nombreGrupoPrecioActivo && (
@@ -969,15 +1097,6 @@ const PuntoDeVenta = ({ cajaInfo, session, perfilUsuario, onVolver, onSolicitarC
           {mostrarOpciones && (
             <div className="mx-3 mb-3 rounded-lg border border-gray-200 bg-gray-50 p-2 grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-2 text-[11px]">
               <div className="min-w-0">
-                <label className="font-bold text-gray-500 block mb-1 truncate">{t('discount')} manual (Gs)</label>
-                <input type="number" min="0" max={Math.max(0, subtotal - descuentoPromocional)} step="1" value={descuento} onChange={(e) => setDescuento(e.target.value)} onBlur={() => setDescuento(String(Math.min(descuentoManual, Math.max(0, subtotal - descuentoPromocional)) || ''))} className="w-full h-8 border border-gray-300 rounded px-2 bg-white" />
-                {descuentoPromocional > 0 && <p className="mt-1 text-[10px] font-semibold text-emerald-700">Promoción automática: {formatGs(descuentoPromocional)}</p>}
-              </div>
-              <div className="min-w-0">
-                <label className="font-bold text-gray-500 block mb-1 truncate">{t('packagingCharge')} (Gs)</label>
-                <input type="number" min="0" step="1" value={cargoEmbalaje} onChange={(e) => setCargoEmbalaje(e.target.value)} onBlur={() => setCargoEmbalaje(String(cargoEmbalajeAplicado || ''))} className="w-full h-8 border border-gray-300 rounded px-2 bg-white" />
-              </div>
-              <div className="min-w-0">
                 <label className="font-bold text-gray-500 block mb-1 truncate">{t('serviceSeller')}</label>
                 <select value={personalServicio} onChange={(e) => setPersonalServicio(e.target.value)} className="w-full h-8 border border-gray-300 rounded px-2 bg-white truncate">
                   <option value="">{t('selectServiceSeller')}</option>
@@ -987,15 +1106,11 @@ const PuntoDeVenta = ({ cajaInfo, session, perfilUsuario, onVolver, onSolicitarC
                   })}
                 </select>
               </div>
-              <div className="min-w-0">
-                <label className="font-bold text-gray-500 block mb-1 truncate">{t('saleNote')}</label>
-                <input type="text" value={notaVenta} onChange={(e) => setNotaVenta(e.target.value)} className="w-full h-8 border border-gray-300 rounded px-2 bg-white" />
-              </div>
             </div>
           )}
 
-          <div className="flex-1 overflow-y-auto px-2 bg-gray-50/40">
-            <table className="w-full min-w-[560px] text-sm border-separate border-spacing-0">
+          <div className="flex-1 overflow-x-auto overflow-y-auto px-2 bg-gray-50/40">
+            <table className="w-full min-w-[720px] text-sm border-separate border-spacing-0">
               <thead className="sticky top-0 z-10 bg-white text-gray-500 text-[10px] uppercase shadow-sm">
                 <tr>
                   <th className="text-left py-2">{t('product')}</th>
@@ -1017,46 +1132,45 @@ const PuntoDeVenta = ({ cajaInfo, session, perfilUsuario, onVolver, onSolicitarC
                     const subtotalItem = monedaVenta === 'PYG' ? precioGs * item.cantidad : convertirDesdeGs(precioGs * item.cantidad);
                     const esCombo = item.tipo_producto === 'Combo' && Array.isArray(item.combo_productos) && item.combo_productos.length > 0;
                     const expandido = combosExpandidos[item.id];
+                    const marcaProducto = String(item.marca_nombre || marcasPorId.get(String(item.marca_id || item.marca)) || (typeof item.marca === 'string' ? item.marca : '') || '').trim();
                     return (
                       <React.Fragment key={item.id}>
-                        <tr className="border-b border-gray-200 even:bg-white odd:bg-gray-50/70 hover:bg-orange-50">
-                          <td className="py-3 pr-2 font-medium text-gray-800 min-w-[190px]">
-                            <div className="flex items-center gap-2 min-w-0">
-                              <div className="w-9 h-9 rounded bg-white border border-gray-200 flex-shrink-0 flex items-center justify-center overflow-hidden shadow-sm">
-                                {item.imagen_url ? (
-                                  <img src={item.imagen_url} alt={item.nombre} className="w-full h-full object-cover" />
-                                ) : (
-                                  <span className="text-xs text-gray-300">{esCombo ? '🎁' : '📦'}</span>
-                                )}
-                              </div>
+                        <tr className={`border-b border-gray-200 bg-white hover:bg-orange-50 ${productoAgregadoId === item.id ? `pos-cart-row-fade-${cicloResaltadoCarrito % 2}` : ''}`}>
+                          <td className="py-2 pr-2 font-medium min-w-[245px]">
+                            <div className="flex min-w-0 items-center gap-2 leading-tight">
+                              <button type="button" onClick={() => setProductoImagenAmpliada(item)} aria-label={`Ampliar imagen y detalles de ${item.nombre}`} title="Ampliar imagen y ver detalles" className="flex h-10 w-10 flex-shrink-0 cursor-zoom-in items-center justify-center overflow-hidden rounded-md border border-slate-200 bg-slate-100 text-slate-400">
+                                {item.imagen_url ? <img src={item.imagen_url} alt="" className="h-full w-full object-cover" /> : <svg aria-hidden="true" viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.8"><rect x="3" y="4" width="18" height="16" rx="2" /><circle cx="8.5" cy="9" r="1.5" /><path d="m21 15-5-5L5 20" /></svg>}
+                              </button>
                               <div className="min-w-0">
-                                <span className="leading-tight line-clamp-2 break-words" title={item.nombre}>{item.nombre}</span>
-                                {esCombo && (
-                                  <button
-                                    onClick={() => toggleComboExpandido(item.id)}
-                                    className="mt-0.5 flex items-center gap-1 text-[10px] font-bold text-orange-500 hover:text-orange-700"
-                                  >
-                                    <span className="bg-orange-100 text-orange-600 px-1.5 py-0.5 rounded-full">COMBO</span>
-                                    <span>{expandido ? '▲ ocultar' : '▼ ver contenido'}</span>
-                                  </button>
-                                )}
+                                <div className="mb-0.5 font-mono text-[11px] text-slate-700">{item.codigo || 's/c'}</div>
+                                <div className="flex items-center gap-1 text-[13px] font-bold text-sky-600">
+                                  <span className="min-w-0 truncate" title={item.nombre}>{item.nombre}</span>
+                                  <button type="button" title={item.descripcion || item.nombre} aria-label={`Info: ${item.nombre}`} className="flex h-4 w-4 flex-shrink-0 items-center justify-center rounded-full border border-sky-400 text-[10px] font-bold text-sky-600">i</button>
+                                </div>
+                                <div className="mt-0.5 text-[10px] font-semibold text-orange-600">
+                                  {marcaProducto && <><span>{marcaProducto.toLocaleUpperCase('es')}</span><span className="mx-1">&middot;</span></>}
+                                  <span>Stock: {formatearStock(stockEnSucursal(item), item.unidad)}</span>
+                                </div>
+                                {esCombo && <button onClick={() => toggleComboExpandido(item.id)} className="mt-1 rounded-full bg-orange-100 px-1.5 py-0.5 text-[10px] font-bold text-orange-600 hover:bg-orange-200">COMBO &middot; {expandido ? 'ocultar' : 'ver contenido'}</button>}
                               </div>
                             </div>
                           </td>
                           <td className="py-3 px-1 text-center whitespace-nowrap">
-                            <div className="inline-flex items-center gap-1">
-                              <button onClick={() => cambiarCantidad(item.id, item.cantidad - pasoCantidad(item.unidad))} className="bg-gray-100 w-6 h-6 rounded text-gray-600 font-bold hover:bg-gray-200">-</button>
+                            <div className="flex items-center justify-center gap-2">
+                              <button type="button" aria-label={`Restar cantidad de ${item.nombre}`} onClick={() => cambiarCantidad(item.id, item.cantidad - pasoCantidad(item.unidad))} className="h-7 w-7 rounded-md border border-slate-200 bg-white text-slate-600 font-bold hover:bg-slate-50">&#8722;</button>
                               <input
                                 type="number"
                                 min={pasoVisible(item.unidad)}
                                 step={pasoVisible(item.unidad)}
                                 value={cantidadVisible(item.cantidad, item.unidad)}
                                 onChange={(e) => cambiarCantidad(item.id, cantidadInterna(e.target.value, item.unidad))}
-                                className="w-16 text-center border border-gray-200 rounded px-1 py-0.5"
+                                className="w-12 border-b border-slate-300 bg-transparent px-1 py-1 text-center font-semibold focus:outline-none focus:border-sky-500"
                                 aria-label={`Cantidad de ${item.nombre} en ${etiquetaCantidad(item.unidad)}`}
                               />
-                              <span className="text-[10px] text-gray-400">{etiquetaCantidad(item.unidad)}</span>
-                              <button onClick={() => cambiarCantidad(item.id, item.cantidad + pasoCantidad(item.unidad))} className="bg-gray-100 w-6 h-6 rounded text-gray-600 font-bold hover:bg-gray-200">+</button>
+                              <button type="button" aria-label={`Sumar cantidad de ${item.nombre}`} onClick={() => cambiarCantidad(item.id, item.cantidad + pasoCantidad(item.unidad))} className="h-7 w-7 rounded-md border border-slate-200 bg-white text-emerald-600 font-bold hover:bg-emerald-50">+</button>
+                              <select value={item.unidad || 'UNID'} aria-label={`Unidad de ${item.nombre}`} title="Unidad base definida para este producto" disabled className="h-9 max-w-[76px] rounded-md border border-slate-200 bg-white px-2 text-xs font-semibold disabled:cursor-not-allowed disabled:opacity-100">
+                                <option value={item.unidad || 'UNID'}>{String(item.unidad || 'UNID').toLocaleUpperCase('es')}</option>
+                              </select>
                             </div>
                           </td>
                           <td className="py-3 px-1 text-right whitespace-nowrap">
@@ -1064,7 +1178,7 @@ const PuntoDeVenta = ({ cajaInfo, session, perfilUsuario, onVolver, onSolicitarC
                               type="number"
                               value={precio}
                               onChange={(e) => cambiarPrecioUnitario(item.id, convertirAGs(Number(e.target.value) || 0))}
-                              className="w-24 text-right border border-gray-200 rounded px-1.5 py-1 text-gray-700 focus:outline-none focus:ring-1 focus:ring-orange-400"
+                              className="w-24 rounded-md border border-slate-200 px-2 py-2 text-right font-semibold text-slate-800 focus:outline-none focus:ring-1 focus:ring-sky-400"
                             />
                           </td>
                           <td className="py-3 px-1 text-right whitespace-nowrap">
@@ -1072,11 +1186,11 @@ const PuntoDeVenta = ({ cajaInfo, session, perfilUsuario, onVolver, onSolicitarC
                               type="number"
                               value={subtotalItem}
                               onChange={(e) => cambiarSubtotalManual(item.id, convertirAGs(Number(e.target.value) || 0))}
-                              className="w-24 text-right border border-gray-200 rounded px-1.5 py-1 font-bold text-gray-800 focus:outline-none focus:ring-1 focus:ring-orange-400"
+                              className="w-24 rounded-md border border-slate-200 px-2 py-2 text-right font-bold text-slate-800 focus:outline-none focus:ring-1 focus:ring-sky-400"
                             />
                           </td>
                           <td className="py-3 pl-2 text-center whitespace-nowrap">
-                            <button onClick={() => eliminarDelCarrito(item.id)} className="text-red-400 hover:text-red-600 font-bold">✕</button>
+                            <button type="button" aria-label={`Quitar ${item.nombre} del carrito`} onClick={() => eliminarDelCarrito(item.id)} className="text-red-400 hover:text-red-600 font-bold">✕</button>
                           </td>
                         </tr>
 
@@ -1107,88 +1221,6 @@ const PuntoDeVenta = ({ cajaInfo, session, perfilUsuario, onVolver, onSolicitarC
             </table>
           </div>
 
-          <div className="border-t border-gray-200 p-3 flex justify-between text-sm font-bold text-gray-600">
-            <span>{t('items')}: {totalArticulos}</span>
-            <span>{t('total')}: {formatMoneda(totalEnMoneda, monedaVenta)}</span>
-          </div>
-
-          <div className="shrink-0 border-t-2 border-gray-300 bg-white p-2 shadow-[0_-3px_10px_rgba(0,0,0,0.05)]">
-            <div className="flex flex-wrap items-end gap-2">
-              <div className="w-32 shrink-0 rounded-lg border border-gray-200 bg-gray-50 p-1.5">
-                <label className="text-[10px] font-bold text-gray-500 block mb-1">Moneda</label>
-                <select value={monedaVenta} onChange={(e) => setMonedaVenta(e.target.value)} className="w-full h-8 border border-gray-300 rounded px-2 text-xs font-bold bg-white" disabled={cargandoTasa}>
-                  <option value="PYG">PYG</option>
-                  <option value="USD">USD</option>
-                  <option value="EUR">EUR</option>
-                  <option value="BRL">BRL</option>
-                </select>
-              </div>
-              <div className="w-28 shrink-0 rounded-lg border border-gray-200 bg-sky-50 p-1.5">
-                <label className="text-[10px] font-bold text-sky-700 block mb-1">Mercado</label>
-                <div className="h-8 rounded bg-white border border-sky-200 px-2 flex items-center justify-center text-[10px] font-black text-sky-800">
-                  {cargandoTasa ? '...' : Number(tasaReferencia || 0).toLocaleString('es-PY', { maximumFractionDigits: 0 })}
-                </div>
-              </div>
-              <div className="w-24 shrink-0 rounded-lg border border-gray-200 bg-amber-50 p-1.5">
-                <label className="text-[10px] font-bold text-amber-700 block mb-1">Margen %</label>
-                <input
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  value={margenNegocio}
-                  onChange={(e) => setMargenNegocio(Number(e.target.value) || 0)}
-                  className="w-full h-8 border border-amber-200 rounded px-2 text-xs font-bold bg-white"
-                />
-              </div>
-              <div className="w-28 shrink-0 rounded-lg border border-gray-200 bg-amber-50 p-1.5">
-                <label className="text-[10px] font-bold text-amber-700 block mb-1">Tasa</label>
-                <div className="h-8 rounded bg-white border border-amber-200 px-2 flex items-center justify-center text-[10px] font-black text-amber-800">
-                  {cargandoTasa ? '...' : Number(tasaCambio || 0).toLocaleString('es-PY', { maximumFractionDigits: 0 })}
-                </div>
-              </div>
-              <div className="w-36 shrink-0 rounded-lg border border-gray-200 bg-gray-50 p-1.5">
-                <label className="text-[10px] font-bold text-gray-500 block mb-1">{t('paidWith')} ({monedaVenta})</label>
-                <input type="number" placeholder={monedaVenta === 'PYG' ? 'Ej: 100000' : 'Ej: 100'} value={montoPagado} onChange={(e) => setMontoPagado(e.target.value)} className="w-full h-8 border border-gray-300 rounded px-2 font-bold text-sm" />
-              </div>
-              <div className="w-40 shrink-0 rounded-lg border border-gray-200 bg-gray-50 p-1.5">
-                <label className="text-[10px] font-bold text-gray-500 block mb-1">{t('paymentMethod')}</label>
-                <select value={metodoPago} onChange={(e) => setMetodoPago(e.target.value)} className="w-full h-8 border border-gray-300 rounded px-2 text-xs font-bold bg-white">
-                  <option value="Efectivo">💵 {t('cash')}</option>
-                  <option value="Tarjeta">💳 {t('card')}</option>
-                  <option value="Transferencia">🏦 {t('transferShort')}</option>
-                </select>
-              </div>
-              <button
-                onClick={() => procesarVenta('venta')}
-                disabled={carrito.length === 0}
-                className={`h-11 flex-1 min-w-[170px] rounded-lg font-black text-sm text-white transition-all ${carrito.length === 0 ? 'bg-gray-300 cursor-not-allowed' : 'bg-orange-500 hover:bg-orange-600'}`}
-              >
-                {t('charge')} {formatMoneda(totalEnMoneda, monedaVenta)}
-              </button>
-            </div>
-
-          {vuelto > 0 && (
-            <div className="mt-2 bg-green-50 text-green-800 p-1.5 rounded flex justify-between font-bold border border-green-200 text-xs">
-              <span>{t('change')}:</span><span>{formatMoneda(vueltoEnMoneda, monedaVenta)} · {formatGs(vuelto)}</span>
-            </div>
-          )}
-          {saldoPendiente > 0 && (
-            <div className="mt-2 bg-red-50 text-red-800 p-1.5 rounded flex justify-between font-bold border border-red-200 text-xs">
-              <span>{t('remainingDebt')}:</span><span>{formatMoneda(saldoPendienteEnMoneda, monedaVenta)} · {formatGs(saldoPendiente)}</span>
-            </div>
-          )}
-
-            <div className="mt-2 flex gap-1.5 overflow-x-auto text-[10px] font-bold pb-0.5">
-            <button onClick={() => procesarVenta('pendiente')} disabled={carrito.length === 0} className="shrink-0 whitespace-nowrap bg-gray-100 text-gray-700 px-3 py-2 rounded-lg hover:bg-gray-200 disabled:opacity-50">📝 {t('pendingOrder')}</button>
-            <button onClick={() => procesarVenta('cotizacion')} disabled={carrito.length === 0} className="shrink-0 whitespace-nowrap bg-gray-100 text-gray-700 px-3 py-2 rounded-lg hover:bg-gray-200 disabled:opacity-50">📄 {t('quote')}</button>
-            <button onClick={procesarDelivery} disabled={carrito.length === 0} className="shrink-0 whitespace-nowrap bg-blue-50 text-blue-700 px-3 py-2 rounded-lg hover:bg-blue-100 disabled:opacity-50">🚚 Delivery</button>
-            <button onClick={() => procesarVenta('credito')} disabled={carrito.length === 0} className="shrink-0 whitespace-nowrap bg-indigo-50 text-indigo-700 px-3 py-2 rounded-lg hover:bg-indigo-100 disabled:opacity-50">💳 {t('creditSale')}</button>
-            <button onClick={() => cobrarConMetodo('Tarjeta')} disabled={carrito.length === 0} className="shrink-0 whitespace-nowrap bg-pink-50 text-pink-700 px-3 py-2 rounded-lg hover:bg-pink-100 disabled:opacity-50">💳 {t('card')}</button>
-            <button onClick={() => setMostrarPagoMultiple(true)} disabled={carrito.length === 0} className="shrink-0 whitespace-nowrap bg-sky-50 text-sky-700 px-3 py-2 rounded-lg hover:bg-sky-100 disabled:opacity-50">▣ {t('multiplePayment')}</button>
-            <button onClick={() => cobrarConMetodo('Efectivo')} disabled={carrito.length === 0} className="shrink-0 whitespace-nowrap bg-emerald-50 text-emerald-700 px-3 py-2 rounded-lg hover:bg-emerald-100 disabled:opacity-50">💵 {t('cash')}</button>
-            <button onClick={vaciarCarrito} className="shrink-0 whitespace-nowrap bg-red-50 text-red-600 px-3 py-2 rounded-lg hover:bg-red-100">✕ {t('cancel')}</button>
-            </div>
-          </div>
         </div>
 
         <div className="hidden lg:flex flex-col flex-1 p-4 overflow-hidden">
@@ -1237,7 +1269,7 @@ const PuntoDeVenta = ({ cajaInfo, session, perfilUsuario, onVolver, onSolicitarC
                   <div
                     key={prod.id}
                     onClick={() => agregarAlCarrito(prod)}
-                    className="bg-white rounded-xl shadow-sm border border-gray-100 cursor-pointer hover:border-orange-500 hover:shadow-md transition-all overflow-hidden flex flex-col"
+                    className="bg-white rounded-xl shadow-sm border border-gray-100 cursor-pointer hover:border-indigo-500 hover:shadow-md transition-all overflow-hidden flex flex-col"
                   >
                     <div className="w-full h-24 bg-gray-50 flex items-center justify-center overflow-hidden">
                       {prod.imagen_url ? (
@@ -1260,6 +1292,59 @@ const PuntoDeVenta = ({ cajaInfo, session, perfilUsuario, onVolver, onSolicitarC
           </div>
         </div>
       </div>
+      <section aria-label="Resumen y acciones de venta" className="shrink-0 border-t border-slate-300 bg-slate-100 px-3 py-2 shadow-[0_-3px_12px_rgba(15,23,42,0.10)]">
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4 2xl:grid-cols-7">
+          <div className="flex items-center justify-between rounded-md border border-slate-200 bg-white px-3 py-2"><span className="text-xs font-bold text-slate-500">Artículos</span><strong className="text-lg text-slate-900">{totalArticulos}</strong></div>
+          <div className="flex items-center justify-between rounded-md border border-slate-200 bg-white px-3 py-2"><span className="text-xs font-bold text-slate-500">Total</span><strong className="text-sm text-slate-900">{formatMoneda(totalEnMoneda, monedaVenta)}</strong></div>
+          <label className="rounded-md border border-slate-200 bg-white px-3 py-1.5 text-[11px] font-bold text-slate-600">Descuento (Gs)<input type="number" min="0" max={Math.max(0, subtotal - descuentoPromocional)} step="1" value={descuento} onChange={(event) => setDescuento(event.target.value)} onBlur={() => setDescuento(String(Math.min(descuentoManual, Math.max(0, subtotal - descuentoPromocional)) || ''))} className="mt-1 h-7 w-full rounded border border-slate-300 px-2 text-sm font-semibold text-slate-900" />{descuentoPromocional > 0 && <span className="mt-0.5 block text-[10px] text-emerald-700">Promo: {formatGs(descuentoPromocional)}</span>}</label>
+          <label className="rounded-md border border-slate-200 bg-white px-3 py-1.5 text-[11px] font-bold text-slate-600">Vencimiento<input type="date" value={fechaVencimientoPresupuesto} onChange={(event) => setFechaVencimientoPresupuesto(event.target.value)} className="mt-1 h-7 w-full rounded border border-slate-300 px-2 text-xs font-semibold text-slate-900" /></label>
+          <label className="rounded-md border border-slate-200 bg-white px-3 py-1.5 text-[11px] font-bold text-slate-600">Nota de remisión<input type="text" value={notaRemision} onChange={(event) => setNotaRemision(event.target.value)} placeholder="Opcional" className="mt-1 h-7 w-full rounded border border-slate-300 px-2 text-xs font-normal text-slate-900" /></label>
+          <label className="rounded-md border border-slate-200 bg-white px-3 py-1.5 text-[11px] font-bold text-slate-600">Nota de venta<input type="text" value={notaVenta} onChange={(event) => setNotaVenta(event.target.value)} placeholder="Opcional" className="mt-1 h-7 w-full rounded border border-slate-300 px-2 text-xs font-normal text-slate-900" /></label>
+          <label className="rounded-md border border-slate-200 bg-white px-3 py-1.5 text-[11px] font-bold text-slate-600">Cargo de embalaje (Gs)<input type="number" min="0" step="1" value={cargoEmbalaje} onChange={(event) => setCargoEmbalaje(event.target.value)} onBlur={() => setCargoEmbalaje(String(cargoEmbalajeAplicado || ''))} className="mt-1 h-7 w-full rounded border border-slate-300 px-2 text-sm font-semibold text-slate-900" /></label>
+        </div>
+        <div className="mt-2 flex min-w-0 items-center gap-2">
+          <div className="flex min-w-0 flex-1 items-center gap-2 overflow-x-auto pb-0.5">
+          <button onClick={() => procesarVenta('pendiente')} disabled={carrito.length === 0} className="shrink-0 whitespace-nowrap rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-50">▧ Pedido pendiente</button>
+          <button onClick={guardarPresupuestoDesdePOS} disabled={carrito.length === 0 || guardandoPresupuesto} className="shrink-0 whitespace-nowrap rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-50">▧ {guardandoPresupuesto ? 'Guardando…' : 'Presupuesto'}</button>
+          <button onClick={procesarDelivery} disabled={carrito.length === 0} className="shrink-0 whitespace-nowrap rounded-md bg-slate-200 px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-300 disabled:opacity-50">▣ Delivery</button>
+          <button onClick={() => procesarVenta('credito')} disabled={carrito.length === 0} className="shrink-0 whitespace-nowrap rounded-md bg-slate-200 px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-300 disabled:opacity-50">✓ Venta a crédito</button>
+          <button onClick={() => cobrarConMetodo('Tarjeta')} disabled={carrito.length === 0} className="shrink-0 whitespace-nowrap rounded-md bg-pink-600 px-3 py-2 text-xs font-bold text-white hover:bg-pink-700 disabled:opacity-50">▣ Tarjeta</button>
+          <button onClick={() => setMostrarPagoMultiple(true)} disabled={carrito.length === 0} className="shrink-0 whitespace-nowrap rounded-md bg-slate-900 px-3 py-2 text-xs font-bold text-white hover:bg-slate-800 disabled:opacity-50">▤ Pago múltiple</button>
+          <button onClick={() => cobrarConMetodo('Efectivo')} disabled={carrito.length === 0} className="shrink-0 whitespace-nowrap rounded-md bg-emerald-600 px-3 py-2 text-xs font-bold text-white hover:bg-emerald-700 disabled:opacity-50">▣ Efectivo</button>
+          <button onClick={vaciarCarrito} className="shrink-0 whitespace-nowrap rounded-md bg-red-600 px-3 py-2 text-xs font-bold text-white hover:bg-red-700">× Cancelar</button>
+          <button onClick={abrirTransaccionesRecientes} className="shrink-0 whitespace-nowrap rounded-md bg-orange-600 px-3 py-2 text-xs font-bold text-white hover:bg-orange-700">◷ Transacciones recientes</button>
+          </div>
+          <div className="flex min-w-[205px] shrink-0 flex-col items-end rounded-xl bg-slate-900 px-5 py-2 text-white shadow-lg"><span className="text-[10px] font-black tracking-[.16em] text-slate-300">TOTAL A PAGAR</span><strong className="text-2xl leading-tight">{formatMoneda(totalEnMoneda, monedaVenta)}</strong></div>
+          <div aria-label="Marca PyPOS" className="flex shrink-0 items-center justify-center px-1"><LogoPyPos size={32} /></div>
+        </div>
+        {(vuelto > 0 || saldoPendiente > 0) && <div className="mt-1 flex flex-wrap gap-x-5 text-xs font-bold">{vuelto > 0 && <span className="text-emerald-700">Vuelto: {formatMoneda(vueltoEnMoneda, monedaVenta)} · {formatGs(vuelto)}</span>}{saldoPendiente > 0 && <span className="text-red-700">Saldo pendiente: {formatMoneda(saldoPendienteEnMoneda, monedaVenta)} · {formatGs(saldoPendiente)}</span>}</div>}
+      </section>
+      {productoImagenAmpliada && (() => {
+        const producto = productoImagenAmpliada;
+        const marca = String(producto.marca_nombre || marcasPorId.get(String(producto.marca_id || producto.marca)) || (typeof producto.marca === 'string' ? producto.marca : '') || '').trim();
+        const precio = Number(producto.precio_venta ?? producto.precio) || 0;
+        return (
+          <div className="fixed inset-0 z-[11000] flex items-center justify-center bg-slate-950/70 p-4" role="dialog" aria-modal="true" aria-labelledby="pos-producto-zoom-titulo" onClick={(event) => { if (event.target === event.currentTarget) setProductoImagenAmpliada(null); }} onKeyDown={(event) => { if (event.key === 'Escape') setProductoImagenAmpliada(null); }} tabIndex={-1}>
+            <section className="w-full max-w-[360px] overflow-hidden rounded-[20px] bg-white text-center shadow-[0_25px_80px_rgba(0,0,0,0.35)]">
+              <div className="px-6 pb-6 pt-8">
+                <div className="mx-auto mb-[18px] flex h-[248px] w-[248px] max-w-full items-center justify-center rounded-[18px] border-2 border-slate-200 bg-slate-50 p-3">
+                  {producto.imagen_url ? <img src={producto.imagen_url} alt={producto.nombre} className="h-[220px] w-[220px] max-w-full rounded-xl object-contain" /> : <svg aria-hidden="true" viewBox="0 0 24 24" className="h-16 w-16 text-slate-400" fill="none" stroke="currentColor" strokeWidth="1.4"><rect x="3" y="4" width="18" height="16" rx="2" /><circle cx="8.5" cy="9" r="1.5" /><path d="m21 15-5-5L5 20" /></svg>}
+                </div>
+                <h2 id="pos-producto-zoom-titulo" className="break-words text-xl font-black text-slate-900">{producto.nombre}</h2>
+                <p className="mt-1 text-sm font-semibold text-indigo-500">SKU: {producto.codigo || '—'}</p>
+                <div className="mt-4 grid grid-cols-3 gap-2 text-[10px] font-black uppercase tracking-wide">
+                  <div className="rounded-xl border border-slate-200 bg-slate-100 px-2 py-3"><span className="block text-slate-400">Marca</span><span className="mt-1 block truncate text-slate-700" title={marca || '—'}>{marca || '—'}</span></div>
+                  <div className="rounded-xl border border-rose-100 bg-rose-50 px-2 py-3"><span className="block text-rose-400">Precio</span><span className="mt-1 block text-rose-700">{formatMoneda(precio, monedaVenta)}</span></div>
+                  <div className="rounded-xl border border-emerald-100 bg-emerald-50 px-2 py-3"><span className="block text-emerald-500">Stock</span><span className="mt-1 block text-emerald-800">{formatearStock(stockEnSucursal(producto), producto.unidad)}</span></div>
+                </div>
+                <button type="button" onClick={() => setProductoImagenAmpliada(null)} className="mt-5 rounded-lg bg-slate-900 px-6 py-2.5 text-sm font-bold text-white hover:bg-slate-800">Cerrar</button>
+              </div>
+            </section>
+          </div>
+        );
+      })()}
+
+      {mostrarTransaccionesRecientes && <div className="fixed inset-0 z-[10000] flex items-center justify-center bg-slate-950/50 p-4"><section role="dialog" aria-modal="true" aria-labelledby="pos-transacciones-title" className="w-full max-w-2xl overflow-hidden rounded-xl bg-white shadow-2xl"><div className="flex items-center justify-between border-b px-5 py-4"><div><h2 id="pos-transacciones-title" className="font-bold text-slate-900">Transacciones recientes</h2><p className="text-xs text-slate-500">Últimas 10 ventas de esta empresa</p></div><button type="button" onClick={() => setMostrarTransaccionesRecientes(false)} className="rounded-lg px-3 py-1 text-xl text-slate-500 hover:bg-slate-100" aria-label="Cerrar">×</button></div>{errorTransaccionesRecientes ? <p role="alert" className="m-4 rounded-lg bg-red-50 p-3 text-sm text-red-700">{errorTransaccionesRecientes}</p> : cargandoTransaccionesRecientes ? <p className="p-8 text-center text-sm text-slate-500">Cargando transacciones…</p> : <div className="max-h-[60vh] overflow-y-auto"><table className="w-full text-left text-sm"><thead className="sticky top-0 bg-slate-50 text-xs text-slate-500"><tr><th className="px-4 py-3">Fecha</th><th className="px-4 py-3">Cliente</th><th className="px-4 py-3">Estado</th><th className="px-4 py-3 text-right">Total</th></tr></thead><tbody className="divide-y divide-slate-100">{transaccionesRecientes.map((venta) => <tr key={venta.id}><td className="whitespace-nowrap px-4 py-3">{venta.fecha ? new Date(venta.fecha).toLocaleString('es-PY') : '—'}</td><td className="px-4 py-3">{venta.cliente || 'Cliente Ocasional'}</td><td className="px-4 py-3">{venta.estado_pago || '—'} · {venta.metodo_pago || '—'}</td><td className="px-4 py-3 text-right font-bold">{formatGs(venta.total)}</td></tr>)}{transaccionesRecientes.length === 0 && <tr><td colSpan="4" className="p-8 text-center text-sm text-slate-500">No hay ventas recientes.</td></tr>}</tbody></table></div>}<div className="flex justify-end border-t p-3"><button type="button" onClick={() => setMostrarTransaccionesRecientes(false)} className="rounded-lg border px-4 py-2 text-sm font-semibold text-slate-700">Cerrar</button></div></section></div>}
       {mostrarGastos && (
         <GastosDelTurno cajaInfo={cajaInfo} abrirFormulario={abrirFormularioGasto} onClose={() => { setMostrarGastos(false); setAbrirFormularioGasto(false); }} />
       )}

@@ -321,6 +321,9 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
       case '/printers':
         setVistaActiva('config_modulos');
         break;
+      case '/scales':
+        setVistaActiva('config_modulos');
+        break;
       case '/tax-rates':
         setVistaActiva('config_modulos');
         break;
@@ -554,7 +557,7 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
         return <ConfiguracionFacturaElectronica />;
 
       case 'config_modulos':
-        return <ConfiguracionModulos key={location.pathname} perfilUsuario={perfilUsuario} initialSection={{ '/configuracion/modulos':'facturas', '/invoice-schemes':'facturas', '/barcodes':'barcodes', '/printers':'printers', '/tax-rates':'taxes', '/types-of-service':'services', '/subscription':'suscripcion' }[location.pathname.toLowerCase()] || 'facturas'} />;
+        return <ConfiguracionModulos key={location.pathname} perfilUsuario={perfilUsuario} initialSection={{ '/configuracion/modulos':'facturas', '/invoice-schemes':'facturas', '/barcodes':'barcodes', '/printers':'printers', '/scales':'scales', '/tax-rates':'taxes', '/types-of-service':'services', '/subscription':'suscripcion' }[location.pathname.toLowerCase()] || 'facturas'} />;
 
       case 'admin_desarrollador':
         return <PanelDesarrollador />;
@@ -847,6 +850,9 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
                     </button>
                     <button type="button" onClick={() => irA('config_modulos', '/printers')} className="w-full min-h-[52px] px-5 text-left text-base text-slate-700 hover:bg-orange-50">
                       → Impresoras de tickets
+                    </button>
+                    <button type="button" onClick={() => irA('config_modulos', '/scales')} className="w-full min-h-[52px] px-5 text-left text-base text-slate-700 hover:bg-orange-50">
+                      → Balanzas de red
                     </button>
                     <button type="button" onClick={() => irA('config_modulos', '/tax-rates')} className="w-full min-h-[52px] px-5 text-left text-base text-slate-700 hover:bg-orange-50">
                       → Tasas de impuestos
@@ -1201,6 +1207,7 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
                     <Link to="/invoice-schemes" onClick={() => irA('config_modulos', '/invoice-schemes')} className={estiloSubItem('config_modulos', '/invoice-schemes')}>🠖 Configuración de factura</Link>
                     <Link to="/barcodes" onClick={() => irA('config_modulos', '/barcodes')} className={estiloSubItem('config_modulos', '/barcodes')}>🠖 Configuraciones de código de barras</Link>
                     <Link to="/printers" onClick={() => irA('config_modulos', '/printers')} className={estiloSubItem('config_modulos', '/printers')}>🠖 Impresoras de tickets</Link>
+                    <Link to="/scales" onClick={() => irA('config_modulos', '/scales')} className={estiloSubItem('config_modulos', '/scales')}>🠖 Balanzas de red</Link>
                     <Link to="/tax-rates" onClick={() => irA('config_modulos', '/tax-rates')} className={estiloSubItem('config_modulos', '/tax-rates')}>🠖 Tasas de impuestos</Link>
                     <Link to="/types-of-service" onClick={() => irA('config_modulos', '/types-of-service')} className={estiloSubItem('config_modulos', '/types-of-service')}>🠖 Tipos de servicio</Link>
                     <Link to="/subscription" onClick={() => irA('config_modulos', '/subscription')} className={estiloSubItem('config_modulos', '/subscription')}>🠖 Suscripción</Link>

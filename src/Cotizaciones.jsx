@@ -124,6 +124,8 @@ export default function Cotizaciones() {
       cliente: cotizacion.cliente,
       items: itemsCotizacion,
       descuento: Number(cotizacion.descuento) || 0,
+      cargo_embalaje: Number(cotizacion.items?.[0]?.cargo_embalaje) || 0,
+      fecha_vencimiento: cotizacion.fecha_vencimiento || '',
       notas: cotizacion.notas || '',
     }));
     navigate('/pos');

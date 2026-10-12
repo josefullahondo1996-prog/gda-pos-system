@@ -524,3 +524,19 @@ button[class*="chat-window-toggle"][aria-expanded="true"] svg,
     padding-right: 16px;
   }
 }
+@keyframes pos-cart-row-fade {
+  from { background-color: #fbd0b7; }
+  to { background-color: #ffffff; }
+}
+
+.pos-cart-row-fade-0,
+.pos-cart-row-fade-1 {
+  animation: pos-cart-row-fade 5s linear both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pos-cart-row-fade-0,
+  .pos-cart-row-fade-1 {
+    animation-duration: 1ms;
+  }
+}

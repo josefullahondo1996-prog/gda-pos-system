@@ -110,12 +110,15 @@ export default function ListaProductos() {
     if (!error && data) setProductos(data);
   };
 
+  // Si se eligió una sucursal en el filtro, el stock mostrado corresponde a esa
+  // sucursal. Un saldo 0 también es un valor real; no debe caer al stock global.
+  const ubicacionStockVisible = filtroUbicacionLista !== 'Todos' ? filtroUbicacionLista : sucursalActiva;
+  const nombreUbicacionStockVisible = ubicacionStockVisible
+    ? ubicacionesDisponibles.find((ubicacion) => String(ubicacion.id) === String(ubicacionStockVisible))?.nombre || nombreSucursalActiva
+    : '';
   const stockVisible = (producto) => {
-    if (sucursalActiva) {
-      const stockUbicacion = mapaStockUbicacion[producto.id]?.[sucursalActiva];
-      if (stockUbicacion !== undefined && stockUbicacion !== null && Number(stockUbicacion) > 0) {
-        return Number(stockUbicacion);
-      }
+    if (ubicacionStockVisible) {
+      return Number(mapaStockUbicacion[producto.id]?.[ubicacionStockVisible]) || 0;
     }
     return Number(producto.stock_actual) || 0;
   };
@@ -133,7 +136,7 @@ export default function ListaProductos() {
       (p.codigo && p.codigo.toLowerCase().includes(busqueda.toLowerCase()));
     const coincideCategoria = filtroCategoria === 'Todos' || p.categoria === filtroCategoria;
     const coincideMarca = filtroMarca === 'Todos' || p.marca === filtroMarca;
-    const coincideTab = tabActiva === 'todos' || (tabActiva === 'stock' && Number(p.stock_actual) <= Number(p.alerta_stock_bajo || 5));
+    const coincideTab = tabActiva === 'todos' || (tabActiva === 'stock' && stockVisible(p) <= Number(p.alerta_stock_bajo || 5));
     const coincideUnidad = filtroUnidad === 'Todos' || String(p.unidad_id) === filtroUnidad;
     const coincideIva = filtroIva === 'Todos' || p.iva === filtroIva;
     const coincideUbicacion = filtroUbicacionLista === 'Todos' || Number(mapaStockUbicacion[p.id]?.[filtroUbicacionLista] || 0) > 0;
@@ -288,8 +291,8 @@ export default function ListaProductos() {
     const filas = [
       ['Producto', 'Ubicación', 'Precio Compra', 'Precio Venta', 'Stock', 'Categoría', 'Marca', 'IVA', 'SKU'],
       ...productosFiltrados.map((p) => [
-        p.nombre, nombreEmpresa, p.precio_compra || 0, p.precio_venta || 0,
-        p.stock_actual || 0, p.categoria || '', p.marca || '', p.iva || 'IVA 10%', p.codigo || '',
+        p.nombre, nombreUbicacionStockVisible || nombreEmpresa, p.precio_compra || 0, p.precio_venta || 0,
+        stockVisible(p), p.categoria || '', p.marca || '', p.iva || 'IVA 10%', p.codigo || '',
       ]),
     ];
     const csv = filas.map((f) => f.join(',')).join('\n');
@@ -560,7 +563,7 @@ export default function ListaProductos() {
                           <span className="block w-fit mt-1 bg-gray-200 text-gray-600 text-[10px] font-bold px-1.5 py-0.5 rounded">{t('notForSale')}</span>
                         )}
                       </td>
-                      <td className="p-3 text-gray-500">{!usuarioVeTodas && nombreUbicacionUsuario ? nombreUbicacionUsuario : nombreEmpresa}</td>
+                      <td className="p-3 text-gray-500">{!usuarioVeTodas && nombreUbicacionUsuario ? nombreUbicacionUsuario : (nombreUbicacionStockVisible || nombreEmpresa)}</td>
                       <td className="p-3 text-right font-semibold text-gray-600">
                         {prod.precio_compra ? `${Number(prod.precio_compra).toLocaleString('es-PY')} Gs` : '0 Gs'}
                       </td>
@@ -571,9 +574,9 @@ export default function ListaProductos() {
                         <span className={`px-2 py-0.5 rounded-sm font-bold text-[11px] ${stockVisible(prod) <= Number(prod.alerta_stock_bajo || 5) ? 'bg-red-100 text-red-700' : 'bg-gray-100 text-gray-700'}`}>
                           {stockFormateado(prod, stockVisible(prod))}
                         </span>
-                        {sucursalActiva && (
+                        {ubicacionStockVisible && (
                           <div className="text-[10px] text-gray-400 mt-1">
-                            En {nombreSucursalActiva}: <span className="font-bold text-gray-600">{stockFormateado(prod, mapaStockUbicacion[prod.id]?.[sucursalActiva] ?? 0)}</span>
+                            En {nombreUbicacionStockVisible}: <span className="font-bold text-gray-600">{stockFormateado(prod, stockVisible(prod))}</span>
                           </div>
                         )}
                       </td>

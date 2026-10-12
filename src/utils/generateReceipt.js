@@ -1,4 +1,7 @@
 const formatGs = (v) => `${Number(v || 0).toLocaleString('es-PY')}`;
+const escapeHtml = (value) => String(value ?? '').replace(/[&<>"']/g, (character) => ({
+  '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
+}[character]));
 
 // Normaliza los ítems vengan del carrito del POS (nombre, precio_venta/precio) o
 // de detalle_ventas ya guardado (nombre_producto, subtotal).
@@ -64,10 +67,10 @@ export const generateReceipt = (venta, empresa = {}, formato = '80mm', autoImpri
           : it.nombre;
         itemsHtml += `
       <tr>
-        <td style="text-align:left;vertical-align:top;padding:2px 0;">${it.cantidad}</td>
+        <td style="text-align:left;vertical-align:top;padding:2px 0;">${escapeHtml(it.cantidad)}</td>
         <td style="vertical-align:top;padding:2px 4px;">
-          <div style="text-transform:uppercase;word-break:break-word;">${nombre}</div>
-          <div style="font-size:9px;color:#333;">${it.cantidad} x ${formatGs(it.precioUnitario)}</div>
+          <div style="text-transform:uppercase;word-break:break-word;">${escapeHtml(nombre)}</div>
+          <div style="font-size:9px;color:#333;">${escapeHtml(it.cantidad)} x ${formatGs(it.precioUnitario)}</div>
         </td>
         <td style="text-align:right;vertical-align:top;padding:2px 0;white-space:nowrap;">${formatGs(it.subtotal)}</td>
       </tr>`;
@@ -90,7 +93,7 @@ export const generateReceipt = (venta, empresa = {}, formato = '80mm', autoImpri
 
     let pagoHtml = `
       <tr>
-        <td style="padding:1px 0;">${metodoPagoLabel}:</td>
+        <td style="padding:1px 0;">${escapeHtml(metodoPagoLabel)}:</td>
         <td style="text-align:right;padding:1px 0;">${formatGs(montoPagado)} Gs.</td>
       </tr>`;
 
@@ -118,7 +121,7 @@ export const generateReceipt = (venta, empresa = {}, formato = '80mm', autoImpri
 <html lang="es">
 <head>
   <meta charset="UTF-8">
-  <title>Ticket_${ticketId}</title>
+  <title>Ticket_${escapeHtml(ticketId)}</title>
   <style>
     @media print {
       @page {
@@ -158,19 +161,19 @@ export const generateReceipt = (venta, empresa = {}, formato = '80mm', autoImpri
 <body>
 
   <!-- CABECERA -->
-  <div class="text-center bold" style="font-size:13px;margin-bottom:2px;">${nombreNegocio}</div>
-  ${empresa.ruc       ? `<div class="text-center" style="font-size:10px;">RUC: ${empresa.ruc}</div>`       : ''}
-  ${empresa.telefono  ? `<div class="text-center" style="font-size:10px;">Tel: ${empresa.telefono}</div>`  : ''}
-  ${empresa.direccion ? `<div class="text-center" style="font-size:10px;">${empresa.direccion}</div>`      : ''}
+  <div class="text-center bold" style="font-size:13px;margin-bottom:2px;">${escapeHtml(nombreNegocio)}</div>
+  ${empresa.ruc       ? `<div class="text-center" style="font-size:10px;">RUC: ${escapeHtml(empresa.ruc)}</div>`       : ''}
+  ${empresa.telefono  ? `<div class="text-center" style="font-size:10px;">Tel: ${escapeHtml(empresa.telefono)}</div>`  : ''}
+  ${empresa.direccion ? `<div class="text-center" style="font-size:10px;">${escapeHtml(empresa.direccion)}</div>`      : ''}
 
   <div class="line"></div>
 
   <!-- INFO DEL TICKET -->
-  <div><b>Ticket N\xb0:</b> ${ticketId}</div>
+  <div><b>Ticket N\xb0:</b> ${escapeHtml(ticketId)}</div>
   <div><b>Fecha:</b> ${fechaStr}</div>
   <div><b>Condici\xf3n:</b> ${condicion}</div>
-  ${clienteRuc ? `<div><b>RUC/CI:</b> ${clienteRuc}</div>` : ''}
-  <div><b>Cliente:</b> ${clienteNombre}</div>
+  ${clienteRuc ? `<div><b>RUC/CI:</b> ${escapeHtml(clienteRuc)}</div>` : ''}
+  <div><b>Cliente:</b> ${escapeHtml(clienteNombre)}</div>
 
   <div class="line"></div>
 
