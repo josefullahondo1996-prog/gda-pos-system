@@ -105,7 +105,7 @@ export default function UbicacionesComerciales() {
 
     return (
         <div className="bg-transparent text-sm text-gray-700">
-            <h2 className="text-2xl font-bold text-gray-800 mb-1">Ubicaciones comerciales</h2>
+            <h2 data-guia-tour="sucursal" className="text-2xl font-bold text-gray-800 mb-1">Ubicaciones comerciales</h2>
             <p className="text-gray-400 text-xs mb-4">Administre las ubicaciones comerciales</p>
 
             <div className="bg-white rounded-lg shadow-sm border-t-2 border-[#004284]">

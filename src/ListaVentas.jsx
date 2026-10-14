@@ -4,8 +4,17 @@ import { useEmpresaInfo } from './utils/useEmpresa';
 import { generateReceipt } from './utils/generateReceipt';
 import { useNotificacion } from './NotificacionContext';
 
+const formatoImporteVenta = (venta) => {
+  const moneda = ['PYG', 'USD', 'EUR', 'BRL'].includes(venta?.moneda_venta) ? venta.moneda_venta : 'PYG';
+  const valor = Number(venta?.total_moneda ?? venta?.total ?? 0).toLocaleString(moneda === 'BRL' ? 'pt-BR' : 'es-PY', {
+    minimumFractionDigits: moneda === 'PYG' ? 0 : 2,
+    maximumFractionDigits: moneda === 'PYG' ? 0 : 2,
+  });
+  return moneda === 'BRL' ? `R$ ${valor}` : moneda === 'USD' ? `USD ${valor}` : moneda === 'EUR' ? `€ ${valor}` : `Gs ${valor}`;
+};
+
 export default function ListaVentas({ perfilUsuario }) {
-  const { id: empresaId, nombre: nombreEmpresa, direccion: direccionEmpresa, telefono: telefonoEmpresa, ruc: rucEmpresa } = useEmpresaInfo();
+  const { id: empresaId, nombre: nombreEmpresa, direccion: direccionEmpresa, telefono: telefonoEmpresa, ruc: rucEmpresa, logo_url: logoEmpresa } = useEmpresaInfo();
   const { confirmar, notificar } = useNotificacion();
   const esAdmin = (perfilUsuario?.roles?.nombre || '').toLowerCase().includes('admin');
   const permisosVentas = perfilUsuario?.roles?.permisos?.ventas_pos || {};
@@ -270,7 +279,7 @@ export default function ListaVentas({ perfilUsuario }) {
                   <td className="p-3 text-gray-600">{venta.fecha ? new Date(venta.fecha).toLocaleString('es-PY') : '—'}</td>
                   <td className="p-3 font-medium text-gray-800">{venta.cliente || venta.cliente_nombre || 'Cliente Ocasional'}</td>
                   <td className="p-3 text-gray-600">{venta.metodo_pago || 'Efectivo'}</td>
-                  <td className="p-3 font-bold text-gray-900">Gs {Number(venta.total || 0).toLocaleString()}</td>
+                  <td className="p-3 font-bold text-gray-900">{formatoImporteVenta(venta)}</td>
                   <td className="p-3">
                     <span className={`px-2 py-1 rounded-full text-xs font-bold ${
                       (venta.estado_pago || venta.estado)?.toLowerCase() === 'pagado' 
@@ -282,7 +291,7 @@ export default function ListaVentas({ perfilUsuario }) {
                   </td>
                   <td className="p-3 flex items-center gap-2">
                     <button 
-                      onClick={() => generateReceipt(venta, { nombre: nombreEmpresa, direccion: direccionEmpresa, telefono: telefonoEmpresa, ruc: rucEmpresa })}
+                      onClick={() => generateReceipt(venta, { nombre: nombreEmpresa, direccion: direccionEmpresa, telefono: telefonoEmpresa, ruc: rucEmpresa, logo_url: logoEmpresa })}
                       className="bg-blue-50 text-[#004284] border border-blue-200 px-3 py-1 rounded text-xs font-bold hover:bg-blue-100 flex items-center gap-1 transition shadow-sm"
                     >
                       🖨️ Imprimir

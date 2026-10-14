@@ -7,6 +7,7 @@ import { createPortal } from 'react-dom';
 import { jsPDF } from 'jspdf';
 import { supabase } from './supabaseClient';
 import { useEmpresaInfo } from './utils/useEmpresa';
+import { useConfiguracionEmpresa } from './utils/useConfiguracionEmpresa';
 import { useUbicacionUsuario } from './utils/useUbicacion';
 import { useSucursalActiva } from './utils/SucursalContext';
 import { cargarMapaStockPorUbicacion } from './utils/stockUbicacion';
@@ -18,6 +19,19 @@ export default function ListaProductos() {
   const navigate = useNavigate();
   const { t } = useLanguage();
   const { id: empresaId, nombre: nombreEmpresa } = useEmpresaInfo();
+  const { ajustes: ajustesEmpresa } = useConfiguracionEmpresa(empresaId);
+  const monedaLista = ['PYG', 'USD', 'EUR', 'BRL'].includes(ajustesEmpresa.currency) ? ajustesEmpresa.currency : 'PYG';
+  const formatoPrecioProducto = (producto, campoPyg, campoMoneda) => {
+    const valorMoneda = producto?.moneda_precio === monedaLista ? producto?.[campoMoneda] : null;
+    if (valorMoneda != null && Number.isFinite(Number(valorMoneda))) {
+      const cantidad = Number(valorMoneda).toLocaleString(monedaLista === 'BRL' ? 'pt-BR' : 'es-PY', {
+        minimumFractionDigits: monedaLista === 'PYG' ? 0 : 2,
+        maximumFractionDigits: monedaLista === 'PYG' ? 0 : 2,
+      });
+      return monedaLista === 'BRL' ? `R$ ${cantidad}` : monedaLista === 'USD' ? `USD ${cantidad}` : monedaLista === 'EUR' ? `€ ${cantidad}` : `${cantidad} Gs`;
+    }
+    return `${Number(producto?.[campoPyg] || 0).toLocaleString('es-PY')} Gs`;
+  };
   const { confirmar } = useNotificacion();
   const { id: ubicacionUsuarioId, nombre: nombreUbicacionUsuario, ve_todas: usuarioVeTodas } = useUbicacionUsuario();
   // sucursalActiva: la elegida en el selector global del header.
@@ -58,6 +72,10 @@ export default function ListaProductos() {
   const [errorHistorial, setErrorHistorial] = useState('');
   const [paginaActual, setPaginaActual] = useState(1);
   const [porPagina, setPorPagina] = useState(25);
+  useEffect(() => {
+    const valor = ajustesEmpresa.default_datatable_page_entries;
+    if (valor !== undefined && valor !== '') setPorPagina(valor === 'Todos' ? 0 : Math.max(1, Number(valor) || 25));
+  }, [ajustesEmpresa.default_datatable_page_entries]);
   const [mostrarFormularioNuevo, setMostrarFormularioNuevo] = useState(false);
   const [productoEditando, setProductoEditando] = useState(null);
   const [productoDetalle, setProductoDetalle] = useState(null);
@@ -158,9 +176,9 @@ export default function ListaProductos() {
   });
 
   // Paginación (client-side, sobre el resultado ya filtrado)
-  const totalPaginas = Math.max(1, Math.ceil(productosFiltrados.length / porPagina));
+  const totalPaginas = porPagina === 0 ? 1 : Math.max(1, Math.ceil(productosFiltrados.length / porPagina));
   const paginaSegura = Math.min(paginaActual, totalPaginas);
-  const productosPagina = productosFiltrados.slice((paginaSegura - 1) * porPagina, paginaSegura * porPagina);
+  const productosPagina = porPagina === 0 ? productosFiltrados : productosFiltrados.slice((paginaSegura - 1) * porPagina, paginaSegura * porPagina);
 
   useEffect(() => {
     setPaginaActual(1);
@@ -198,7 +216,7 @@ export default function ListaProductos() {
       doc.setFontSize(8);
       doc.text(prod.nombre.slice(0, 40), 3, 6, { maxWidth: 44 });
       doc.setFontSize(11);
-      doc.text(`Gs ${Number(prod.precio_venta || 0).toLocaleString('es-PY')}`, 3, 18);
+      doc.text(formatoPrecioProducto(prod, 'precio_venta', 'precio_venta_moneda'), 3, 18);
       doc.setFont('Helvetica', 'normal');
       doc.setFontSize(9);
       doc.text(prod.codigo || '—', 3, 26);
@@ -456,13 +474,17 @@ export default function ListaProductos() {
           {/* Barra de Acciones Superiores */}
           <div className="flex flex-wrap justify-between items-center gap-3 mb-4">
             <div className="flex gap-1 flex-wrap items-center">
-              <button onClick={exportarCSV} className="bg-gray-100 border text-gray-600 px-2.5 py-1 rounded text-xs font-semibold hover:bg-gray-200">📄 {t('exportCsv')}</button>
+              {ajustesEmpresa.system_settings_explicit && ajustesEmpresa.is_enabled_export === false ? null : <button onClick={exportarCSV} className="bg-gray-100 border text-gray-600 px-2.5 py-1 rounded text-xs font-semibold hover:bg-gray-200">📄 {t('exportCsv')}</button>}
               <button onClick={() => window.print()} className="bg-gray-100 border text-gray-600 px-2.5 py-1 rounded text-xs font-semibold hover:bg-gray-200">🖨️ {t('print')}</button>
               <select value={porPagina} onChange={(e) => setPorPagina(Number(e.target.value))} className="border rounded p-1.5 text-xs font-semibold bg-white ml-2">
                 <option value={10}>{t('show')} 10</option>
                 <option value={25}>{t('show')} 25</option>
                 <option value={50}>{t('show')} 50</option>
                 <option value={100}>{t('show')} 100</option>
+                <option value={200}>{t('show')} 200</option>
+                <option value={500}>{t('show')} 500</option>
+                <option value={1000}>{t('show')} 1.000</option>
+                <option value={0}>Todos</option>
               </select>
             </div>
 
@@ -565,10 +587,10 @@ export default function ListaProductos() {
                       </td>
                       <td className="p-3 text-gray-500">{!usuarioVeTodas && nombreUbicacionUsuario ? nombreUbicacionUsuario : (nombreUbicacionStockVisible || nombreEmpresa)}</td>
                       <td className="p-3 text-right font-semibold text-gray-600">
-                        {prod.precio_compra ? `${Number(prod.precio_compra).toLocaleString('es-PY')} Gs` : '0 Gs'}
+                        {formatoPrecioProducto(prod, 'precio_compra', 'precio_compra_moneda')}
                       </td>
                       <td className="p-3 text-right font-bold text-gray-800">
-                        {Number(prod.precio_venta || 0).toLocaleString('es-PY')} Gs
+                        {formatoPrecioProducto(prod, 'precio_venta', 'precio_venta_moneda')}
                       </td>
                       <td className="p-3 text-center">
                         <span className={`px-2 py-0.5 rounded-sm font-bold text-[11px] ${stockVisible(prod) <= Number(prod.alerta_stock_bajo || 5) ? 'bg-red-100 text-red-700' : 'bg-gray-100 text-gray-700'}`}>

@@ -51,9 +51,13 @@ export const useEmpresaInfo = () => {
       cargarEmpresa();
     });
 
+    const alActualizarConfiguracionEmpresa = () => cargarEmpresa();
+    window.addEventListener('empresa-configuracion-actualizada', alActualizarConfiguracionEmpresa);
+
     return () => {
       activo = false;
       subscription.unsubscribe();
+      window.removeEventListener('empresa-configuracion-actualizada', alActualizarConfiguracionEmpresa);
     };
   }, []);
 

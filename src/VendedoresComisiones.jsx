@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { FileSpreadsheet, FileText, Filter, Printer, RefreshCw, Settings } from 'lucide-react';
 import { supabase } from './supabaseClient';
 import { useEmpresaInfo } from './utils/useEmpresa';
+import { useConfiguracionEmpresa } from './utils/useConfiguracionEmpresa';
 import { useUbicacionUsuario } from './utils/useUbicacion';
 import { useLanguage } from './LanguageContext';
 
@@ -13,6 +14,8 @@ const estadoNormalizado = (estado) => String(estado || '').toLowerCase();
 export default function VendedoresComisiones() {
   const { t } = useLanguage();
   const { id: empresaId } = useEmpresaInfo();
+  const { ajustes: ajustesEmpresa } = useConfiguracionEmpresa(empresaId);
+  const calcularComisionSobreCobrado = ajustesEmpresa.cmmsn_calculation_type === 'Pago recibido';
   const { id: ubicacionUsuarioId, ve_todas: usuarioVeTodas } = useUbicacionUsuario();
   const [ventas, setVentas] = useState([]);
   const [gastos, setGastos] = useState([]);
@@ -96,8 +99,11 @@ export default function VendedoresComisiones() {
       acumuladas[nombre].total += Number(venta.total || 0);
       acumuladas[nombre].cobrado += Number(venta.monto_pagado || 0);
     });
-    return Object.values(acumuladas).map((fila) => ({ ...fila, comision: fila.total * fila.porcentaje / 100 })).sort((a, b) => b.total - a.total);
-  }, [ventasValidas, nombresUsuarios]);
+    return Object.values(acumuladas).map((fila) => ({
+      ...fila,
+      comision: (calcularComisionSobreCobrado ? fila.cobrado : fila.total) * fila.porcentaje / 100,
+    })).sort((a, b) => b.total - a.total);
+  }, [ventasValidas, nombresUsuarios, calcularComisionSobreCobrado]);
 
   const vendedores = [...new Set([...usuarios.map((usuario) => [usuario.nombre, usuario.apellido].filter(Boolean).join(' ').trim()).filter(Boolean), ...ventas.map((venta) => venta.personal_servicio || venta.usuario_nombre).filter(Boolean)])].sort((a, b) => a.localeCompare(b, 'es'));
   const ventasTexto = ventasValidas.filter((venta) => `${venta.id} ${venta.cliente || ''} ${venta.personal_servicio || ''} ${venta.usuario_nombre || ''} ${venta.estado_pago || ''}`.toLowerCase().includes(buscar.toLowerCase()));

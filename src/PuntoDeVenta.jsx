@@ -4,13 +4,14 @@ import DetalleCaja from './DetalleCaja';
 import NuevoClientePOS from './NuevoClientePOS';
 import ModalPagoMultiple from './ModalPagoMultiple';
 import AgregarProducto from './AgregarProducto';
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { supabase } from './supabaseClient';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { sonidoExito, sonidoError } from './utils/sonido';
 import { generateReceipt } from './utils/generateReceipt';
 import { useEmpresaInfo } from './utils/useEmpresa';
+import { useConfiguracionEmpresa } from './utils/useConfiguracionEmpresa';
 import { useUbicacionUsuario } from './utils/useUbicacion';
 import { cargarMapaStockPorUbicacion } from './utils/stockUbicacion';
 import { useNotificacion } from './NotificacionContext';
@@ -20,9 +21,10 @@ import LogoPyPos from './LogoPyPos';
 
 const formatGs = (valor) => `Gs ${Number(valor || 0).toLocaleString('es-PY')}`;
 
-const PuntoDeVenta = ({ cajaInfo, session, perfilUsuario, onVolver, onSolicitarCierre, onNuevoGasto }) => {
+const PuntoDeVenta = ({ cajaInfo, session, perfilUsuario, onVolver, onSolicitarCierre, onNuevoGasto, onAbrirGuia }) => {
   const { t } = useLanguage();
-  const { id: empresaId, nombre: nombreEmpresa, direccion: direccionEmpresa, telefono: telefonoEmpresa, ruc: rucEmpresa } = useEmpresaInfo();
+  const { id: empresaId, nombre: nombreEmpresa, direccion: direccionEmpresa, telefono: telefonoEmpresa, ruc: rucEmpresa, logo_url: logoEmpresa } = useEmpresaInfo();
+  const { ajustes: ajustesEmpresa, cargando: cargandoAjustesEmpresa } = useConfiguracionEmpresa(empresaId);
   const { notificar } = useNotificacion();
   const [formatoTicket, setFormatoTicket] = useState(() => localStorage.getItem('gda_formato_ticket') || '80mm');
   const [balanzaConfig, setBalanzaConfig] = useState(null);
@@ -112,10 +114,35 @@ const PuntoDeVenta = ({ cajaInfo, session, perfilUsuario, onVolver, onSolicitarC
   const [cliente, setCliente] = useState('Cliente Ocasional');
   const [metodoPago, setMetodoPago] = useState('Efectivo');
   const [montoPagado, setMontoPagado] = useState('');
-  const [monedaVenta, setMonedaVenta] = useState(() => {
-    if (typeof window === 'undefined') return 'PYG';
-    return localStorage.getItem('gda_moneda_venta') || 'PYG';
-  });
+  const [monedaVenta, setMonedaVenta] = useState('PYG');
+  const monedaBaseAnterior = useRef(null);
+  const monedaBaseEmpresa = typeof ajustesEmpresa.currency === 'string' && ajustesEmpresa.currency ? ajustesEmpresa.currency : 'PYG';
+  const monedasDisponibles = useMemo(() => {
+    const compatibles = new Set(['PYG', 'USD', 'EUR', 'BRL']);
+    const base = compatibles.has(monedaBaseEmpresa) ? monedaBaseEmpresa : 'PYG';
+    const extrasConfiguradas = ajustesEmpresa.enable_multicurrency && Array.isArray(ajustesEmpresa.multicurrency_ids)
+      ? ajustesEmpresa.multicurrency_ids.filter((moneda) => compatibles.has(moneda))
+      : [];
+    return [...new Set([base, ...extrasConfiguradas])];
+  }, [ajustesEmpresa.enable_multicurrency, ajustesEmpresa.multicurrency_ids, monedaBaseEmpresa]);
+  const claveMonedaVenta = empresaId ? `gda_moneda_venta_${empresaId}` : null;
+  const guardarMonedaVenta = (moneda) => {
+    if (!claveMonedaVenta) return;
+    try { localStorage.setItem(claveMonedaVenta, moneda); } catch { /* caché opcional */ }
+  };
+
+  useEffect(() => {
+    if (cargandoAjustesEmpresa || !empresaId) return;
+    let preferida = '';
+    try { preferida = localStorage.getItem(claveMonedaVenta) || ''; } catch { /* caché opcional */ }
+    const cambioDeMonedaBase = monedaBaseAnterior.current && monedaBaseAnterior.current !== monedaBaseEmpresa;
+    const siguiente = cambioDeMonedaBase
+      ? monedaBaseEmpresa
+      : monedasDisponibles.includes(preferida) ? preferida : (monedasDisponibles.includes(monedaBaseEmpresa) ? monedaBaseEmpresa : monedasDisponibles[0] || 'PYG');
+    monedaBaseAnterior.current = monedaBaseEmpresa;
+    setMonedaVenta(siguiente);
+    guardarMonedaVenta(siguiente);
+  }, [cargandoAjustesEmpresa, empresaId, claveMonedaVenta, monedasDisponibles, monedaBaseEmpresa]);
   const [tasaReferencia, setTasaReferencia] = useState(() => {
     if (typeof window === 'undefined') return 1;
     const tasaGuardada = Number(localStorage.getItem('gda_tasa_referencia'));
@@ -133,6 +160,7 @@ const PuntoDeVenta = ({ cajaInfo, session, perfilUsuario, onVolver, onSolicitarC
   });
   const [cargandoTasa, setCargandoTasa] = useState(false);
   const [tasaFuente, setTasaFuente] = useState('velocity');
+  const [monedaVentaPersistible, setMonedaVentaPersistible] = useState(false);
   const tasasFallback = {
     PYG: 1,
     USD: 7850,
@@ -184,6 +212,14 @@ const PuntoDeVenta = ({ cajaInfo, session, perfilUsuario, onVolver, onSolicitarC
   const [fechaHora, setFechaHora] = useState(new Date());
 
   useEffect(() => {
+    if (!empresaId) return undefined;
+    let vigente = true;
+    supabase.from('ventas').select('moneda_venta,total_moneda').eq('empresa_id', empresaId).limit(1)
+      .then(({ error }) => { if (vigente) setMonedaVentaPersistible(!error); });
+    return () => { vigente = false; };
+  }, [empresaId]);
+
+  useEffect(() => {
     const timer = setInterval(() => setFechaHora(new Date()), 1000 * 30);
     return () => clearInterval(timer);
   }, []);
@@ -195,7 +231,7 @@ const PuntoDeVenta = ({ cajaInfo, session, perfilUsuario, onVolver, onSolicitarC
       if (typeof window !== 'undefined') {
         localStorage.setItem('gda_tasa_referencia', '1');
         localStorage.setItem('gda_tasa_cambio', '1');
-        localStorage.setItem('gda_moneda_venta', 'PYG');
+        guardarMonedaVenta('PYG');
       }
       return;
     }
@@ -226,7 +262,7 @@ const PuntoDeVenta = ({ cajaInfo, session, perfilUsuario, onVolver, onSolicitarC
         if (typeof window !== 'undefined') {
           localStorage.setItem('gda_tasa_referencia', String(tasaBase));
           localStorage.setItem('gda_tasa_cambio', String(tasaFinal));
-          localStorage.setItem('gda_moneda_venta', monedaVenta);
+          guardarMonedaVenta(monedaVenta);
         }
       }
 
@@ -442,10 +478,21 @@ const PuntoDeVenta = ({ cajaInfo, session, perfilUsuario, onVolver, onSolicitarC
       String(item.nombre || '').trim().toLocaleLowerCase('es') === nombreGrupo.trim().toLocaleLowerCase('es')
     );
     const precio = Number(grupo?.precioVenta ?? grupo?.precio_venta);
-    return Number.isFinite(precio) && precio > 0 ? precio : null;
+    if (!Number.isFinite(precio) || precio <= 0) return null;
+    const monedaGrupo = grupo.moneda || producto.moneda_precio || 'PYG';
+    return monedaGrupo === monedaVenta ? precio * (monedaVenta === 'PYG' ? 1 : tasaCambio) : Number(grupo.precioVentaPyg ?? precio);
   };
 
-  const precioParaCliente = (producto) => precioDelGrupo(producto) ?? (Number(producto?.precio_venta ?? producto?.precio) || 0);
+  const precioParaCliente = (producto) => {
+    const precioGrupo = precioDelGrupo(producto);
+    if (precioGrupo !== null) return precioGrupo;
+    const monedaProducto = producto?.moneda_precio || 'PYG';
+    const precioMoneda = Number(producto?.precio_venta_moneda);
+    if (monedaProducto === monedaVenta && Number.isFinite(precioMoneda) && precioMoneda > 0) {
+      return precioMoneda * (monedaVenta === 'PYG' ? 1 : tasaCambio);
+    }
+    return Number(producto?.precio_venta ?? producto?.precio) || 0;
+  };
 
   useEffect(() => {
     if (carrito.length === 0) return;
@@ -604,6 +651,7 @@ const PuntoDeVenta = ({ cajaInfo, session, perfilUsuario, onVolver, onSolicitarC
     return Number.isFinite(resultado) ? resultado : null;
   }, [calculadoraA, calculadoraB, operacionCalculadora]);
   const descuentoPromocional = useMemo(() => {
+    if (ajustesEmpresa.disable_discount) return 0;
     const ahora = Date.now();
     const normalizar = (valor) => String(valor || '').trim().toLocaleLowerCase('es');
     return carrito.reduce((total, item) => {
@@ -627,18 +675,30 @@ const PuntoDeVenta = ({ cajaInfo, session, perfilUsuario, onVolver, onSolicitarC
         : Math.min(bruto, Math.max(0, Number(regla.valor) || 0) * Number(item.cantidad || 0));
       return total + descuentoLinea;
     }, 0);
-  }, [carrito, reglasDescuento, ubicacionActivaId]);
-  const descuentoManual = Math.max(0, Number(descuento) || 0);
+  }, [carrito, reglasDescuento, ubicacionActivaId, ajustesEmpresa.disable_discount]);
+  const descuentoPredeterminado = Math.max(0, Math.min(100, Number(ajustesEmpresa.default_sales_discount) || 0)) * subtotal / 100;
+  const descuentoManual = ajustesEmpresa.disable_discount ? 0
+    : String(descuento).trim() === '' ? descuentoPredeterminado : Math.max(0, Number(descuento) || 0);
   const descuentoAplicado = Math.min(descuentoManual + descuentoPromocional, subtotal);
   const cargoEmbalajeAplicado = Math.max(0, Number(cargoEmbalaje) || 0);
   const totalConAjustes = Math.max(0, subtotal - descuentoAplicado + cargoEmbalajeAplicado);
   const formatMoneda = (valor, moneda = monedaVenta) => {
     const numero = Number(valor || 0);
     const simbolos = { PYG: 'Gs', USD: 'USD', EUR: 'EUR', BRL: 'R$' };
-    const decimals = moneda === 'PYG' ? 0 : 2;
+    const precisionGuardada = Number(ajustesEmpresa.currency_precision);
+    const decimals = moneda === 'PYG'
+      ? (Number.isInteger(precisionGuardada) && precisionGuardada >= 0 && precisionGuardada <= 4 ? precisionGuardada : 0)
+      : (Number.isInteger(precisionGuardada) && precisionGuardada >= 2 && precisionGuardada <= 4 ? precisionGuardada : 2);
     const simbolo = simbolos[moneda] || moneda;
-    return `${simbolo} ${numero.toLocaleString('es-PY', { minimumFractionDigits: decimals, maximumFractionDigits: decimals })}`;
+    const cantidad = numero.toLocaleString('es-PY', { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
+    return ajustesEmpresa.currency_symbol_placement === 'Antes de la cantidad' ? `${simbolo} ${cantidad}` : `${cantidad} ${simbolo}`;
   };
+  const zonaHoraria = ajustesEmpresa.time_zone || 'America/Asuncion';
+  const formatearFechaEmpresa = (fecha) => {
+    const partes = Object.fromEntries(new Intl.DateTimeFormat('en-CA', { timeZone: zonaHoraria, year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(fecha).map((parte) => [parte.type, parte.value]));
+    return String(ajustesEmpresa.date_format || 'dd/mm/yyyy').replace(/dd|mm|yyyy/g, (token) => ({ dd: partes.day, mm: partes.month, yyyy: partes.year })[token]);
+  };
+  const opcionesHora = { timeZone: zonaHoraria, hour: '2-digit', minute: '2-digit', hour12: ajustesEmpresa.time_format !== '24 horas' };
   const convertirDesdeGs = (valorEnGs, monedaDestino = monedaVenta) => {
     const valor = Number(valorEnGs || 0);
     if (monedaDestino === 'PYG' || !Number.isFinite(tasaCambio) || tasaCambio <= 0) return valor;
@@ -660,11 +720,23 @@ const PuntoDeVenta = ({ cajaInfo, session, perfilUsuario, onVolver, onSolicitarC
 
   const procesarVenta = async (tipoOperacion = 'venta', datosPagoMultiple = null, metodoForzado = null, notaForzada = null) => {
     if (carrito.length === 0) return alert('El carrito está vacío');
+    if (monedaVenta !== 'PYG' && !monedaVentaPersistible) {
+      alert('Para vender y guardar en otra moneda, primero aplica database/migration_ventas_multimoneda.sql en Supabase. La operación fue cancelada y no se descontó stock.');
+      return null;
+    }
+    if (ajustesEmpresa.is_commission_agent_required && !personalServicio) {
+      alert('La empresa requiere seleccionar un agente o personal de servicio antes de finalizar la venta.');
+      return;
+    }
+    if (ajustesEmpresa.is_pay_term_required && tipoOperacion === 'credito' && !clienteSeleccionado?.termino_pago) {
+      alert('Selecciona un cliente con plazo de pago configurado antes de registrar una venta a crédito.');
+      return;
+    }
 
     // Si viene del modal de Pago Múltiple, usamos esos valores; si no,
     // seguimos leyendo los mismos estados de siempre (montoPagado, metodoPago,
     // notaVenta) para no cambiar en nada el comportamiento de los botones existentes.
-    let montoPagadoFinal = datosPagoMultiple ? datosPagoMultiple.montoPagado : convertirAGs(Number(montoPagado) || 0);
+    let montoPagadoFinal = datosPagoMultiple ? convertirAGs(datosPagoMultiple.montoPagado) : convertirAGs(Number(montoPagado) || 0);
     
     // Si el usuario hace clic en "COBRAR" (tipoOperacion 'venta') sin escribir un monto, 
     // asumimos que pagó el total exacto.
@@ -707,7 +779,7 @@ const PuntoDeVenta = ({ cajaInfo, session, perfilUsuario, onVolver, onSolicitarC
     else if (montoPagadoFinal === 0 && totalConAjustes > 0) estadoPago = 'Credito';
     else if (montoPagadoFinal > 0 && montoPagadoFinal < totalConAjustes) estadoPago = 'Pago Parcial';
 
-    const saldoPendienteFinal = datosPagoMultiple ? datosPagoMultiple.saldoPendiente : saldoPendiente;
+    const saldoPendienteFinal = datosPagoMultiple ? convertirAGs(datosPagoMultiple.saldoPendiente) : saldoPendiente;
 
     const nuevaVenta = {
       empresa_id: empresaId,
@@ -716,10 +788,13 @@ const PuntoDeVenta = ({ cajaInfo, session, perfilUsuario, onVolver, onSolicitarC
       cliente,
       grupo_precio: nombreGrupoPrecioActivo || null,
       total: totalConAjustes,
+      total_moneda: totalEnMoneda,
       metodo_pago: metodoPagoFinal,
       estado_pago: estadoPago,
       monto_pagado: montoPagadoFinal,
+      monto_pagado_moneda: datosPagoMultiple ? convertirDesdeGs(montoPagadoFinal) : (Number(montoPagado) || (tipoOperacion === 'venta' ? totalEnMoneda : 0)),
       saldo_pendiente: estadoPago === 'Credito' ? totalConAjustes : saldoPendienteFinal,
+      saldo_pendiente_moneda: estadoPago === 'Credito' ? totalEnMoneda : convertirDesdeGs(saldoPendienteFinal),
       articulos: carrito.length,
       descuento: descuentoAplicado,
       cargo_embalaje: cargoEmbalajeAplicado,
@@ -746,6 +821,9 @@ const PuntoDeVenta = ({ cajaInfo, session, perfilUsuario, onVolver, onSolicitarC
         nombre_producto: item.nombre,
         cantidad: item.cantidad,
         precio_unitario: item.precio_venta || item.precio || 0,
+        precio_unitario_moneda: convertirDesdeGs(item.precio_venta || item.precio || 0),
+        subtotal: (item.precio_venta || item.precio || 0) * item.cantidad,
+        subtotal_moneda: convertirDesdeGs((item.precio_venta || item.precio || 0) * item.cantidad),
       }));
 
       const { data: ventaId, error } = await supabase.rpc('registrar_venta', {
@@ -808,10 +886,20 @@ const PuntoDeVenta = ({ cajaInfo, session, perfilUsuario, onVolver, onSolicitarC
         (c) => (c.nombre_empresa || c.nombre) === cliente
       );
       const clienteRuc = clienteData?.documento_nro || '';
-      const ventaParaTicket = { ...nuevaVenta, id: ventaId, cliente_nombre: cliente, cliente_ruc: clienteRuc, items: carrito };
+      const ventaParaTicket = {
+        ...nuevaVenta,
+        id: ventaId,
+        cliente_nombre: cliente,
+        cliente_ruc: clienteRuc,
+        items: carrito.map((item) => ({
+          ...item,
+          precio_unitario_moneda: convertirDesdeGs(item.precio_venta || item.precio || 0),
+          subtotal_moneda: convertirDesdeGs((item.precio_venta || item.precio || 0) * item.cantidad),
+        })),
+      };
       generateReceipt(
         ventaParaTicket,
-        { nombre: nombreEmpresa, direccion: direccionEmpresa, telefono: telefonoEmpresa, ruc: rucEmpresa },
+        { nombre: nombreEmpresa, direccion: direccionEmpresa, telefono: telefonoEmpresa, ruc: rucEmpresa, logo_url: logoEmpresa },
         formatoTicket,
         true
       );
@@ -895,7 +983,7 @@ const PuntoDeVenta = ({ cajaInfo, session, perfilUsuario, onVolver, onSolicitarC
       const filasParaGuardar = resumen.filas.map((f) => ({
         empresa_id: empresaId,
         venta_id: ventaId,
-        monto: f.cantidad,
+        monto: convertirAGs(f.cantidad),
         metodo_pago: f.metodo,
         cuenta_id: f.cuentaId || null,
         nota: f.nota || null,
@@ -980,15 +1068,29 @@ const PuntoDeVenta = ({ cajaInfo, session, perfilUsuario, onVolver, onSolicitarC
   return (
     <div className="flex flex-col h-screen bg-gray-100 font-sans overflow-hidden">
 
-      <div className="bg-white border-b border-gray-200 px-4 py-2 flex flex-wrap items-center justify-between gap-2">
+      <div data-guia-tour="operacion" className="bg-white border-b border-gray-200 px-4 py-2 flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-3">
           <button onClick={() => onVolver && onVolver()} className="text-gray-500 hover:text-gray-800 font-medium text-sm">
             ← Volver
           </button>
+          <button type="button" onClick={onAbrirGuia} className="rounded border border-slate-200 bg-slate-50 px-2 py-1 text-xs font-bold text-slate-600 hover:border-orange-200 hover:text-orange-600" aria-label="Abrir guía de inicio">Ayuda</button>
           <span className="text-gray-800 font-bold text-sm">{perfilUsuario?.empresas?.nombre || 'Mi Negocio'}</span>
           <span className="text-gray-400 text-xs">
-            {fechaHora.toLocaleDateString('es-PY')} {fechaHora.toLocaleTimeString('es-PY', { hour: '2-digit', minute: '2-digit' })}
+            {formatearFechaEmpresa(fechaHora)} {fechaHora.toLocaleTimeString('es-PY', opcionesHora)}
           </span>
+          {ajustesEmpresa.enable_multicurrency && monedasDisponibles.length > 1 && (
+            <label className="flex items-center gap-1 rounded border border-slate-200 bg-white px-2 py-1 text-[11px] font-semibold text-slate-600">
+              Moneda
+              <select aria-label="Moneda de la venta" value={monedaVenta} onChange={(event) => {
+                const nuevaMoneda = event.target.value;
+                setMonedaVenta(nuevaMoneda);
+                guardarMonedaVenta(nuevaMoneda);
+              }} className="bg-transparent py-0.5 text-xs font-bold text-slate-800 outline-none">
+                {monedasDisponibles.map((moneda) => <option key={moneda} value={moneda}>{moneda}</option>)}
+              </select>
+            </label>
+          )}
+          {monedaVenta !== 'PYG' && !monedaVentaPersistible && <span role="status" className="rounded bg-amber-50 px-2 py-1 text-[10px] font-semibold text-amber-800">Aplica migration_ventas_multimoneda.sql antes de cobrar en {monedaVenta}</span>}
         </div>
         <div className="flex flex-wrap justify-end gap-1.5 text-[11px] font-bold">
           <button onClick={() => setMostrarDetalleCaja(true)} className="bg-emerald-50 text-emerald-700 border border-emerald-100 px-2.5 py-1.5 rounded hover:bg-emerald-100 whitespace-nowrap">
@@ -1077,7 +1179,7 @@ const PuntoDeVenta = ({ cajaInfo, session, perfilUsuario, onVolver, onSolicitarC
               aria-label="Buscar productos por nombre o código"
               className="min-w-0 flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
             />
-            <button type="button" onClick={() => { setMostrarBalanza(true); setLecturaBalanza(null); setCodigoBalanza(''); setProductoBalanzaId(''); setErrorBalanza(''); }} className="shrink-0 rounded-lg border border-sky-200 bg-sky-50 px-3 py-2 text-sm font-bold text-sky-800 hover:bg-sky-100" title="Leer el peso estable desde la balanza por red">⚖️ Balanza</button>
+            {ajustesEmpresa.enable_weighing_scale !== false && <button type="button" onClick={() => { setMostrarBalanza(true); setLecturaBalanza(null); setCodigoBalanza(''); setProductoBalanzaId(''); setErrorBalanza(''); }} className="shrink-0 rounded-lg border border-sky-200 bg-sky-50 px-3 py-2 text-sm font-bold text-sky-800 hover:bg-sky-100" title="Leer el peso estable desde la balanza por red">⚖️ Balanza</button>}
             {mostrarBalanza && <div className="fixed inset-0 z-[90] flex items-center justify-center bg-black/50 p-4" role="dialog" aria-modal="true" aria-labelledby="pos-balanza-titulo"><div className="w-full max-w-md rounded-2xl bg-white p-5 shadow-2xl"><div className="flex items-start justify-between gap-3"><div><h2 id="pos-balanza-titulo" className="text-lg font-black text-slate-900">Venta por peso</h2><p className="mt-1 text-sm text-slate-500">{balanzaConfig ? `${balanzaConfig.name}: ${balanzaConfig.ip}:${balanzaConfig.port || 502}` : 'Balanza de red no configurada'}</p></div><button type="button" onClick={() => setMostrarBalanza(false)} className="rounded-lg px-3 py-1 text-xl text-slate-500 hover:bg-slate-100" aria-label="Cerrar">×</button></div><label className="mt-4 block text-sm font-bold text-slate-700">Código del producto<input type="text" inputMode="text" autoComplete="off" placeholder="Escribí o escaneá el código y presioná Enter" value={codigoBalanza} onChange={(event) => { const codigo = event.target.value; setCodigoBalanza(codigo); setLecturaBalanza(null); const encontrado = productosPesables.find((producto) => String(producto.codigo || '').trim().toLocaleLowerCase('es') === codigo.trim().toLocaleLowerCase('es')); setProductoBalanzaId(encontrado ? String(encontrado.id) : ''); setErrorBalanza(''); }} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); seleccionarProductoPorCodigo(); } }} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2.5 font-normal" /></label><label className="mt-4 block text-sm font-bold text-slate-700">Producto cárnico<select className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5" value={productoBalanzaId} onChange={(event) => { setProductoBalanzaId(event.target.value); const producto = productosPesables.find((item) => String(item.id) === event.target.value); setCodigoBalanza(producto?.codigo || ''); setLecturaBalanza(null); setErrorBalanza(''); }}><option value="">Elegí carne vendida por kg o g</option>{productosPesables.map((producto) => <option key={producto.id} value={producto.id}>{producto.nombre} · {producto.unidad} · {formatGs(precioParaCliente(producto))}/{producto.unidad}</option>)}</select></label>{lecturaBalanza && <div className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50 p-4"><p className="text-xs font-bold uppercase tracking-wide text-emerald-800">Peso estable leído</p><p className="mt-1 text-3xl font-black text-emerald-950">{lecturaBalanza.kilograms.toLocaleString('es-PY', { minimumFractionDigits: 3, maximumFractionDigits: 3 })} kg</p>{productoPesado && <p className="mt-1 text-sm text-emerald-900">Importe estimado: {formatGs(precioParaCliente(productoPesado) * (unidadEnGramos(productoPesado.unidad) ? lecturaBalanza.kilograms * 1000 : lecturaBalanza.kilograms))}</p>}</div>}{errorBalanza && <p role="alert" className="mt-3 rounded-lg bg-red-50 p-3 text-sm text-red-700">{errorBalanza}</p>}<div className="mt-5 flex flex-wrap justify-end gap-2"><button type="button" disabled={leyendoBalanza} onClick={leerPesoBalanza} className="rounded-lg bg-sky-700 px-4 py-2.5 font-bold text-white disabled:opacity-60">{leyendoBalanza ? 'Leyendo…' : 'Leer peso estable'}</button><button type="button" disabled={!lecturaBalanza || !productoPesado} onClick={agregarPesoAlCarrito} className="rounded-lg bg-orange-500 px-4 py-2.5 font-bold text-white disabled:opacity-40">Agregar al carrito</button></div><p className="mt-3 text-xs text-slate-500">La lectura solo prepara la línea de venta. Revisá el producto y el importe en el carrito antes de cobrar.</p></div></div>}
           </div>
 
@@ -1255,7 +1357,12 @@ const PuntoDeVenta = ({ cajaInfo, session, perfilUsuario, onVolver, onSolicitarC
           </div>
 
           <div className="flex-1 overflow-y-auto pr-1">
-            {cargando ? (
+            {ajustesEmpresa.hide_product_suggestion ? (
+              <div className="mx-auto mt-10 max-w-lg rounded-xl border border-amber-200 bg-amber-50 p-5 text-center text-sm text-amber-900">
+                La lista de sugerencias está desactivada. Buscá el producto por nombre o código en el campo superior.
+              </div>
+            ) : (
+            cargando ? (
               <div className="flex justify-center items-center h-full">
                 <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-orange-500"></div>
               </div>
@@ -1282,12 +1389,13 @@ const PuntoDeVenta = ({ cajaInfo, session, perfilUsuario, onVolver, onSolicitarC
                       <p className="font-bold text-gray-800 text-sm leading-tight line-clamp-2">{prod.nombre}</p>
                       <div className="mt-1">
                         <p className="text-[11px] text-gray-400 mb-1">{prod.codigo || '—'} · Stock: {formatearStock(stockEnSucursal(prod), prod.unidad)}</p>
-                        <p className="text-orange-600 font-black">{formatMoneda(convertirDesdeGs(precioParaCliente(prod)), monedaVenta)}</p>
+                        {ajustesEmpresa.show_pricing_on_product_suggestion !== false && <p className="text-orange-600 font-black">{formatMoneda(convertirDesdeGs(precioParaCliente(prod)), monedaVenta)}</p>}
                       </div>
                     </div>
                   </div>
                 ))}
               </div>
+            )
             )}
           </div>
         </div>
@@ -1296,23 +1404,23 @@ const PuntoDeVenta = ({ cajaInfo, session, perfilUsuario, onVolver, onSolicitarC
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4 2xl:grid-cols-7">
           <div className="flex items-center justify-between rounded-md border border-slate-200 bg-white px-3 py-2"><span className="text-xs font-bold text-slate-500">Artículos</span><strong className="text-lg text-slate-900">{totalArticulos}</strong></div>
           <div className="flex items-center justify-between rounded-md border border-slate-200 bg-white px-3 py-2"><span className="text-xs font-bold text-slate-500">Total</span><strong className="text-sm text-slate-900">{formatMoneda(totalEnMoneda, monedaVenta)}</strong></div>
-          <label className="rounded-md border border-slate-200 bg-white px-3 py-1.5 text-[11px] font-bold text-slate-600">Descuento (Gs)<input type="number" min="0" max={Math.max(0, subtotal - descuentoPromocional)} step="1" value={descuento} onChange={(event) => setDescuento(event.target.value)} onBlur={() => setDescuento(String(Math.min(descuentoManual, Math.max(0, subtotal - descuentoPromocional)) || ''))} className="mt-1 h-7 w-full rounded border border-slate-300 px-2 text-sm font-semibold text-slate-900" />{descuentoPromocional > 0 && <span className="mt-0.5 block text-[10px] text-emerald-700">Promo: {formatGs(descuentoPromocional)}</span>}</label>
+          {!ajustesEmpresa.disable_discount && <label className="rounded-md border border-slate-200 bg-white px-3 py-1.5 text-[11px] font-bold text-slate-600">Descuento ({monedaVenta})<input type="number" min="0" max={convertirDesdeGs(Math.max(0, subtotal - descuentoPromocional))} step={monedaVenta === 'PYG' ? '1' : '0.01'} value={monedaVenta === 'PYG' ? descuento : descuento === '' ? '' : convertirDesdeGs(Number(descuento) || 0)} onChange={(event) => setDescuento(event.target.value === '' ? '' : convertirAGs(Number(event.target.value) || 0))} onBlur={() => { if (String(descuento).trim() !== '') setDescuento(String(Math.min(Number(descuento) || 0, Math.max(0, subtotal - descuentoPromocional)) || '')); }} className="mt-1 h-7 w-full rounded border border-slate-300 px-2 text-sm font-semibold text-slate-900" />{Number(ajustesEmpresa.default_sales_discount) > 0 && String(descuento).trim() === '' && <span className="mt-0.5 block text-[10px] text-slate-500">Predeterminado {Number(ajustesEmpresa.default_sales_discount)}%: {formatMoneda(convertirDesdeGs(descuentoPredeterminado), monedaVenta)}</span>}{descuentoPromocional > 0 && <span className="mt-0.5 block text-[10px] text-emerald-700">Promo: {formatMoneda(convertirDesdeGs(descuentoPromocional), monedaVenta)}</span>}</label>}
           <label className="rounded-md border border-slate-200 bg-white px-3 py-1.5 text-[11px] font-bold text-slate-600">Vencimiento<input type="date" value={fechaVencimientoPresupuesto} onChange={(event) => setFechaVencimientoPresupuesto(event.target.value)} className="mt-1 h-7 w-full rounded border border-slate-300 px-2 text-xs font-semibold text-slate-900" /></label>
           <label className="rounded-md border border-slate-200 bg-white px-3 py-1.5 text-[11px] font-bold text-slate-600">Nota de remisión<input type="text" value={notaRemision} onChange={(event) => setNotaRemision(event.target.value)} placeholder="Opcional" className="mt-1 h-7 w-full rounded border border-slate-300 px-2 text-xs font-normal text-slate-900" /></label>
           <label className="rounded-md border border-slate-200 bg-white px-3 py-1.5 text-[11px] font-bold text-slate-600">Nota de venta<input type="text" value={notaVenta} onChange={(event) => setNotaVenta(event.target.value)} placeholder="Opcional" className="mt-1 h-7 w-full rounded border border-slate-300 px-2 text-xs font-normal text-slate-900" /></label>
-          <label className="rounded-md border border-slate-200 bg-white px-3 py-1.5 text-[11px] font-bold text-slate-600">Cargo de embalaje (Gs)<input type="number" min="0" step="1" value={cargoEmbalaje} onChange={(event) => setCargoEmbalaje(event.target.value)} onBlur={() => setCargoEmbalaje(String(cargoEmbalajeAplicado || ''))} className="mt-1 h-7 w-full rounded border border-slate-300 px-2 text-sm font-semibold text-slate-900" /></label>
+          <label className="rounded-md border border-slate-200 bg-white px-3 py-1.5 text-[11px] font-bold text-slate-600">Cargo de embalaje ({monedaVenta})<input type="number" min="0" step={monedaVenta === 'PYG' ? '1' : '0.01'} value={monedaVenta === 'PYG' ? cargoEmbalaje : cargoEmbalaje === '' ? '' : convertirDesdeGs(Number(cargoEmbalaje) || 0)} onChange={(event) => setCargoEmbalaje(event.target.value === '' ? '' : convertirAGs(Number(event.target.value) || 0))} onBlur={() => setCargoEmbalaje(String(cargoEmbalajeAplicado || ''))} className="mt-1 h-7 w-full rounded border border-slate-300 px-2 text-sm font-semibold text-slate-900" /></label>
         </div>
         <div className="mt-2 flex min-w-0 items-center gap-2">
           <div className="flex min-w-0 flex-1 items-center gap-2 overflow-x-auto pb-0.5">
-          <button onClick={() => procesarVenta('pendiente')} disabled={carrito.length === 0} className="shrink-0 whitespace-nowrap rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-50">▧ Pedido pendiente</button>
+          {!ajustesEmpresa.disable_draft && !ajustesEmpresa.disable_suspend && <button onClick={() => procesarVenta('pendiente')} disabled={carrito.length === 0} className="shrink-0 whitespace-nowrap rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-50">▧ Pedido pendiente</button>}
           <button onClick={guardarPresupuestoDesdePOS} disabled={carrito.length === 0 || guardandoPresupuesto} className="shrink-0 whitespace-nowrap rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-50">▧ {guardandoPresupuesto ? 'Guardando…' : 'Presupuesto'}</button>
           <button onClick={procesarDelivery} disabled={carrito.length === 0} className="shrink-0 whitespace-nowrap rounded-md bg-slate-200 px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-300 disabled:opacity-50">▣ Delivery</button>
-          <button onClick={() => procesarVenta('credito')} disabled={carrito.length === 0} className="shrink-0 whitespace-nowrap rounded-md bg-slate-200 px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-300 disabled:opacity-50">✓ Venta a crédito</button>
-          <button onClick={() => cobrarConMetodo('Tarjeta')} disabled={carrito.length === 0} className="shrink-0 whitespace-nowrap rounded-md bg-pink-600 px-3 py-2 text-xs font-bold text-white hover:bg-pink-700 disabled:opacity-50">▣ Tarjeta</button>
-          <button onClick={() => setMostrarPagoMultiple(true)} disabled={carrito.length === 0} className="shrink-0 whitespace-nowrap rounded-md bg-slate-900 px-3 py-2 text-xs font-bold text-white hover:bg-slate-800 disabled:opacity-50">▤ Pago múltiple</button>
-          <button onClick={() => cobrarConMetodo('Efectivo')} disabled={carrito.length === 0} className="shrink-0 whitespace-nowrap rounded-md bg-emerald-600 px-3 py-2 text-xs font-bold text-white hover:bg-emerald-700 disabled:opacity-50">▣ Efectivo</button>
+          {!ajustesEmpresa.disable_credit_sale_button && <button onClick={() => procesarVenta('credito')} disabled={carrito.length === 0} className="shrink-0 whitespace-nowrap rounded-md bg-slate-200 px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-300 disabled:opacity-50">✓ Venta a crédito</button>}
+          {!ajustesEmpresa.disable_pay_checkout && !ajustesEmpresa.disable_express_checkout && <button onClick={() => cobrarConMetodo('Tarjeta')} disabled={carrito.length === 0} className="shrink-0 whitespace-nowrap rounded-md bg-pink-600 px-3 py-2 text-xs font-bold text-white hover:bg-pink-700 disabled:opacity-50">▣ Tarjeta</button>}
+          {!ajustesEmpresa.disable_pay_checkout && <button onClick={() => setMostrarPagoMultiple(true)} disabled={carrito.length === 0} className="shrink-0 whitespace-nowrap rounded-md bg-slate-900 px-3 py-2 text-xs font-bold text-white hover:bg-slate-800 disabled:opacity-50">▤ Pago múltiple</button>}
+          {!ajustesEmpresa.disable_pay_checkout && !ajustesEmpresa.disable_express_checkout && <button onClick={() => cobrarConMetodo('Efectivo')} disabled={carrito.length === 0} className="shrink-0 whitespace-nowrap rounded-md bg-emerald-600 px-3 py-2 text-xs font-bold text-white hover:bg-emerald-700 disabled:opacity-50">▣ Efectivo</button>}
           <button onClick={vaciarCarrito} className="shrink-0 whitespace-nowrap rounded-md bg-red-600 px-3 py-2 text-xs font-bold text-white hover:bg-red-700">× Cancelar</button>
-          <button onClick={abrirTransaccionesRecientes} className="shrink-0 whitespace-nowrap rounded-md bg-orange-600 px-3 py-2 text-xs font-bold text-white hover:bg-orange-700">◷ Transacciones recientes</button>
+          {!ajustesEmpresa.hide_recent_trans && <button onClick={abrirTransaccionesRecientes} className="shrink-0 whitespace-nowrap rounded-md bg-orange-600 px-3 py-2 text-xs font-bold text-white hover:bg-orange-700">◷ Transacciones recientes</button>}
           </div>
           <div className="flex min-w-[205px] shrink-0 flex-col items-end rounded-xl bg-slate-900 px-5 py-2 text-white shadow-lg"><span className="text-[10px] font-black tracking-[.16em] text-slate-300">TOTAL A PAGAR</span><strong className="text-2xl leading-tight">{formatMoneda(totalEnMoneda, monedaVenta)}</strong></div>
           <div aria-label="Marca PyPOS" className="flex shrink-0 items-center justify-center px-1"><LogoPyPos size={32} /></div>
@@ -1365,8 +1473,10 @@ const PuntoDeVenta = ({ cajaInfo, session, perfilUsuario, onVolver, onSolicitarC
         abierto={mostrarPagoMultiple}
         onCerrar={() => setMostrarPagoMultiple(false)}
         totalArticulos={totalArticulos}
-        totalAPagar={totalConAjustes}
+        totalAPagar={totalEnMoneda}
+        moneda={monedaVenta}
         cuentasCaja={cuentasCaja}
+        ajustesEmpresa={ajustesEmpresa}
         onFinalizar={finalizarPagoMultiple}
       />
       {mostrarFormularioProducto && (

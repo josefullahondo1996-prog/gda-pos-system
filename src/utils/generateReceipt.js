@@ -1,4 +1,11 @@
 const formatGs = (v) => `${Number(v || 0).toLocaleString('es-PY')}`;
+const formatMoneda = (v, moneda = 'PYG') => {
+  const opciones = moneda === 'PYG'
+    ? { minimumFractionDigits: 0, maximumFractionDigits: 0 }
+    : { minimumFractionDigits: 2, maximumFractionDigits: 2 };
+  const cantidad = Number(v || 0).toLocaleString(moneda === 'BRL' ? 'pt-BR' : 'es-PY', opciones);
+  return moneda === 'BRL' ? `R$ ${cantidad}` : moneda === 'USD' ? `USD ${cantidad}` : moneda === 'EUR' ? `€ ${cantidad}` : `${cantidad} Gs.`;
+};
 const escapeHtml = (value) => String(value ?? '').replace(/[&<>"']/g, (character) => ({
   '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
 }[character]));
@@ -14,7 +21,12 @@ const normalizarItems = (venta) => {
       it.precio_venta ?? it.precio ?? it.precio_unitario ??
       (it.subtotal ? it.subtotal / cantidad : 0);
     const subtotal = it.subtotal ?? precioUnitario * cantidad;
-    return { nombre, cantidad, precioUnitario, subtotal };
+    return {
+      nombre,
+      cantidad,
+      precioUnitario: it.precio_unitario_moneda ?? precioUnitario,
+      subtotal: it.subtotal_moneda ?? subtotal,
+    };
   });
 };
 
@@ -32,7 +44,13 @@ export const generateReceipt = (venta, empresa = {}, formato = '80mm', autoImpri
     const bodyWidth  = es58 ? '50mm' : '72mm';
 
     const nombreNegocio = (empresa.nombre || 'MI EMPRESA').toUpperCase();
+    const logoUrl = String(empresa.logo_url || '').trim();
+    const logoSeguro = /^(https:\/\/|data:image\/(png|jpeg|webp|svg\+xml);base64,)/i.test(logoUrl) ? logoUrl : '';
+    const logoHtml = logoSeguro
+      ? `<img src="${escapeHtml(logoSeguro)}" alt="Logotipo de ${escapeHtml(empresa.nombre || 'la empresa')}" style="display:block;max-width:75%;max-height:18mm;margin:0 auto 4px;object-fit:contain;" />`
+      : '';
     const items         = normalizarItems(venta);
+    const moneda = ['PYG', 'USD', 'EUR', 'BRL'].includes(venta.moneda_venta) ? venta.moneda_venta : 'PYG';
 
     // ── Número de ticket ──────────────────────────────────────────────────────
     const ticketRaw = venta.numero_factura || String(venta.id || '0');
@@ -70,9 +88,9 @@ export const generateReceipt = (venta, empresa = {}, formato = '80mm', autoImpri
         <td style="text-align:left;vertical-align:top;padding:2px 0;">${escapeHtml(it.cantidad)}</td>
         <td style="vertical-align:top;padding:2px 4px;">
           <div style="text-transform:uppercase;word-break:break-word;">${escapeHtml(nombre)}</div>
-          <div style="font-size:9px;color:#333;">${escapeHtml(it.cantidad)} x ${formatGs(it.precioUnitario)}</div>
+          <div style="font-size:9px;color:#333;">${escapeHtml(it.cantidad)} x ${formatMoneda(it.precioUnitario, moneda)}</div>
         </td>
-        <td style="text-align:right;vertical-align:top;padding:2px 0;white-space:nowrap;">${formatGs(it.subtotal)}</td>
+        <td style="text-align:right;vertical-align:top;padding:2px 0;white-space:nowrap;">${formatMoneda(it.subtotal, moneda)}</td>
       </tr>`;
       });
     } else {
@@ -80,28 +98,28 @@ export const generateReceipt = (venta, empresa = {}, formato = '80mm', autoImpri
       <tr>
         <td>1</td>
         <td style="padding:2px 4px;">Venta de Repuestos / Servicios</td>
-        <td style="text-align:right;">${formatGs(venta.total)}</td>
+        <td style="text-align:right;">${formatMoneda(venta.total_moneda ?? venta.total, moneda)}</td>
       </tr>`;
     }
 
     // ── Pagos ─────────────────────────────────────────────────────────────────
     const metodoPagoLabel = venta.metodo_pago || 'Efectivo';
-    const total           = Number(venta.total        || 0);
-    const montoPagado     = Number(venta.monto_pagado || total);
+    const total           = Number(venta.total_moneda ?? venta.total ?? 0);
+    const montoPagado     = Number(venta.monto_pagado_moneda ?? venta.monto_pagado ?? total);
     const vuelto          = montoPagado > total ? montoPagado - total : 0;
-    const saldoPendiente  = Number(venta.saldo_pendiente || 0);
+    const saldoPendiente  = Number(venta.saldo_pendiente_moneda ?? venta.saldo_pendiente ?? 0);
 
     let pagoHtml = `
       <tr>
         <td style="padding:1px 0;">${escapeHtml(metodoPagoLabel)}:</td>
-        <td style="text-align:right;padding:1px 0;">${formatGs(montoPagado)} Gs.</td>
+        <td style="text-align:right;padding:1px 0;">${formatMoneda(montoPagado, moneda)}</td>
       </tr>`;
 
     if (vuelto > 0) {
       pagoHtml += `
       <tr>
         <td style="padding:1px 0;"><b>Vuelto:</b></td>
-        <td style="text-align:right;padding:1px 0;"><b>${formatGs(vuelto)} Gs.</b></td>
+        <td style="text-align:right;padding:1px 0;"><b>${formatMoneda(vuelto, moneda)}</b></td>
       </tr>`;
     }
 
@@ -109,7 +127,7 @@ export const generateReceipt = (venta, empresa = {}, formato = '80mm', autoImpri
       pagoHtml += `
       <tr>
         <td style="padding:1px 0;color:#c00;"><b>Saldo pendiente:</b></td>
-        <td style="text-align:right;padding:1px 0;color:#c00;"><b>${formatGs(saldoPendiente)} Gs.</b></td>
+        <td style="text-align:right;padding:1px 0;color:#c00;"><b>${formatMoneda(saldoPendiente, moneda)}</b></td>
       </tr>`;
     }
 
@@ -161,6 +179,7 @@ export const generateReceipt = (venta, empresa = {}, formato = '80mm', autoImpri
 <body>
 
   <!-- CABECERA -->
+  ${logoHtml}
   <div class="text-center bold" style="font-size:13px;margin-bottom:2px;">${escapeHtml(nombreNegocio)}</div>
   ${empresa.ruc       ? `<div class="text-center" style="font-size:10px;">RUC: ${escapeHtml(empresa.ruc)}</div>`       : ''}
   ${empresa.telefono  ? `<div class="text-center" style="font-size:10px;">Tel: ${escapeHtml(empresa.telefono)}</div>`  : ''}
@@ -197,7 +216,7 @@ export const generateReceipt = (venta, empresa = {}, formato = '80mm', autoImpri
   <table>
     <tr>
       <td class="bold" style="font-size:13px;">TOTAL:</td>
-      <td class="right bold" style="font-size:13px;">${formatGs(total)} Gs.</td>
+      <td class="right bold" style="font-size:13px;">${formatMoneda(total, moneda)}</td>
     </tr>
     ${pagoHtml}
   </table>
@@ -205,7 +224,7 @@ export const generateReceipt = (venta, empresa = {}, formato = '80mm', autoImpri
   <div class="line"></div>
 
   <!-- IVA Y CIERRE -->
-  <div class="text-center" style="font-size:10px;">Liquidaci\xf3n IVA: (10%) ${formatGs(iva10)} Gs.</div>
+  ${moneda === 'PYG' ? `<div class="text-center" style="font-size:10px;">Liquidaci\xf3n IVA: (10%) ${formatGs(iva10)} Gs.</div>` : ''}
   <div class="line"></div>
   <div class="text-center bold" style="font-size:11px;margin-top:4px;">\xa1Gracias por su compra!</div>
 

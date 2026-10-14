@@ -98,7 +98,7 @@ const AbrirCaja = ({ onCajaAbierta, perfilUsuario }) => {
   return (
     <div className="p-6 bg-[#f4f6f9] min-h-screen w-full font-sans text-gray-800">
 
-        <h1 className="text-2xl font-bold text-gray-800 mb-6">{t('openCashRegister')}</h1>
+        <h1 data-guia-tour="operacion" className="text-2xl font-bold text-gray-800 mb-6">{t('openCashRegister')}</h1>
 
       <div className="bg-white border border-gray-200 rounded-lg shadow-sm p-8 max-w-4xl mx-auto mt-4">
 

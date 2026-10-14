@@ -135,6 +135,7 @@ function App() {
   if (cargando) {
     return (
       <div className="min-h-screen flex items-center justify-center text-gray-500">
+        <div className="gda-navigation-progress gda-app-loading-progress" role="progressbar" aria-label="Cargando GDA POS" aria-valuetext="Cargando GDA POS" />
         {t('loading')}
       </div>
     );

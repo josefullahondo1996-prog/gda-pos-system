@@ -1,16 +1,20 @@
-import { lazy, Suspense, useEffect, useState } from 'react';
+import { lazy, Suspense, useEffect, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { supabase } from './supabaseClient';
 import {
   LayoutDashboard, Users, Contact, Package, Factory, Wrench, ChevronLeft,
   ArrowDownToLine, ArrowUpFromLine, BarChart3, ShoppingCart, LogOut, Settings,
   MapPin, FileText, Barcode, Printer, Percent, ClipboardList, CreditCard, ArrowRightLeft,
-  Menu, X, DollarSign, BookOpen, Truck, ShoppingBag, Clock3, Building2, CircleHelp, CalendarDays, ShieldCheck, Mail, ClipboardCheck, QrCode
+  Menu, X, DollarSign, BookOpen, Truck, ShoppingBag, Clock3, Building2, CircleHelp, CalendarDays, ShieldCheck, Mail, ClipboardCheck, QrCode, Bell, AlertTriangle, CalendarClock, PackageX
 } from 'lucide-react';
 import { LanguageSelector, useLanguage } from './LanguageContext';
 import LogoPyPos from './LogoPyPos';
+import GuiaInicial from './GuiaInicial';
 
 import { useUbicacionUsuario } from './utils/useUbicacion';
+import { useEmpresaInfo } from './utils/useEmpresa';
+import { useConfiguracionEmpresa } from './utils/useConfiguracionEmpresa';
+import { useAlertasInventario } from './utils/useAlertasInventario';
 
 // Las vistas del ERP se descargan al abrirlas para reducir el paquete inicial.
 const ConfiguracionEmpresa = lazy(() => import('./ConfiguracionEmpresa'));
@@ -78,6 +82,14 @@ const GarantiasProductos = lazy(() => import('./ModulosProductos').then((m) => (
 
 export default function Dashboard({ session, perfilUsuario, initialView = 'inicio' }) {
   const { t, locale } = useLanguage();
+  const empresaInfo = useEmpresaInfo();
+  const { ajustes: ajustesEmpresa } = useConfiguracionEmpresa(empresaInfo.id);
+  const { alertas: alertasInventario, cargando: cargandoAlertasInventario, error: errorAlertasInventario } = useAlertasInventario(empresaInfo.id, ajustesEmpresa.stock_expiry_alert_days);
+  const formatoFechaEmpresa = ajustesEmpresa.date_format || 'dd/mm/yyyy';
+  const fechaPartesEmpresa = Object.fromEntries(new Intl.DateTimeFormat('en-CA', {
+    timeZone: ajustesEmpresa.time_zone || 'America/Asuncion', year: 'numeric', month: '2-digit', day: '2-digit',
+  }).formatToParts(new Date()).map((parte) => [parte.type, parte.value]));
+  const fechaHeaderEmpresa = formatoFechaEmpresa.replace(/dd|mm|yyyy/g, (token) => ({ dd: fechaPartesEmpresa.day, mm: fechaPartesEmpresa.month, yyyy: fechaPartesEmpresa.year })[token]);
   // === CONTROL DE ACCESO POR ROL (va primero, vistaActiva lo necesita) ===
   const { id: ubicacionUsuarioId, ve_todas: usuarioVeTodas } = useUbicacionUsuario();
   const nombreRol = (perfilUsuario?.roles?.nombre || '').toLowerCase();
@@ -93,6 +105,17 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
   };
 
   const puedeVerVista = (vista) => {
+    if (ajustesEmpresa.module_settings_explicit) {
+      const moduloPorVista = {
+        compras: 'module_1', agregar_compra: 'module_1', devoluciones_compra: 'module_1',
+        todas_ventas: 'module_2', devoluciones_ventas: 'module_2', pedidos: 'module_2', cotizaciones: 'module_2', cobros: 'module_2', descuentos_ventas: 'module_2', importar_ventas: 'module_2',
+        pos: 'module_3', transferencias_stock: 'module_4', ajustes_stock: 'module_5',
+        gastos: 'module_6', agregar_gasto: 'module_6', categorias_gastos: 'module_6',
+        cajas: 'module_7', caja_registradora: 'module_7', informe_caja_pago: 'module_7', flujo_fondos: 'module_7',
+      };
+      const modulo = moduloPorVista[vista];
+      if (modulo && ajustesEmpresa[modulo] === false) return false;
+    }
     if (esAdmin || !permisosRol) return true;
     const categoriaPorVista = {
       ot: 'ot', config_empresa: 'configuraciones', config_factura: 'configuraciones', config_modulos: 'configuraciones', admin_desarrollador: 'configuraciones',
@@ -158,21 +181,117 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
   const [reporteCierre, setReporteCierre] = useState(null);
   const [refreshInicio, setRefreshInicio] = useState(0);
   const [refreshKey, setRefreshKey] = useState(0);
+  const [cargandoNavegacion, setCargandoNavegacion] = useState(false);
+  const timeoutNavegacionRef = useRef(null);
+  const [guiaVisible, setGuiaVisible] = useState(false);
 
   // Navega a cualquier vista y fuerza que se recargue de cero, incluso si ya estabas ahí
   const irA = (vista, pathname) => {
+    window.clearTimeout(timeoutNavegacionRef.current);
+    setCargandoNavegacion(true);
+    timeoutNavegacionRef.current = window.setTimeout(() => {
+      setCargandoNavegacion(false);
+      timeoutNavegacionRef.current = null;
+    }, 700);
     setVistaActiva(vista);
     setRefreshKey((k) => k + 1);
     setMenuMovilAbierto(false); // Cierra el menú móvil al navegar
     if (pathname) navigate(pathname, { replace: true });
   };
+  useEffect(() => () => window.clearTimeout(timeoutNavegacionRef.current), []);
   const [sidebarColapsado, setSidebarColapsado] = useState(false);
   const [menuMovilAbierto, setMenuMovilAbierto] = useState(false);
   const [configuracionesMovilAbiertas, setConfiguracionesMovilAbiertas] = useState(false);
   const [menuCuentaAbierto, setMenuCuentaAbierto] = useState(false);
   const [menuAccionesAbierto, setMenuAccionesAbierto] = useState(false);
+  const [menuAlertasAbierto, setMenuAlertasAbierto] = useState(false);
   const [accionInicio, setAccionInicio] = useState(null);
   const [fechaHora, setFechaHora] = useState(new Date());
+
+  const tituloModulo = ({
+    inicio: t('home'),
+    pos: t('pos'),
+    reporte_cierre: 'Cierre',
+    nuevo_gasto: 'Gasto',
+    compras: t('purchases'),
+    agregar_compra: t('addPurchase'),
+    gastos: t('expenses'),
+    agregar_gasto: t('addExpense'),
+    categorias_gastos: t('expenseCategories'),
+    devoluciones_compra: t('purchaseReturns'),
+    cobros: t('pendingOrders'),
+    catalogo: t('products'),
+    catalogo_qr: 'Catálogo QR',
+    stock_history: 'Historial de existencias',
+    transferencias_stock: 'Transferencias de stock',
+    ajustes_stock: 'Control de stock',
+    agregar_producto: t('addProduct'),
+    importar_productos: 'Importar productos',
+    importar_contactos: 'Importar contactos',
+    imprimir_etiquetas: 'Imprimir etiquetas',
+    importar_stock_inicial: 'Importar stock inicial',
+    grupos_precios_venta: 'Grupo de precios de venta',
+    garantias_productos: 'Garantías',
+    marcas: t('brands'),
+    categorias: t('categories'),
+    unidades: t('units'),
+    clientes: t('customers'),
+    proveedores: t('suppliers'),
+    grupos_clientes: t('customerGroups'),
+    caja_registradora: t('cashRegister'),
+    ganancias_perdidas: t('profitLoss'),
+    usuarios: t('users'),
+    roles: t('roles'),
+    config_empresa: t('companySettings'),
+    config_factura: t('invoiceSettings'),
+    config_modulos: t('settings'),
+    admin_desarrollador: 'Panel de desarrollador',
+    ubicaciones_comerciales: t('commercialLocations'),
+    todas_ventas: t('allSales'),
+    descuentos_ventas: 'Descuentos',
+    devoluciones_ventas: 'Devoluciones de venta',
+    importar_ventas: 'Importar ventas',
+    cajas: t('cashBank'),
+    informe_caja_pago: t('paymentReport'),
+    ventas_por_producto: t('salesByProduct'),
+    compras_por_producto: t('purchasesByProduct'),
+    cobro_de_ventas: t('salesCollections'),
+    vendedores_comisiones: t('sellersCommissions'),
+    ventas_por_personal: 'Ventas por personal',
+    pedidos: 'Pedidos',
+    informes_operativos: 'Informes operativos',
+    informes_micdepos: t('reports'),
+    fabricacion: 'Fabricación',
+    variaciones_productos: 'Variaciones de productos',
+    cotizaciones: 'Presupuestos y cotizaciones',
+    envios: 'Envíos',
+    remisiones_electronicas: 'Remisiones electrónicas',
+    flujo_fondos: 'Flujo de fondos',
+    plantillas_notificacion: 'Plantillas de notificación',
+    ot: t('workOrders'),
+  })[vistaActiva] || 'GDA POS';
+  const nombreEmpresa = perfilUsuario?.empresas?.nombre || empresaInfo.nombre;
+
+  useEffect(() => {
+    const ruta = location.pathname.toLowerCase();
+    const titulosRuta = {
+      '/invoice-schemes': 'Esquemas de facturación',
+      '/barcodes': 'Configuración de códigos de barras',
+      '/printers': 'Impresoras de tickets',
+      '/scales': 'Configuración de balanzas',
+      '/tax-rates': 'Tasas de impuestos',
+      '/types-of-service': 'Tipos de servicio',
+      '/subscription': 'Suscripción',
+      '/informes/stock': 'Informe de stock',
+      '/informes/deudas': 'Informe de deudas',
+      '/informes/gastos': 'Informe de gastos',
+      '/informes/iva': 'Informe de IVA',
+      '/informes/vencimientos': 'Informe de vencimientos',
+      '/informes/ajustes': 'Informe de ajustes',
+    };
+    const titulo = titulosRuta[ruta] || tituloModulo;
+    document.title = nombreEmpresa ? `${titulo} - ${nombreEmpresa}` : `${titulo} - GDA POS`;
+  }, [location.pathname, nombreEmpresa, tituloModulo]);
 
   useEffect(() => {
     const intervalo = setInterval(() => setFechaHora(new Date()), 30000);
@@ -594,6 +713,7 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
             session={session}
             perfilUsuario={perfilUsuario}
             onVolver={irAInicio}
+            onAbrirGuia={() => setGuiaVisible(true)}
             onSolicitarCierre={(reporte) => {
               setReporteCierre(reporte);
               setCajaActual(null);
@@ -788,6 +908,10 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
   return (
     <div className="flex h-screen bg-[#f3f4f6] font-sans flex-col md:flex-row overflow-hidden">
 
+      {cargandoNavegacion && (
+        <div className="gda-navigation-progress" role="progressbar" aria-label="Cargando módulo" aria-valuetext="Cargando módulo" />
+      )}
+
       {/* Overlay para móvil */}
       {menuMovilAbierto && !posPantallaCompleta && (
         <div
@@ -925,12 +1049,12 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
       {!posPantallaCompleta && (
         <aside className={`
           ${sidebarColapsado ? 'w-[78px]' : 'w-[250px]'}
-          transition-[width,transform] duration-300 ease-out bg-white text-slate-800 flex flex-col h-full shadow-[2px_0_8px_rgba(15,23,42,0.08)] border-r border-slate-200 z-30
+          transition-[width,transform] duration-300 ease-out bg-white text-slate-800 flex flex-col h-full shadow-[4px_0_12px_rgba(15,23,42,0.06)] z-30
           fixed inset-y-0 left-0 transform ${menuMovilAbierto ? 'translate-x-0' : '-translate-x-full'}
           hidden md:relative md:translate-x-0 md:flex
         `}>
           {/* Logo Superior con botón de cerrar para móvil */}
-          <div className="h-16 flex items-center justify-between px-4 border-b border-gradient-to-r from-slate-200 via-slate-150 to-slate-200 bg-gradient-to-r from-white via-slate-50/50 to-white backdrop-blur-sm overflow-hidden">
+          <div className="relative z-10 h-16 flex items-center justify-between px-4 bg-gradient-to-r from-white via-slate-50/50 to-white shadow-[0_2px_6px_rgba(15,23,42,0.08)] backdrop-blur-sm overflow-hidden">
             <div className="flex-1 flex justify-center">
               <LogoPyPos variant={sidebarColapsado ? 'icon' : 'full'} size={sidebarColapsado ? 42 : 46} />
             </div>
@@ -1264,59 +1388,38 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
 
             {/* TÍTULO CENTRADO */}
             <h2 className="text-gray-800 font-black text-base md:text-lg text-center flex-1 hidden md:block">
-                {vistaActiva === 'inicio' && t('home')}
-                {vistaActiva === 'pos' && t('pos')}
-                {vistaActiva === 'reporte_cierre' && 'Cierre'}
-                {vistaActiva === 'nuevo_gasto' && 'Gasto'}
-                {vistaActiva === 'compras' && t('purchases')}
-                {vistaActiva === 'agregar_compra' && t('addPurchase')}
-                {vistaActiva === 'gastos' && t('expenses')}
-                {vistaActiva === 'agregar_gasto' && t('addExpense')}
-                {vistaActiva === 'categorias_gastos' && t('expenseCategories')}
-                {vistaActiva === 'devoluciones_compra' && t('purchaseReturns')}
-                {vistaActiva === 'cobros' && t('pendingOrders')}
-                {vistaActiva === 'catalogo' && t('products')}
-                {vistaActiva === 'catalogo_qr' && 'Catálogo QR'}
-                {vistaActiva === 'stock_history' && 'Historial de existencias'}
-                {vistaActiva === 'transferencias_stock' && 'Transferencias de stock'}
-                {vistaActiva === 'ajustes_stock' && 'Control de stock'}
-                {vistaActiva === 'agregar_producto' && t('addProduct')}
-                {vistaActiva === 'imprimir_etiquetas' && 'Imprimir etiquetas'}
-                {vistaActiva === 'importar_stock_inicial' && 'Importar stock inicial'}
-                {vistaActiva === 'grupos_precios_venta' && 'Grupo de precios de venta'}
-                {vistaActiva === 'garantias_productos' && 'Garantías'}
-                {vistaActiva === 'marcas' && t('brands')}
-                {vistaActiva === 'unidades' && t('units')}
-                {vistaActiva === 'clientes' && t('customers')}
-                {vistaActiva === 'caja_registradora' && t('cashRegister')}
-                {vistaActiva === 'ganancias_perdidas' && t('profitLoss')}
-                {vistaActiva === 'usuarios' && t('users')}
-                {vistaActiva === 'roles' && t('roles')}
-                {vistaActiva === 'config_empresa' && t('companySettings')}
-                {vistaActiva === 'config_factura' && t('invoiceSettings')}
-                {vistaActiva === 'ubicaciones_comerciales' && t('commercialLocations')}
-                {vistaActiva === 'todas_ventas' && t('allSales')}
-                {vistaActiva === 'descuentos_ventas' && 'Descuentos'}
-                {vistaActiva === 'devoluciones_ventas' && 'Devoluciones de venta'}
-                {vistaActiva === 'importar_ventas' && 'Importar ventas'}
-                {vistaActiva === 'cajas' && t('cashBank')}
-                {vistaActiva === 'informe_caja_pago' && t('paymentReport')}
-                {vistaActiva === 'ventas_por_producto' && t('salesByProduct')}
-                {vistaActiva === 'cobro_de_ventas' && t('salesCollections')}
-                {vistaActiva === 'vendedores_comisiones' && t('sellersCommissions')}
-                {vistaActiva === 'ventas_por_personal' && 'Ventas por personal'}
-                {vistaActiva === 'pedidos' && 'Pedidos'}
-                {vistaActiva === 'informes_operativos' && 'Informes operativos'}
-                {vistaActiva === 'fabricacion' && 'Fabricación'}
-                {vistaActiva === 'variaciones_productos' && 'Variaciones de productos'}
-                {vistaActiva === 'cotizaciones' && 'Presupuestos y cotizaciones'}
-                {vistaActiva === 'envios' && 'Envíos'}
-                {vistaActiva === 'remisiones_electronicas' && 'Remisiones electrónicas'}
-                {vistaActiva === 'flujo_fondos' && 'Flujo de fondos'}
+                {tituloModulo}
               </h2>
             <div className="flex-1"></div>
             <div className="hidden md:flex items-center gap-2 lg:gap-3">
                 <LanguageSelector compact />
+              <div className="relative">
+                <button type="button" onClick={() => { setMenuAlertasAbierto((abierto) => !abierto); setMenuAccionesAbierto(false); setMenuCuentaAbierto(false); }} className="relative flex h-9 w-9 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-700 shadow-sm transition hover:border-orange-200 hover:text-orange-600" aria-label={`Alertas de inventario: ${alertasInventario.length}`} aria-expanded={menuAlertasAbierto} aria-haspopup="menu">
+                  <Bell size={18} />
+                  {alertasInventario.length > 0 && <span className="absolute -right-1 -top-1 min-w-4 rounded-full bg-red-600 px-1 text-center text-[10px] font-bold leading-4 text-white shadow">{alertasInventario.length > 99 ? '99+' : alertasInventario.length}</span>}
+                </button>
+                {menuAlertasAbierto && <div className="absolute right-0 top-12 z-50 w-[min(92vw,390px)] overflow-hidden rounded-xl border border-slate-200 bg-white shadow-2xl" role="menu" aria-label="Alertas de inventario">
+                  <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3"><div><p className="text-sm font-bold text-slate-800">Alertas de inventario</p><p className="text-xs text-slate-500">{alertasInventario.length} aviso{alertasInventario.length === 1 ? '' : 's'} activo{alertasInventario.length === 1 ? '' : 's'}</p></div><Bell size={17} className="text-orange-500" /></div>
+                  <div className="max-h-[min(60vh,440px)] overflow-y-auto">
+                    {cargandoAlertasInventario && <p className="p-5 text-center text-sm text-slate-500">Consultando stock y vencimientos…</p>}
+                    {!cargandoAlertasInventario && errorAlertasInventario && <p className="p-5 text-sm text-red-700">No se pudieron consultar las alertas. Revisá la conexión y volvé a abrir la campana.</p>}
+                    {!cargandoAlertasInventario && !errorAlertasInventario && alertasInventario.length === 0 && <div className="p-6 text-center"><span className="mx-auto mb-2 flex h-10 w-10 items-center justify-center rounded-full bg-emerald-50 text-emerald-600">✓</span><p className="text-sm font-semibold text-slate-700">Todo en orden</p><p className="mt-1 text-xs text-slate-500">No hay productos con stock bajo ni próximos a vencer.</p></div>}
+                    {!cargandoAlertasInventario && !errorAlertasInventario && alertasInventario.slice(0, 20).map((alerta) => {
+                      const esStock = alerta.tipo === 'stock';
+                      const titulo = esStock ? (alerta.stock <= 0 ? 'Sin stock' : 'Stock bajo') : (alerta.dias < 0 ? 'Producto vencido' : 'Próximo a vencer');
+                      const detalle = esStock
+                        ? `Disponible: ${alerta.stock.toLocaleString('es-PY')} · mínimo: ${alerta.umbral.toLocaleString('es-PY')}`
+                        : `${alerta.dias < 0 ? `Venció hace ${Math.abs(alerta.dias)} día(s)` : `Vence en ${alerta.dias} día(s)`} · ${new Date(`${alerta.fecha}T00:00:00`).toLocaleDateString('es-PY')}`;
+                      return <button key={alerta.id} type="button" role="menuitem" onClick={() => { setMenuAlertasAbierto(false); irA(esStock ? 'catalogo' : 'informes_operativos', esStock ? '/catalogo' : '/informes/vencimientos'); }} className="flex w-full items-start gap-3 border-b border-slate-100 px-4 py-3 text-left transition hover:bg-slate-50">
+                        <span className={`mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full ${alerta.nivel === 'critico' ? 'bg-red-50 text-red-600' : 'bg-amber-50 text-amber-600'}`}>{esStock ? <PackageX size={16} /> : <CalendarClock size={16} />}</span>
+                        <span className="min-w-0 flex-1"><span className="flex items-center justify-between gap-2"><span className="text-xs font-bold uppercase tracking-wide text-slate-500">{titulo}</span><span className="text-[10px] text-slate-400">{alerta.codigo || ''}</span></span><span className="mt-0.5 block truncate text-sm font-semibold text-slate-800">{alerta.nombre}</span><span className="mt-0.5 block text-xs text-slate-500">{detalle}</span></span>
+                      </button>;
+                    })}
+                    {alertasInventario.length > 20 && !cargandoAlertasInventario && <p className="px-4 py-2 text-center text-xs text-slate-500">Se muestran 20 de {alertasInventario.length} avisos.</p>}
+                  </div>
+                  <div className="flex gap-2 border-t border-slate-100 bg-slate-50 px-3 py-2"><button type="button" onClick={() => { setMenuAlertasAbierto(false); irA('catalogo', '/catalogo'); }} className="flex-1 rounded-lg px-3 py-2 text-xs font-bold text-slate-600 hover:bg-white">Ver catálogo</button><button type="button" onClick={() => { setMenuAlertasAbierto(false); irA('informes_operativos', '/informes/vencimientos'); }} className="flex-1 rounded-lg bg-orange-500 px-3 py-2 text-xs font-bold text-white hover:bg-orange-600">Ver vencimientos</button></div>
+                </div>}
+              </div>
               <div className="relative">
                 <button
                   type="button"
@@ -1357,7 +1460,7 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
               </button>
               <div className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 shadow-sm">
                 <Clock3 size={16} className="text-slate-500" />
-                <span>{new Date().toLocaleDateString('es-PY', { day: '2-digit', month: '2-digit', year: 'numeric' })}</span>
+                <span>{fechaHeaderEmpresa}</span>
               </div>
               <div className="relative">
                 <button
@@ -1497,6 +1600,24 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
             </button>
           </nav>
         )}
+
+        {!posPantallaCompleta && <button type="button" onClick={() => setGuiaVisible(true)} className="fixed bottom-[4.75rem] right-4 z-40 inline-flex items-center gap-2 rounded-full bg-slate-900 px-4 py-3 text-sm font-bold text-white shadow-xl transition hover:bg-slate-700 md:bottom-5" aria-label="Abrir guía de inicio">
+          <BookOpen size={17} /> <span>Guía</span>
+        </button>}
+
+        <GuiaInicial
+          empresaId={empresaInfo.id}
+          usuarioId={perfilUsuario?.auth_user_id || session?.user?.id}
+          empresaNombre={empresaInfo.nombre || perfilUsuario?.empresas?.nombre}
+          moneda={ajustesEmpresa.currency || 'PYG'}
+          cajaAbierta={Boolean(cajaActual)}
+          soloPOS={soloPOS}
+          puedeAbrirVista={puedeVerVista}
+          onNavegar={(vista, ruta) => irA(vista, ruta)}
+          visible={guiaVisible}
+          onCerrar={() => setGuiaVisible(false)}
+          onAbrir={() => setGuiaVisible(true)}
+        />
 
       </div>
     </div>

@@ -3,6 +3,7 @@ import { supabase } from './supabaseClient';
 import { useNotificacion } from './NotificacionContext';
 import { sonidoExito } from './utils/sonido';
 import { useEmpresaInfo, useNombreEmpresa } from './utils/useEmpresa';
+import { useConfiguracionEmpresa } from './utils/useConfiguracionEmpresa';
 import { useUbicacionUsuario } from './utils/useUbicacion';
 import { cantidadInterna, cantidadVisible } from './utils/cantidadProducto';
 import { useLanguage } from './LanguageContext';
@@ -12,6 +13,7 @@ export default function GestorCompras({ vistaInicial = 'lista' }) {
   const { t, locale } = useLanguage();
   const nombreEmpresa = useNombreEmpresa();
   const { id: empresaId } = useEmpresaInfo();
+  const { ajustes: ajustesEmpresa } = useConfiguracionEmpresa(empresaId);
   const { notificar, confirmar } = useNotificacion();
   const [compras, setCompras] = useState([]);
   const [mostrarFormulario, setMostrarFormulario] = useState(vistaInicial === 'agregar');
@@ -23,6 +25,10 @@ export default function GestorCompras({ vistaInicial = 'lista' }) {
   const [busquedaLista, setBusquedaLista] = useState('');
   const [paginaActual, setPaginaActual] = useState(1);
   const [porPagina, setPorPagina] = useState(25);
+  useEffect(() => {
+    const valor = ajustesEmpresa.default_datatable_page_entries;
+    if (valor !== undefined && valor !== '') setPorPagina(valor === 'Todos' ? 0 : Math.max(1, Number(valor) || 25));
+  }, [ajustesEmpresa.default_datatable_page_entries]);
 
   // --- ESTADOS DEL FORMULARIO DE AGREGAR COMPRA ---
   const [proveedor, setProveedor] = useState('');
@@ -105,6 +111,12 @@ export default function GestorCompras({ vistaInicial = 'lista' }) {
   const [marcasDisponibles, setMarcasDisponibles] = useState([]);
   const [unidadesDisponibles, setUnidadesDisponibles] = useState([]);
   const [guardandoProducto, setGuardandoProducto] = useState(false);
+
+  useEffect(() => {
+    if (!mostrarModalProducto) return;
+    const margenPredeterminado = Number(ajustesEmpresa.default_profit_percent);
+    setMargenProdNuevo(Number.isFinite(margenPredeterminado) && margenPredeterminado >= 0 ? margenPredeterminado : 25);
+  }, [mostrarModalProducto, ajustesEmpresa.default_profit_percent]);
 
   // --- ESTADOS DEL MODAL RÁPIDO DE PROVEEDOR ---
   const [mostrarModalProveedor, setMostrarModalProveedor] = useState(false);
@@ -274,7 +286,9 @@ export default function GestorCompras({ vistaInicial = 'lista' }) {
       const datosCompra = {
         proveedor_nombre: proveedor, nro_factura: nroFactura, total: totalCompraFinal,
         saldo_pendiente: saldoPendienteFinal, estado: saldoPendienteFinal <= 0 ? 'pagado' : 'pendiente', fecha: fechaCompra,
-        estado_compra: estadoCompra === 'Seleccione' ? 'Recibido' : estadoCompra,
+        estado_compra: ajustesEmpresa.purchase_settings_explicit && ajustesEmpresa.enable_purchase_status === false
+          ? 'Recibido'
+          : estadoCompra === 'Seleccione' ? 'Recibido' : estadoCompra,
         ubicacion: ubicacionEmpresa,
       };
 
@@ -372,7 +386,7 @@ export default function GestorCompras({ vistaInicial = 'lista' }) {
     setTipoCodigoBarraProdNuevo('Code 128 (C128)'); setIvaPctProdNuevo(10); setTipoImpuestoProdNuevo('Incluido');
     setImeiProdNuevo(false); setNoVenderProdNuevo(false);
     setCampoPersonalizado1(''); setCampoPersonalizado2(''); setCampoPersonalizado3(''); setCampoPersonalizado4('');
-    setPrecioCompraSinIvaProdNuevo(''); setPrecioCompraConIvaProdNuevo(''); setMargenProdNuevo(25); setPrecioVentaConIvaProdNuevo('');
+    setPrecioCompraSinIvaProdNuevo(''); setPrecioCompraConIvaProdNuevo(''); setMargenProdNuevo(Number(ajustesEmpresa.default_profit_percent) || 25); setPrecioVentaConIvaProdNuevo('');
     setTipoProductoProdNuevo('Individual');
     setComboProductosProdNuevo([]);
     setBusquedaComboProdNuevo('');
@@ -719,9 +733,9 @@ export default function GestorCompras({ vistaInicial = 'lista' }) {
   const compraAdeudada = compras.reduce((acc, c) => acc + Number(c.saldo_pendiente || 0), 0);
   const pagadoPorMoneda = granTotal - compraAdeudada;
 
-  const totalPaginasCompras = Math.max(1, Math.ceil(comprasFiltradas.length / porPagina));
+  const totalPaginasCompras = porPagina === 0 ? 1 : Math.max(1, Math.ceil(comprasFiltradas.length / porPagina));
   const paginaSegura = Math.min(paginaActual, totalPaginasCompras);
-  const comprasPagina = comprasFiltradas.slice((paginaSegura - 1) * porPagina, paginaSegura * porPagina);
+  const comprasPagina = porPagina === 0 ? comprasFiltradas : comprasFiltradas.slice((paginaSegura - 1) * porPagina, paginaSegura * porPagina);
 
   const desgloseEstadoPago = comprasFiltradas.reduce((acc, c) => {
     const label = getEstadoPago(c).label;
@@ -783,7 +797,7 @@ export default function GestorCompras({ vistaInicial = 'lista' }) {
                 </div>
               </div>
 
-              <div>
+              {!(ajustesEmpresa.purchase_settings_explicit && ajustesEmpresa.enable_purchase_status === false) && <div>
                 <label className="block text-xs font-bold text-gray-700 mb-1 flex items-center gap-1">
                   Estado de compra:* <span className="text-blue-400 text-[10px] cursor-help">ⓘ</span>
                 </label>
@@ -793,7 +807,7 @@ export default function GestorCompras({ vistaInicial = 'lista' }) {
                   <option value="Pendiente">Pendiente</option>
                   <option value="Solicitado">Solicitado</option>
                 </select>
-              </div>
+              </div>}
 
               <div className="md:col-span-3">
                 <label className="block text-xs font-bold text-gray-700 mb-1">Dirección:</label>
@@ -1059,9 +1073,10 @@ export default function GestorCompras({ vistaInicial = 'lista' }) {
                     <option value={10}>10</option>
                     <option value={25}>25</option>
                     <option value={50}>50</option>
+                    <option value={100}>100</option><option value={200}>200</option><option value={500}>500</option><option value={1000}>1.000</option><option value={0}>Todos</option>
                   </select>
                   <span>{t('entries')}</span>
-                  <button onClick={exportarComprasCSV} className="bg-gray-100 border text-gray-600 px-2.5 py-1 rounded text-xs font-semibold hover:bg-gray-200 ml-2">📄 Exportar a CSV</button>
+                  {ajustesEmpresa.system_settings_explicit && ajustesEmpresa.is_enabled_export === false ? null : <button onClick={exportarComprasCSV} className="bg-gray-100 border text-gray-600 px-2.5 py-1 rounded text-xs font-semibold hover:bg-gray-200 ml-2">📄 Exportar a CSV</button>}
                   <button onClick={() => window.print()} className="bg-gray-100 border text-gray-600 px-2.5 py-1 rounded text-xs font-semibold hover:bg-gray-200">🖨️ Imprimir</button>
                 </div>
                 <div className="flex items-center gap-2">

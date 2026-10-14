@@ -1,5 +1,6 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { getAuthenticatedUser, unauthorized } from '../_shared/auth.ts';
+import { getGoekuaCredential } from '../_shared/goekua.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -41,15 +42,13 @@ Deno.serve(async (req) => {
     // Obtener API Key de la empresa
     const { data: empresa, error: empresaError } = await supabase
       .from('empresas')
-      .select('fe_api_key, fe_activa')
+      .select('id')
       .eq('id', empresaId)
       .single();
+    const goekua = await getGoekuaCredential(supabase, empresaId);
 
-    if (empresaError || !empresa) {
-      throw new Error('Empresa no encontrada.');
-    }
-
-    if (!empresa.fe_activa || !empresa.fe_api_key) {
+    if (empresaError || !empresa) throw new Error('Empresa no encontrada.');
+    if (!goekua) {
       return new Response(
         JSON.stringify({ error: 'Facturación electrónica no está activa.' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
@@ -58,10 +57,10 @@ Deno.serve(async (req) => {
 
     // Consultar el documento en Goekua
     const response = await fetch(
-      `https://api.goekua.com.py/api/electronic-document/${cdc}`,
+      `${goekua.baseUrl}/api/electronic-document/${encodeURIComponent(cdc)}`,
       {
         method: 'GET',
-        headers: { 'x-api-key': empresa.fe_api_key },
+        headers: { 'x-api-key': goekua.apiKey },
       }
     );
 

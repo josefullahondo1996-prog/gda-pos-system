@@ -3,12 +3,15 @@ import { Building2, Calculator, Check, ChevronDown, CircleDollarSign, FileText, 
 import { Link } from 'react-router-dom';
 import { supabase } from './supabaseClient';
 import { sonidoExito, sonidoError } from './utils/sonido';
+import { useEmpresaInfo } from './utils/useEmpresa';
+import { notificarConfiguracionEmpresaActualizada } from './utils/useConfiguracionEmpresa';
 
 const BASE_INPUT = 'w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-800 outline-none transition placeholder:text-slate-400 focus:border-orange-400 focus:ring-4 focus:ring-orange-100 disabled:bg-slate-100';
 const months = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
 const currencyCodes = typeof Intl.supportedValuesOf === 'function' ? Intl.supportedValuesOf('currency').filter(code => code !== 'XXX') : ['PYG','USD','BRL','ARS','EUR','CLP','UYU','BOB','PEN','COP','MXN'];
 const currencyNames = new Intl.DisplayNames(['es-PY'], { type: 'currency' });
 const currencies = currencyCodes.map(value => ({ value, label: `${currencyNames.of(value)} (${value})` }));
+const normalizarBusqueda = (valor) => String(valor || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLocaleLowerCase('es');
 const timeZones = [...new Set([...(typeof Intl.supportedValuesOf === 'function' ? Intl.supportedValuesOf('timeZone') : ['America/Asuncion']), 'UTC'])].sort();
 const field = (label, key, type = 'text', options = [], extra = {}) => ({ label, key, type, options, ...extra });
 const check = (label, key, extra = {}) => field(label, key, 'checkbox', [], extra);
@@ -17,15 +20,15 @@ const group = (title, fields) => ({ title, fields });
 
 const SECTION_DEFS = [
   { id: 'empresa', label: 'Empresa', icon: Building2, description: 'Identidad del negocio, moneda y parámetros generales.', groups: [
-    group('Datos de la empresa', [field('Nombre de la empresa', 'nombre', 'company'), field('RUC', 'ruc', 'company-ruc'), field('Dirección', 'direccion', 'company-address'), field('Teléfono', 'telefono', 'company-phone'), field('Fecha de inicio', 'start_date', 'date'), field('Porcentaje de beneficio predeterminado', 'default_profit_percent', 'number', [], { min: 0, max: 100, suffix: '%' }), select('Moneda', 'currency', currencies), check('Habilitar multidivisa', 'enable_multicurrency'), field('Monedas extra activas', 'multicurrency_ids', 'multiselect', currencies), select('Colocación del símbolo de moneda', 'currency_symbol_placement', ['Antes de la cantidad', 'Después de la cantidad']), select('Zona horaria', 'time_zone', timeZones), field('Logotipo de la empresa', 'logo_url', 'logo'), select('Mes de inicio del año fiscal', 'fy_start_month', months), select('Método de contabilidad', 'accounting_method', ['FIFO (Primero en entrar, primero en salir)', 'LIFO (Último en entrar, primero en salir)']), field('Días de edición de transacción', 'transaction_edit_days', 'number', [], { min: 0 }), select('Formato de fecha', 'date_format', ['dd-mm-yyyy','mm-dd-yyyy','dd/mm/yyyy','mm/dd/yyyy']), select('Formato de tiempo', 'time_format', ['12 horas','24 horas']), select('Precisión de moneda', 'currency_precision', ['0','1','2','3','4']), select('Precisión de cantidad', 'quantity_precision', ['0','1','2','3','4'])]),
+    group('Datos de la empresa', [field('Nombre de la empresa', 'nombre', 'company'), field('RUC', 'ruc', 'company-ruc'), field('Dirección', 'direccion', 'company-address'), field('Teléfono', 'telefono', 'company-phone'), field('Fecha de inicio', 'start_date', 'date'), field('Porcentaje de beneficio predeterminado', 'default_profit_percent', 'number', [], { min: 0, max: 100, suffix: '%' }), field('Moneda', 'currency', 'search-select', currencies), check('Habilitar multidivisa', 'enable_multicurrency'), field('Monedas extra activas', 'multicurrency_ids', 'search-multiselect', currencies), select('Colocación del símbolo de moneda', 'currency_symbol_placement', ['Antes de la cantidad', 'Después de la cantidad']), select('Zona horaria', 'time_zone', timeZones), field('Logotipo de la empresa', 'logo_url', 'logo'), select('Mes de inicio del año fiscal', 'fy_start_month', months), select('Método de contabilidad', 'accounting_method', ['FIFO (Primero en entrar, primero en salir)','LIFO (Último en entrar, primero en salir)']), field('Días de edición de transacción', 'transaction_edit_days', 'number', [], { min: 0 }), select('Formato de fecha', 'date_format', ['dd-mm-yyyy','mm-dd-yyyy','dd/mm/yyyy','mm/dd/yyyy']), select('Formato de tiempo', 'time_format', ['12 horas','24 horas']), select('Precisión de moneda', 'currency_precision', ['0','1','2','3','4']), select('Precisión de cantidad', 'quantity_precision', ['0','1','2','3','4'])]),
   ]},
   { id: 'impuesto', label: 'Impuesto', icon: Calculator, description: 'Nombres e identificadores fiscales y aplicación en las operaciones.', groups: [group('Datos fiscales', [field('Impuesto 1: nombre', 'tax_label_1'), field('Impuesto 1: número', 'tax_number_1'), field('Impuesto 2: nombre', 'tax_label_2'), field('Impuesto 2: número', 'tax_number_2'), check('Habilitar impuesto en línea en compras y ventas', 'enable_inline_tax')])]},
-  { id: 'producto', label: 'Producto', icon: Package, description: 'Valores predeterminados y opciones de inventario.', groups: [group('Catálogo e inventario', [field('Prefijo SKU', 'sku_prefix'), check('Habilitar vencimiento del producto', 'enable_product_expiry'), select('Tipo de vencimiento', 'expiry_type', ['Lista de vencimientos','Fecha de fabricación y período de vencimiento']), select('Acción al vencer un producto', 'on_product_expiry', ['Seguir vendiendo','Dejar de vender antes del vencimiento']), field('Días antes para detener la venta', 'stop_selling_before', 'number', [], { min: 0 }), check('Habilitar marcas', 'enable_brand'), check('Habilitar categorías', 'enable_category'), check('Habilitar subcategorías', 'enable_sub_category'), check('Habilitar información de precio e impuestos', 'enable_price_tax'), select('Unidad predeterminada', 'default_unit', ['UNID (UNID)','LITROS (LS)','METROS (MT)','Servicios (S)','Kg (K)']), check('Habilitar subunidades', 'enable_sub_units'), check('Habilitar bastidores', 'enable_racks'), check('Habilitar filas', 'enable_row'), check('Habilitar posición', 'enable_position'), check('Habilitar garantía de producto', 'enable_product_warranty'), check('Habilitar unidad secundaria', 'enable_secondary_unit')])]},
+  { id: 'producto', label: 'Producto', icon: Package, description: 'Valores predeterminados y opciones de inventario.', groups: [group('Catálogo e inventario', [field('Prefijo SKU', 'sku_prefix'), check('Habilitar vencimiento del producto', 'enable_product_expiry'), select('Tipo de vencimiento', 'expiry_type', ['Agregar fecha de vencimiento','Agregar fecha de fabricación y período de vencimiento']), select('Acción al vencer un producto', 'on_product_expiry', ['Sigue vendiendo','Dejar de vender n días antes']), field('Días antes para detener la venta', 'stop_selling_before', 'number', [], { min: 0 }), check('Habilitar marcas', 'enable_brand'), check('Habilitar categorías', 'enable_category'), check('Habilitar subcategorías', 'enable_sub_category'), check('Habilitar información de precio e impuestos', 'enable_price_tax'), select('Unidad predeterminada', 'default_unit', ['UNID (UNID)','LITROS (LS)','METROS (MT)','Servicios (S)','Kg (K)']), check('Habilitar subunidades', 'enable_sub_units'), check('Habilitar bastidores', 'enable_racks'), check('Habilitar filas', 'enable_row'), check('Habilitar posición', 'enable_position'), check('Habilitar garantía de producto', 'enable_product_warranty'), check('Habilitar unidad secundaria', 'enable_secondary_unit')]), group('Campos e integraciones del catálogo', [field('Etiqueta de campo personalizado 1', 'campo_personalizado_1', 'text', [], { placeholder: 'Ej.: Color' }), field('Etiqueta de campo personalizado 2', 'campo_personalizado_2', 'text', [], { placeholder: 'Ej.: Modelo' }), field('Etiqueta de campo personalizado 3', 'campo_personalizado_3', 'text', [], { placeholder: 'Ej.: Material' }), field('Etiqueta de campo personalizado 4', 'campo_personalizado_4', 'text', [], { placeholder: 'Ej.: Tamaño' }), field('Tipos de servicio (separados por coma)', 'product_service_types', 'textarea', [], { placeholder: 'Ej.: Instalación, Reparación, Mantenimiento' })])] },
   { id: 'contacto', label: 'Contacto', icon: Users, description: 'Límite de crédito predeterminado para clientes y proveedores.', groups: [group('Clientes y proveedores', [field('Límite de crédito predeterminado', 'default_credit_limit', 'number', [], { min: 0 })])]},
   { id: 'venta', label: 'Venta', icon: ShoppingCart, description: 'Valores predeterminados de venta, personal de servicio y comisiones.', groups: [group('Valores de venta', [field('Descuento de venta predeterminado', 'default_sales_discount', 'number', [], { min: 0, max: 100, suffix: '%' }), select('Impuesto de venta predeterminado', 'default_sales_tax', ['Ninguna','IVA 10%','IVA 5%','EXENTA']), select('Método para agregar artículos', 'item_addition_method', ['Agregar en una nueva fila','Aumentar la cantidad si el artículo ya existe']), select('Método de redondeo', 'amount_rounding_method', ['Ninguna','Número entero más cercano','Múltiplo de 0.05','Múltiplo de 0.1','Múltiplo de 0.5']), check('El precio de venta es el precio mínimo', 'enable_msp'), check('Permitir sobreventa', 'allow_overselling'), check('Habilitar órdenes de venta', 'enable_sales_order'), check('Exigir plazo de pago', 'is_pay_term_required')]), group('Personal y cobros', [select('Agente comercial', 'sales_cmsn_agnt', ['Desactivar','Usuario conectado','Seleccionar de la lista de usuarios','Seleccionar de la lista de agentes comerciales']), select('Cálculo de comisión', 'cmmsn_calculation_type', ['Valor de la factura','Pago recibido']), check('Exigir agente comercial', 'is_commission_agent_required'), check('Habilitar enlace de pago', 'enable_payment_link')]), group('Pasarelas de pago (opcional)', [field('Razorpay Key ID', 'razor_pay_key_id'), field('Razorpay Key Secret', 'razor_pay_key_secret', 'password'), field('Stripe public key', 'stripe_public_key'), field('Stripe secret key', 'stripe_secret_key', 'password')])]},
   { id: 'pos', label: 'Punto de venta', icon: Store, description: 'Atajos, opciones de caja, productos, tickets y balanza.', groups: [group('Atajos de teclado', [field('Venta rápida', 'shortcut_express_checkout'), field('Pagar y finalizar', 'shortcut_pay_checkout'), field('Guardar como borrador', 'shortcut_draft'), field('Cancelar', 'shortcut_cancel'), field('Cantidad de productos recientes', 'shortcut_recent_product_quantity'), field('Balanza', 'shortcut_weighing_scale'), field('Editar descuento', 'shortcut_edit_discount'), field('Editar impuesto de orden', 'shortcut_edit_order_tax'), field('Agregar fila de pago', 'shortcut_add_payment_row'), field('Finalizar pago', 'shortcut_finalize_payment'), field('Agregar producto nuevo', 'shortcut_add_new_product')]), group('Comportamiento del POS', [check('Desactivar finalizar compra', 'disable_pay_checkout'), check('Desactivar borradores', 'disable_draft'), check('Permitir nombre para cliente ocasional', 'enable_walk_in_name'), check('Usar nueva interfaz del POS', 'enable_new_pos_ui'), check('Habilitar caja central para vendedores', 'central_checkout'), check('Desactivar pago rápido', 'disable_express_checkout'), check('Ocultar sugerencias de productos', 'hide_product_suggestion'), check('Ocultar transacciones recientes', 'hide_recent_trans'), check('Deshabilitar descuentos', 'disable_discount'), check('Deshabilitar impuestos de orden', 'disable_order_tax'), check('Permitir editar subtotal', 'is_pos_subtotal_editable'), check('Desactivar ventas en espera', 'disable_suspend'), check('Habilitar fecha de transacción', 'enable_transaction_date'), check('Mostrar personal de servicio en cada línea', 'inline_service_staff'), check('Exigir personal de servicio', 'is_service_staff_required'), check('Deshabilitar venta a crédito', 'disable_credit_sale_button'), check('Habilitar balanza', 'enable_weighing_scale'), check('Mostrar esquema de factura', 'show_invoice_scheme'), check('Mostrar diseño de factura', 'show_invoice_layout'), check('Imprimir al suspender venta', 'print_on_suspend'), check('Mostrar precios en sugerencias', 'show_pricing_on_product_suggestion')]), group('Balanza', [field('Prefijo de etiqueta', 'scale_label_prefix'), select('Longitud SKU del producto', 'scale_product_sku_length', ['1','2','3','4','5','6','7','8','9']), select('Longitud entera de cantidad', 'scale_qty_length', ['1','2','3','4','5']), select('Decimales de cantidad', 'scale_qty_length_decimal', ['1','2','3','4']), select('Tipo de conexión', 'scale_connection_type', ['Ninguna','USB/Serial (Web Serial API)','Red (WebSocket)']), select('Velocidad de conexión serial', 'scale_baud_rate', ['9600','19200','38400','57600','115200']), field('Comando para leer peso', 'scale_weight_command'), field('Host de balanza de red', 'scale_network_host'), field('Puerto de balanza', 'scale_network_port', 'number', [], { min: 1, max: 65535 })])]},
   { id: 'compras', label: 'Compras', icon: Truck, description: 'Edición de precios, lotes, órdenes y validaciones fiscales.', groups: [group('Preferencias de compra', [check('Permitir editar el producto desde compras', 'enable_editing_product_from_purchase'), check('Permitir editar precios desde ajuste de stock', 'enable_editing_price_from_stock_adjustment'), check('Habilitar estado de compra', 'enable_purchase_status'), check('Habilitar lotes', 'enable_lot_number'), check('Habilitar órdenes de compra', 'enable_purchase_order'), check('Exigir datos fiscales completos (RG-90)', 'rg90_modo_estricto'), field('Exigir desde la fecha', 'rg90_estricto_desde', 'date')])]},
-  { id: 'pago', label: 'Pago', icon: CircleDollarSign, description: 'Denominaciones y validación del efectivo recibido.', groups: [group('Denominaciones de efectivo', [field('Denominaciones (separadas por coma)', 'cash_denominations', 'textarea'), select('Mostrar denominaciones en', 'enable_cash_denomination_on', ['Pantalla POS','Todas las pantallas']), field('Métodos de pago para denominaciones', 'cash_denomination_methods', 'multiselect', ['Efectivo','Tarjeta','Cheque','Transferencia bancaria','Otro','Pago personalizado 1','Pago personalizado 2','Pago personalizado 3','Pago personalizado 4','Pago personalizado 5','Pago personalizado 6','Pago personalizado 7']), check('Exigir coincidencia exacta de denominaciones', 'cash_denomination_strict_check')])]},
+  { id: 'pago', label: 'Pago', icon: CircleDollarSign, description: 'Denominaciones y validación del efectivo recibido.', groups: [group('Denominaciones de efectivo', [field('Denominaciones (separadas por coma)', 'cash_denominations', 'textarea'), select('Mostrar denominaciones en', 'enable_cash_denomination_on', ['Pantalla POS','Todas las pantallas']), field('Métodos de pago para denominaciones', 'cash_denomination_methods', 'multiselect', ['Efectivo','Tarjeta','Cheque','Transferencia','Otro','Pago personalizado 1','Pago personalizado 2','Pago personalizado 3','Pago personalizado 4','Pago personalizado 5','Pago personalizado 6','Pago personalizado 7']), check('Exigir coincidencia exacta de denominaciones', 'cash_denomination_strict_check')])]},
   { id: 'tablero', label: 'Tablero', icon: Monitor, description: 'Avisos visibles en el tablero principal.', groups: [group('Alertas', [field('Avisar vencimiento de stock con anticipación (días)', 'stock_expiry_alert_days', 'number', [], { min: 0 })])]},
   { id: 'sistema', label: 'Sistema', icon: Settings, description: 'Apariencia y opciones generales de navegación.', groups: [group('Preferencias de interfaz', [select('Color del tema', 'theme_color', ['Blue','Black','Purple','Green','Red','Yellow','Blue Light','Black Light','Purple Light','Green Light','Red Light']), select('Filas predeterminadas por tabla', 'default_datatable_page_entries', ['25','50','100','200','500','1000','Todos']), check('Mostrar texto de ayuda', 'enable_tooltip'), check('Habilitar exportación de datos', 'is_enabled_export')])]},
   { id: 'prefijos', label: 'Prefijos', icon: FileText, description: 'Prefijos usados al generar números de referencia.', groups: [group('Numeración de documentos', ['purchase','purchase_return','purchase_order','stock_transfer','stock_adjustment','sell_return','expense','contacts','purchase_payment','sell_payment','expense_payment','business_location','username','subscription','draft','sales_order'].map((key,index)=>field(['Compra','Devolución de compra','Orden de compra','Transferencia de stock','Ajuste de stock','Devolución de venta','Gastos','Cliente/Proveedor','Pago de compra','Pago de venta','Pago de gastos','Ubicación comercial','Nombre de usuario','Suscripción','Borrador','Orden de venta'][index], `prefix_${key}`))) ]},
@@ -52,14 +55,15 @@ const ALL_FIELDS = SECTION_DEFS.flatMap(section => section.groups.flatMap(g => g
 const getDefaults = () => {
   const initial = {};
   for (const f of ALL_FIELDS) {
-    if (f.type === 'checkbox') initial[f.key] = f.key === 'enable_inline_tax';
-    else if (f.type === 'multiselect') initial[f.key] = [];
+    if (f.type === 'checkbox') initial[f.key] = f.key.startsWith('module_') || ['enable_inline_tax', 'enable_brand', 'enable_category', 'enable_sub_category', 'enable_product_expiry', 'enable_product_warranty', 'enable_price_tax', 'enable_weighing_scale', 'is_enabled_export'].includes(f.key);
+    else if (['multiselect', 'search-multiselect'].includes(f.type)) initial[f.key] = [];
     else if (f.key === 'currency') initial[f.key] = 'PYG';
     else if (f.key === 'currency_symbol_placement') initial[f.key] = 'Después de la cantidad';
     else if (f.key === 'time_zone') initial[f.key] = 'America/Asuncion';
     else if (f.key === 'fy_start_month') initial[f.key] = 'Enero';
     else if (f.key === 'accounting_method') initial[f.key] = 'FIFO (Primero en entrar, primero en salir)';
     else if (f.key === 'transaction_edit_days') initial[f.key] = 350;
+    else if (f.key === 'default_datatable_page_entries') initial[f.key] = '25';
     else if (f.key === 'date_format') initial[f.key] = 'dd/mm/yyyy';
     else if (f.key === 'time_format') initial[f.key] = '12 horas';
     else if (f.key === 'currency_precision' || f.key === 'quantity_precision') initial[f.key] = '0';
@@ -70,6 +74,34 @@ const getDefaults = () => {
   return initial;
 };
 
+const normalizeValues = (source = {}) => {
+  const values = { ...getDefaults() };
+  if (!source || typeof source !== 'object' || Array.isArray(source)) return values;
+  for (const f of ALL_FIELDS) {
+    if (!Object.hasOwn(source, f.key)) continue;
+    const raw = source[f.key];
+    if (f.type === 'checkbox') values[f.key] = raw === true || raw === 1 || raw === '1' || raw === 'true';
+    else if (['multiselect', 'search-multiselect'].includes(f.type)) values[f.key] = Array.isArray(raw) ? raw : [];
+    else if (f.type === 'number') values[f.key] = raw == null || raw === '' ? '' : Number.isFinite(Number(raw)) ? Number(raw) : values[f.key];
+    else if (raw == null || ['string', 'number'].includes(typeof raw)) values[f.key] = raw ?? '';
+  }
+  values.module_settings_explicit = source.module_settings_explicit === true;
+  if (!values.module_settings_explicit) {
+    for (let index = 1; index <= 15; index += 1) values[`module_${index}`] = true;
+  }
+  values.system_settings_explicit = source.system_settings_explicit === true;
+  if (!values.system_settings_explicit) values.is_enabled_export = true;
+  values.purchase_settings_explicit = source.purchase_settings_explicit === true;
+  return values;
+};
+
+const parseLocalConfiguration = (saved) => {
+  if (saved?.configuracion && typeof saved.configuracion === 'object' && !Array.isArray(saved.configuracion)) return saved.configuracion;
+  // Older builds stored only configuracion.modulos under `extra`.
+  if (saved?.extra && typeof saved.extra === 'object' && !Array.isArray(saved.extra)) return { version: saved.version || 1, modulos: saved.extra };
+  return {};
+};
+
 const parseImage = (file) => new Promise((resolve, reject) => {
   const reader = new FileReader();
   reader.onload = () => resolve(String(reader.result || ''));
@@ -78,9 +110,15 @@ const parseImage = (file) => new Promise((resolve, reject) => {
 });
 
 export default function ConfiguracionEmpresa({ perfilUsuario }) {
-  const empresaId = perfilUsuario?.empresa_id;
+  // El resto del POS resuelve la empresa tanto desde el perfil como desde
+  // el usuario autenticado. Reutilizamos esa misma fuente para no dejar esta
+  // vista vacía cuando el perfil llega sin el FK directo.
+  const empresaInfo = useEmpresaInfo();
+  const empresaId = perfilUsuario?.empresa_id || perfilUsuario?.empresas?.id || empresaInfo.id;
   const [empresa, setEmpresa] = useState({ nombre: '', ruc: '', direccion: '', telefono: '', logo_url: '' });
   const [valores, setValores] = useState(() => getDefaults());
+  const [busquedasCampo, setBusquedasCampo] = useState({});
+  const [selectorAbierto, setSelectorAbierto] = useState({});
   const [configuracionExtra, setConfiguracionExtra] = useState({});
   const [seccionActiva, setSeccionActiva] = useState('empresa');
   const [cargando, setCargando] = useState(true);
@@ -96,7 +134,12 @@ export default function ConfiguracionEmpresa({ perfilUsuario }) {
       setCargando(true);
       setErrorCarga('');
       if (!empresaId) {
-        if (activo) { setErrorCarga('No se encontró una empresa asociada a este usuario.'); setCargando(false); }
+        if (activo) {
+          setErrorCarga(perfilUsuario?.es_desarrollador
+            ? 'La cuenta de desarrollador no está asociada a una empresa. Ingresá con un usuario de una empresa para editar su configuración.'
+            : 'No se encontró una empresa asociada a este usuario. Verificá que el perfil tenga una empresa vinculada.');
+          setCargando(false);
+        }
         return;
       }
       const { data, error } = await supabase.from('empresas').select('nombre,ruc,direccion,telefono,logo_url,configuracion').eq('id', empresaId).maybeSingle();
@@ -109,23 +152,23 @@ export default function ConfiguracionEmpresa({ perfilUsuario }) {
           setEmpresa({ nombre: base.nombre || '', ruc: base.ruc || '', direccion: base.direccion || '', telefono: base.telefono || '', logo_url: base.logo_url || '' });
           try {
             const saved = JSON.parse(localStorage.getItem(`pypos-config-empresa-${empresaId}`) || '{}');
-            setValores({ ...getDefaults(), ...(saved.ajustes || {}) });
-            setConfiguracionExtra(saved.extra && typeof saved.extra === 'object' ? saved.extra : {});
+            setValores(normalizeValues(saved.ajustes));
+            setConfiguracionExtra(parseLocalConfiguration(saved));
           } catch { setValores(getDefaults()); }
           setAvisoLocal(true);
         }
       } else if (data) {
         setEmpresa({ nombre: data.nombre || '', ruc: data.ruc || '', direccion: data.direccion || '', telefono: data.telefono || '', logo_url: data.logo_url || '' });
         const saved = data.configuracion && typeof data.configuracion === 'object' ? data.configuracion : {};
-        setValores({ ...getDefaults(), ...(saved.ajustes || {}) });
-        setConfiguracionExtra(saved.modulos && typeof saved.modulos === 'object' ? saved.modulos : {});
+        setValores(normalizeValues(saved.ajustes));
+        setConfiguracionExtra(saved);
         setAvisoLocal(false);
       } else setErrorCarga('No se encontraron los datos de la empresa.');
       setCargando(false);
     };
     cargar();
     return () => { activo = false; };
-  }, [empresaId]);
+  }, [empresaId, perfilUsuario?.es_desarrollador]);
 
   const actualizarValor = (key, value) => setValores(current => ({ ...current, [key]: value }));
   const actualizarEmpresa = (key, value) => setEmpresa(current => ({ ...current, [key]: value }));
@@ -133,36 +176,77 @@ export default function ConfiguracionEmpresa({ perfilUsuario }) {
   const guardar = async (event) => {
     event?.preventDefault();
     if (!empresaId || !empresa.nombre.trim()) return;
+    if (/^file:/i.test(empresa.logo_url)) {
+      setMensaje('No se puede guardar una ruta file://. Elegí el archivo con “Seleccionar archivo” o pegá una URL pública HTTPS.');
+      return;
+    }
+    if (empresa.logo_url && !/^https:\/\//i.test(empresa.logo_url) && !/^data:image\/(png|jpeg|webp|svg\+xml);base64,/i.test(empresa.logo_url)) {
+      setMensaje('El logotipo debe ser una imagen cargada o una URL pública HTTPS.');
+      return;
+    }
     setGuardando(true);
     setMensaje('');
-    const datosEmpresa = { nombre: empresa.nombre.trim(), ruc: empresa.ruc.trim() || null, direccion: empresa.direccion.trim() || null, telefono: empresa.telefono.trim() || null, logo_url: empresa.logo_url || null };
-    const { error: errorCompleto } = await supabase.from('empresas').update({ ...datosEmpresa, configuracion: { version: 1, ...configuracionExtra, ajustes: valores } }).eq('id', empresaId);
-    if (errorCompleto) {
-      const { error: errorBase } = await supabase.from('empresas').update(datosEmpresa).eq('id', empresaId);
-      if (errorBase) {
-        setGuardando(false);
-        sonidoError();
-        setMensaje(`No se pudieron guardar los datos de la empresa: ${errorBase.message}`);
-        return;
+    try {
+      const datosEmpresa = { nombre: empresa.nombre.trim(), ruc: empresa.ruc.trim() || null, direccion: empresa.direccion.trim() || null, telefono: empresa.telefono.trim() || null, logo_url: empresa.logo_url || null };
+      const { data: actual, error: errorLectura } = await supabase.from('empresas').select('configuracion').eq('id', empresaId).maybeSingle();
+      const columnaNoDisponible = errorLectura?.code === '42703' || /configuracion.*(does not exist|schema cache)|column.*configuracion.*not found/i.test(errorLectura?.message || '');
+      if (errorLectura && !columnaNoDisponible) throw new Error(`No se pudo leer la configuración actual; no guardé cambios para evitar sobrescribirla. ${errorLectura.message}`);
+      const configuracionBase = actual?.configuracion && typeof actual.configuracion === 'object' && !Array.isArray(actual.configuracion)
+        ? actual.configuracion
+        : configuracionExtra;
+      const ajustesActualizados = {
+        ...valores,
+        module_settings_explicit: activeSection.id === 'modulos' || valores.module_settings_explicit === true,
+        system_settings_explicit: activeSection.id === 'sistema' || valores.system_settings_explicit === true,
+        purchase_settings_explicit: activeSection.id === 'compras' || valores.purchase_settings_explicit === true,
+      };
+      const configuracionActualizada = { ...configuracionBase, version: 1, ajustes: ajustesActualizados };
+      let empresaActualizada = null;
+      let errorCompleto = errorLectura;
+      if (!errorLectura) {
+        const resultado = await supabase.from('empresas')
+          .update({ ...datosEmpresa, configuracion: configuracionActualizada })
+          .eq('id', empresaId)
+          .select('id')
+          .maybeSingle();
+        empresaActualizada = resultado.data;
+        errorCompleto = resultado.error;
       }
+
+      if (errorCompleto || !empresaActualizada) {
+        const { data: empresaBase, error: errorBase } = await supabase.from('empresas')
+          .update(datosEmpresa)
+          .eq('id', empresaId)
+          .select('id')
+          .maybeSingle();
+        if (errorBase || !empresaBase) throw new Error(errorBase?.message || 'No se encontró una empresa autorizada para guardar los cambios.');
+
+        try { localStorage.setItem(`pypos-config-empresa-${empresaId}`, JSON.stringify({ version: 1, configuracion: configuracionActualizada, ajustes: ajustesActualizados })); } catch { /* persistencia local no disponible */ }
+        setConfiguracionExtra(configuracionBase);
+        setAvisoLocal(true);
+        notificarConfiguracionEmpresaActualizada(empresaId);
+        setMensaje('Se guardaron los datos principales. La configuración detallada quedó en este navegador; aplicá database/migration_configuracion_empresa.sql para sincronizarla con Supabase.');
+      } else {
+        setConfiguracionExtra(configuracionBase);
+        setAvisoLocal(false);
+        try { localStorage.removeItem(`pypos-config-empresa-${empresaId}`); } catch { /* sin acción */ }
+        notificarConfiguracionEmpresaActualizada(empresaId);
+        setMensaje('Configuración de empresa guardada.');
+        sonidoExito();
+      }
+    } catch (error) {
+      sonidoError();
+      setMensaje(`No se pudieron guardar los datos de la empresa: ${error?.message || 'Error de conexión.'}`);
+    } finally {
       setGuardando(false);
-      try { localStorage.setItem(`pypos-config-empresa-${empresaId}`, JSON.stringify({ version: 1, extra: configuracionExtra, ajustes: valores })); } catch { /* el servidor conserva los datos principales */ }
-      setAvisoLocal(true);
-      setMensaje('Se guardaron los datos principales. Para guardar todas las pestañas en Supabase, aplicá database/migration_configuracion_empresa.sql; por ahora los ajustes se guardaron en este navegador.');
-    } else {
-      setAvisoLocal(false);
-      try { localStorage.removeItem(`pypos-config-empresa-${empresaId}`); } catch { /* sin acción */ }
-      setMensaje('Configuración de empresa guardada.');
     }
-    setGuardando(false);
-    sonidoExito();
   };
 
   const activeSection = useMemo(() => SECTION_DEFS.find(section => section.id === seccionActiva) || SECTION_DEFS[0], [seccionActiva]);
 
   const renderField = (f) => {
     const common = { id: `empresa-${f.key}`, className: BASE_INPUT, disabled: guardando };
-    const value = valores[f.key] ?? (f.type === 'multiselect' ? [] : '');
+    const value = valores[f.key] ?? (['multiselect', 'search-multiselect'].includes(f.type) ? [] : '');
     if (f.type === 'company') return <input {...common} value={empresa.nombre} onChange={e => actualizarEmpresa('nombre', e.target.value)} maxLength={120} required />;
     if (f.type === 'company-ruc') return <input {...common} value={empresa.ruc} onChange={e => actualizarEmpresa('ruc', e.target.value)} maxLength={30} placeholder="Número de RUC" />;
     if (f.type === 'company-address') return <input {...common} value={empresa.direccion} onChange={e => actualizarEmpresa('direccion', e.target.value)} maxLength={200} placeholder="Dirección comercial" />;
@@ -177,13 +261,37 @@ export default function ConfiguracionEmpresa({ perfilUsuario }) {
           try { actualizarEmpresa('logo_url', await parseImage(file)); setLogoError(false); setMensaje(''); } catch { setMensaje('No se pudo leer la imagen elegida.'); }
         }} />
         <div className="flex items-center gap-3">
-          <input {...common} type="url" value={empresa.logo_url.startsWith('data:') ? '' : empresa.logo_url} onChange={e => { actualizarEmpresa('logo_url', e.target.value); setLogoError(false); }} placeholder="O pegá una URL pública https://..." />
+          <input {...common} type="url" value={empresa.logo_url.startsWith('data:') ? '' : empresa.logo_url} onChange={e => { actualizarEmpresa('logo_url', e.target.value); setLogoError(false); setMensaje(''); }} placeholder="O pegá una URL pública https://..." />
           <div className="flex h-12 w-20 shrink-0 items-center justify-center overflow-hidden rounded-md border border-slate-200 bg-white p-1">{empresa.logo_url && !logoError ? <img src={empresa.logo_url} alt="Vista previa del logotipo" className="max-h-full max-w-full object-contain" onError={() => setLogoError(true)} /> : <Image size={18} className="text-slate-300" />}</div>
         </div>
-        <p className="text-xs text-slate-500">Almacenamos la imagen en la configuración de esta empresa. Máximo 1,5 MB.</p>
+        {logoError && <p role="alert" className="text-xs text-amber-700">No se pudo cargar esta imagen. Si está en tu computadora, elegí el archivo con “Seleccionar archivo”; si usás un enlace, debe ser público y HTTPS.</p>}
+        <p className="text-xs text-slate-500">Se guarda para esta empresa y aparece en los tickets impresos. Máximo 1,5 MB. Para un archivo de tu computadora, usá “Seleccionar archivo”; no pegues una ruta file://.</p>
       </div>
     );
     if (f.type === 'checkbox') return <label htmlFor={common.id} className="flex min-h-10 cursor-pointer items-center gap-3 rounded-lg border border-slate-200 bg-white px-3 py-2.5 hover:border-orange-200"><input {...common} type="checkbox" checked={Boolean(value)} onChange={e => actualizarValor(f.key, e.target.checked)} className="h-4 w-4 accent-orange-500" /><span className="text-sm text-slate-700">{f.label}</span></label>;
+    if (f.type === 'search-multiselect') {
+      const busqueda = busquedasCampo[f.key] || '';
+      const opcionesFiltradas = f.options.filter(option => normalizarBusqueda(`${option.label} ${option.value}`).includes(normalizarBusqueda(busqueda)));
+      return <div className="space-y-2">
+        <input {...common} type="search" value={busqueda} onChange={event => setBusquedasCampo(actual => ({ ...actual, [f.key]: event.target.value }))} placeholder="Buscar moneda por nombre o código (ej.: dólar, USD)..." aria-label="Buscar moneda por nombre o código" />
+        <div className="max-h-56 overflow-y-auto rounded-lg border border-slate-200 bg-white p-2" role="group" aria-label="Monedas extra disponibles">
+          {opcionesFiltradas.length ? <div className="grid gap-1 sm:grid-cols-2">{opcionesFiltradas.map(option => <label key={option.value} className={`flex cursor-pointer items-center gap-2 rounded-md px-2.5 py-2 text-xs ${value.includes(option.value) ? 'bg-orange-50 text-orange-800' : 'text-slate-600 hover:bg-slate-50'}`}><input type="checkbox" disabled={guardando} checked={value.includes(option.value)} onChange={event => actualizarValor(f.key, event.target.checked ? [...value, option.value] : value.filter(item => item !== option.value))} className="accent-orange-500" /><span>{option.label}</span></label>)}</div> : <p className="p-4 text-center text-sm text-slate-500">No se encontraron monedas con “{busqueda}”.</p>}
+        </div>
+        <p className="text-xs text-slate-500">{value.length} monedas extra seleccionadas. Buscá por nombre o código para agregarlas o quitarlas.</p>
+      </div>;
+    }
+    if (f.type === 'search-select') {
+      const busqueda = busquedasCampo[f.key] || '';
+      const abierto = Boolean(selectorAbierto[f.key]);
+      const seleccionada = f.options.find(option => option.value === value);
+      const opcionesFiltradas = f.options.filter(option => normalizarBusqueda(`${option.label} ${option.value}`).includes(normalizarBusqueda(busqueda)));
+      return <div className="relative">
+        <input {...common} type="search" role="combobox" aria-autocomplete="list" aria-expanded={abierto} aria-controls={`empresa-${f.key}-opciones`} value={abierto ? busqueda : seleccionada?.label || ''} onFocus={() => { setSelectorAbierto(actual => ({ ...actual, [f.key]: true })); setBusquedasCampo(actual => ({ ...actual, [f.key]: '' })); }} onBlur={() => setSelectorAbierto(actual => ({ ...actual, [f.key]: false }))} onChange={event => { setBusquedasCampo(actual => ({ ...actual, [f.key]: event.target.value })); setSelectorAbierto(actual => ({ ...actual, [f.key]: true })); }} onKeyDown={event => { if (event.key === 'Escape') { setSelectorAbierto(actual => ({ ...actual, [f.key]: false })); setBusquedasCampo(actual => ({ ...actual, [f.key]: '' })); } }} placeholder="Buscar moneda por nombre o código (ej.: dólar, USD)..." aria-label="Buscar moneda por nombre o código" autoComplete="off" />
+        {abierto && <div id={`empresa-${f.key}-opciones`} role="listbox" aria-label="Resultados de monedas" className="absolute z-30 mt-1 max-h-64 w-full overflow-y-auto rounded-lg border border-slate-200 bg-white p-1 shadow-xl">
+          {opcionesFiltradas.length ? opcionesFiltradas.map(option => <button key={option.value} type="button" role="option" aria-selected={value === option.value} disabled={guardando} onMouseDown={event => event.preventDefault()} onClick={() => { actualizarValor(f.key, option.value); setSelectorAbierto(actual => ({ ...actual, [f.key]: false })); setBusquedasCampo(actual => ({ ...actual, [f.key]: '' })); }} className={`flex w-full items-center justify-between rounded-md px-3 py-2 text-left text-sm ${value === option.value ? 'bg-orange-50 font-semibold text-orange-700' : 'text-slate-700 hover:bg-slate-50'}`}><span>{option.label}</span>{value === option.value && <Check size={15} />}</button>) : <p className="p-3 text-center text-sm text-slate-500">No se encontraron monedas con “{busqueda}”.</p>}
+        </div>}
+      </div>;
+    }
     if (f.type === 'multiselect') return <div className="flex flex-wrap gap-2">{f.options.map(option => { const optionValue = typeof option === 'string' ? option : option.value; const optionLabel = typeof option === 'string' ? option : option.label; const selected = value.includes(optionValue); return <label key={optionValue} className={`cursor-pointer rounded-full border px-3 py-1.5 text-xs font-semibold ${selected ? 'border-orange-300 bg-orange-50 text-orange-700' : 'border-slate-200 bg-white text-slate-600'}`}><input type="checkbox" className="sr-only" checked={selected} onChange={e => actualizarValor(f.key, e.target.checked ? [...value, optionValue] : value.filter(item => item !== optionValue))} />{optionLabel}</label>; })}</div>;
     if (f.type === 'select') return <select {...common} value={value} onChange={e => actualizarValor(f.key, e.target.value)}><option value="">Seleccionar...</option>{f.options.map(option => <option key={typeof option === 'string' ? option : option.value} value={typeof option === 'string' ? option : option.value}>{typeof option === 'string' ? option : option.label}</option>)}</select>;
     if (f.type === 'textarea') return <textarea {...common} rows={3} value={value} onChange={e => actualizarValor(f.key, e.target.value)} placeholder={f.placeholder || ''} />;
@@ -196,7 +304,7 @@ export default function ConfiguracionEmpresa({ perfilUsuario }) {
   return (
     <div className="mx-auto w-full max-w-7xl space-y-5 pb-8">
       <header className="flex flex-wrap items-start justify-between gap-4">
-        <div><p className="mb-1 text-xs font-bold uppercase tracking-[0.16em] text-orange-600">Configuraciones</p><h2 className="text-2xl font-bold tracking-tight text-slate-900">Configuración de la empresa</h2><p className="mt-1 text-sm text-slate-500">Ajustes generales organizados por sección para {empresa.nombre || 'tu negocio'}.</p></div>
+        <div><p className="mb-1 text-xs font-bold uppercase tracking-[0.16em] text-orange-600">Configuraciones</p><h2 data-guia-tour="empresa" className="text-2xl font-bold tracking-tight text-slate-900">Configuración de la empresa</h2><p className="mt-1 text-sm text-slate-500">Ajustes generales organizados por sección para {empresa.nombre || 'tu negocio'}.</p></div>
         <div className="inline-flex items-center gap-2 rounded-full border border-emerald-100 bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-700"><ShieldCheck size={15} /> Configuración por empresa</div>
       </header>
 
@@ -209,7 +317,7 @@ export default function ConfiguracionEmpresa({ perfilUsuario }) {
           <form onSubmit={guardar} className="min-w-0 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
             <div className="border-b border-slate-100 px-5 py-4 sm:px-7"><h3 className="text-base font-bold text-slate-800">{activeSection.label}</h3><p className="mt-1 text-sm text-slate-500">{activeSection.description}</p></div>
             {activeSection.id === 'facturacion' ? <div className="m-5 rounded-xl border border-amber-200 bg-amber-50 p-5"><h4 className="font-bold text-amber-900">Facturación electrónica</h4><p className="mt-1 text-sm text-amber-800">La referencia indica que esta opción depende del plan. PyPOS tiene un módulo específico para la configuración SIFEN.</p><Link to="/config_factura" className="mt-4 inline-flex items-center gap-2 rounded-lg bg-orange-500 px-4 py-2 text-sm font-bold text-white hover:bg-orange-600">Abrir configuración de factura electrónica <ChevronDown size={15} className="-rotate-90" /></Link></div> : (
-              <div className="space-y-6 px-5 py-6 sm:px-7">{activeSection.groups.map((g,index) => <section key={`${activeSection.id}-${index}`} className="space-y-4"><div className="border-b border-slate-100 pb-2"><h4 className="text-sm font-bold text-slate-800">{g.title}</h4></div><div className="grid gap-x-5 gap-y-4 sm:grid-cols-2">{g.fields.map(f => f.type === 'checkbox' ? <div key={f.key} className="sm:col-span-2">{renderField(f)}</div> : <div key={f.key} className={`block ${f.type === 'logo' || f.type === 'multiselect' ? 'sm:col-span-2' : ''}`}><label htmlFor={`empresa-${f.key}`} className="mb-1.5 block text-sm font-semibold text-slate-700">{f.label}{f.key === 'nombre' && <span className="text-red-500"> *</span>}</label>{renderField(f)}</div>)}</div></section>)}</div>
+              <div className="space-y-6 px-5 py-6 sm:px-7">{activeSection.groups.map((g,index) => <section key={`${activeSection.id}-${index}`} className="space-y-4"><div className="border-b border-slate-100 pb-2"><h4 className="text-sm font-bold text-slate-800">{g.title}</h4></div><div className="grid gap-x-5 gap-y-4 sm:grid-cols-2">{g.fields.map(f => f.type === 'checkbox' ? <div key={f.key} className="sm:col-span-2">{renderField(f)}</div> : <div key={f.key} className={`block ${['logo', 'multiselect', 'search-multiselect'].includes(f.type) ? 'sm:col-span-2' : ''}`}><label htmlFor={`empresa-${f.key}`} className="mb-1.5 block text-sm font-semibold text-slate-700">{f.label}{f.key === 'nombre' && <span className="text-red-500"> *</span>}</label>{renderField(f)}</div>)}</div></section>)}</div>
             )}
             {activeSection.id !== 'facturacion' && <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 bg-slate-50/70 px-5 py-4 sm:px-7"><p className="text-xs text-slate-500">Los cambios aplican solo a {empresa.nombre || 'esta empresa'}.</p><button type="submit" disabled={guardando || !empresa.nombre.trim()} className="inline-flex items-center gap-2 rounded-lg bg-orange-500 px-4 py-2.5 text-sm font-bold text-white shadow-sm transition hover:bg-orange-600 disabled:cursor-not-allowed disabled:opacity-60">{guardando ? <LoaderCircle size={16} className="animate-spin" /> : <Save size={16} />}{guardando ? 'Guardando...' : 'Guardar cambios'}</button></div>}
           </form>

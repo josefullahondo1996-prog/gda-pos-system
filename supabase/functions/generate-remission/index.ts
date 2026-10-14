@@ -1,5 +1,6 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { getAuthenticatedUser, unauthorized } from '../_shared/auth.ts';
+import { getGoekuaCredential } from '../_shared/goekua.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -27,6 +28,7 @@ Deno.serve(async (req) => {
 
   const { user, error: authError } = await getAuthenticatedUser(req);
   if (!user) return unauthorized(authError || 'No autorizado.', corsHeaders);
+  if (Deno.env.get('GOEKUA_STAGING_EMISSION_ENABLED') !== 'true') return json({ error: 'La emisión de remisiones de prueba está bloqueada hasta terminar la revisión fiscal y técnica.' }, 503);
 
   let body: Record<string, any>;
   try { body = await req.json(); } catch { return json({ error: 'El cuerpo debe ser JSON válido.' }, 400); }
@@ -97,11 +99,12 @@ Deno.serve(async (req) => {
   if (!esAdmin && !permisoModulo) return json({ error: 'Tu rol no tiene permiso para emitir remisiones desde este origen.' }, 403);
 
   const { data: empresa, error: errorEmpresa } = await supabase.from('empresas')
-    .select('id, nombre, ruc, direccion, telefono, fe_api_key, fe_activa, fe_proveedor, configuracion')
+    .select('id, nombre, ruc, direccion, telefono, configuracion')
     .eq('id', empresaId).maybeSingle();
   if (errorEmpresa || !empresa) return json({ error: 'No se encontró la empresa.' }, 404);
-  if (empresa.fe_proveedor !== 'goekua' || !empresa.fe_activa || !empresa.fe_api_key) {
-    return json({ error: 'Activá Goekua y configurá su API Key en Facturación Electrónica antes de emitir.' }, 400);
+  const goekua = await getGoekuaCredential(supabase, empresaId);
+  if (!goekua || goekua.ambiente !== 'staging') {
+    return json({ error: 'No hay Goekua staging configurado; producción permanece bloqueada.' }, 400);
   }
 
   // Una reintento de la misma solicitud nunca vuelve a enviar el documento a
@@ -262,8 +265,8 @@ Deno.serve(async (req) => {
   if (errorInsert) return json({ error: errorInsert.code === '23505' ? 'El número de documento ya se usó o esta solicitud ya fue procesada; revisá el historial antes de reintentar.' : `No se pudo reservar el documento: ${errorInsert.message}` }, 409);
 
   try {
-    const response = await fetch('https://api.goekua.com.py/api/electronic-document/generate-remission-note', {
-      method: 'POST', headers: { 'x-api-key': empresa.fe_api_key, 'Content-Type': 'application/json' },
+    const response = await fetch(`${goekua.baseUrl}/api/electronic-document/generate-remission-note`, {
+      method: 'POST', headers: { 'x-api-key': goekua.apiKey, 'Content-Type': 'application/json' },
       body: JSON.stringify(payload), signal: AbortSignal.timeout(45000),
     });
     const responseText = await response.text();

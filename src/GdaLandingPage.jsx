@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
   ArrowRight, BarChart3, Boxes, Check, ChevronDown, CircleDollarSign, ClipboardCheck,
@@ -25,8 +25,25 @@ const faqs = [
 ];
 
 function ProductPreview() {
+  const previewRef = useRef(null);
+
+  const handlePointerMove = (event) => {
+    if (!previewRef.current || event.pointerType !== 'mouse') return;
+    const bounds = previewRef.current.getBoundingClientRect();
+    const x = (event.clientX - bounds.left) / bounds.width - 0.5;
+    const y = (event.clientY - bounds.top) / bounds.height - 0.5;
+    previewRef.current.style.setProperty('--tilt-x', `${-y * 3}deg`);
+    previewRef.current.style.setProperty('--tilt-y', `${x * 4}deg`);
+  };
+
+  const resetPointer = () => {
+    if (!previewRef.current) return;
+    previewRef.current.style.setProperty('--tilt-x', '0deg');
+    previewRef.current.style.setProperty('--tilt-y', '0deg');
+  };
+
   return (
-    <div className="gda-preview" aria-label="Vista ilustrativa del panel de GDA POS">
+    <div ref={previewRef} className="gda-preview" onPointerMove={handlePointerMove} onPointerLeave={resetPointer} aria-label="Vista ilustrativa del panel de GDA POS">
       <div className="gda-preview-top"><div className="gda-dots"><i /><i /><i /></div><span>GDA POS <b>● En línea</b></span><span className="gda-preview-avatar">G</span></div>
       <div className="gda-preview-body">
         <aside className="gda-preview-side"><strong>GDA<span>POS</span></strong><em className="selected"><Store /> Inicio</em><em><ShoppingCart /> Ventas</em><em><Package /> Productos</em><em><Wallet /> Caja</em><em><BarChart3 /> Informes</em><div className="gda-preview-side-bottom">Tu negocio, en control</div></aside>
@@ -43,16 +60,54 @@ function ProductPreview() {
 export default function GdaLandingPage() {
   const [menuOpen, setMenuOpen] = useState(false);
   const [openFaq, setOpenFaq] = useState(0);
+  const [scrollProgress, setScrollProgress] = useState(0);
 
   useEffect(() => {
-    const previous = document.body.className;
+    const alreadyPageClass = document.body.classList.contains('gda-site-page');
     document.body.classList.add('gda-site-page');
-    return () => { document.body.className = previous; };
+    const revealItems = document.querySelectorAll('.gda-site [data-reveal]');
+    const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    let observer;
+
+    if (reducedMotion || !('IntersectionObserver' in window)) {
+      revealItems.forEach((item) => item.classList.add('is-visible'));
+    } else {
+      observer = new IntersectionObserver((entries) => {
+        entries.forEach((entry) => {
+          if (entry.isIntersecting) {
+            entry.target.classList.add('is-visible');
+            observer.unobserve(entry.target);
+          }
+        });
+      }, { threshold: 0.12, rootMargin: '0px 0px -35px 0px' });
+      revealItems.forEach((item) => observer.observe(item));
+    }
+
+    let frame = 0;
+    const updateProgress = () => {
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(() => {
+        const scrollable = document.documentElement.scrollHeight - window.innerHeight;
+        setScrollProgress(scrollable > 0 ? Math.min(window.scrollY / scrollable, 1) : 0);
+      });
+    };
+    updateProgress();
+    window.addEventListener('scroll', updateProgress, { passive: true });
+    window.addEventListener('resize', updateProgress);
+
+    return () => {
+      observer?.disconnect();
+      cancelAnimationFrame(frame);
+      window.removeEventListener('scroll', updateProgress);
+      window.removeEventListener('resize', updateProgress);
+      if (!alreadyPageClass) document.body.classList.remove('gda-site-page');
+    };
   }, []);
 
   const closeMenu = () => setMenuOpen(false);
   return (
     <div className="gda-site">
+      <div className="gda-reading-progress" aria-hidden="true"><span style={{ transform: `scaleX(${scrollProgress})` }} /></div>
       <div className="gda-topline"><span><i /> SISTEMA DE GESTIÓN PARA TU NEGOCIO</span><span>Ventas · Caja · Inventario · Reportes</span></div>
       <header className="gda-header">
         <a href="#inicio" className="gda-brand" aria-label="GDA POS inicio"><span className="gda-brand-icon">G</span><span>GDA <b>POS</b><small>GESTIÓN SIMPLE. NEGOCIO EN CONTROL.</small></span></a>
@@ -72,21 +127,21 @@ export default function GdaLandingPage() {
           <div className="gda-hero-bottom"><span>HECHO PARA EL TRABAJO DE TODOS LOS DÍAS</span><div><b>01</b> VENDER <i /> <b>02</b> CONTROLAR <i /> <b>03</b> CRECER</div></div>
         </section>
 
-        <section className="gda-strip" id="soluciones"><div><CircleDollarSign /><span><b>Ventas y caja</b><small>Operaciones por turno</small></span></div><div><Package /><span><b>Stock conectado</b><small>Productos centralizados</small></span></div><div><BarChart3 /><span><b>Información clara</b><small>Informes del negocio</small></span></div><div><Smartphone /><span><b>Listo para móvil</b><small>También desde tu celular</small></span></div></section>
+        <section className="gda-strip" id="soluciones"><div data-reveal><CircleDollarSign /><span><b>Ventas y caja</b><small>Operaciones por turno</small></span></div><div data-reveal><Package /><span><b>Stock conectado</b><small>Productos centralizados</small></span></div><div data-reveal><BarChart3 /><span><b>Información clara</b><small>Informes del negocio</small></span></div><div data-reveal><Smartphone /><span><b>Listo para móvil</b><small>También desde tu celular</small></span></div></section>
 
-        <section className="gda-section gda-modules" id="modulos"><div className="gda-section-heading"><div><div className="gda-eyebrow"><i /> HERRAMIENTAS PARA TU OPERACIÓN</div><h2>Todo conectado.<br /><span>Todo bajo control.</span></h2></div><p>Empezá por lo que usás hoy. Tus ventas, caja, productos e informes forman parte del mismo sistema.</p></div>
-          <div className="gda-module-grid">{modules.map(({ icon: Icon, title, text, tags }, index) => <article className={`gda-module-card ${index === 0 ? 'featured' : ''}`} key={title}><div className="gda-module-icon"><Icon /></div><span className="gda-module-index">0{index + 1}</span><h3>{title}</h3><p>{text}</p><div className="gda-tags">{tags.map((tag) => <span key={tag}>{tag}</span>)}</div></article>)}</div>
+        <section className="gda-section gda-modules" id="modulos" data-reveal><div className="gda-section-heading"><div><div className="gda-eyebrow"><i /> HERRAMIENTAS PARA TU OPERACIÓN</div><h2>Todo conectado.<br /><span>Todo bajo control.</span></h2></div><p>Empezá por lo que usás hoy. Tus ventas, caja, productos e informes forman parte del mismo sistema.</p></div>
+          <div className="gda-module-grid">{modules.map(({ icon: Icon, title, text, tags }, index) => <article data-reveal className={`gda-module-card ${index === 0 ? 'featured' : ''}`} key={title}><div className="gda-module-icon"><Icon /></div><span className="gda-module-index">0{index + 1}</span><h3>{title}</h3><p>{text}</p><div className="gda-tags">{tags.map((tag) => <span key={tag}>{tag}</span>)}</div></article>)}</div>
         </section>
 
-        <section className="gda-workflow" id="como-funciona"><div className="gda-workflow-intro"><div className="gda-eyebrow"><i /> UN FLUJO SIMPLE</div><h2>De la apertura<br />al cierre.</h2><p>El equipo trabaja con pasos claros y la información queda en el mismo sistema para que puedas seguir la operación.</p><Link to="/login" className="gda-text-link">Ingresar a GDA POS <ArrowRight /></Link></div><div className="gda-steps"><article><span>01</span><div className="gda-step-icon"><Wallet /></div><h3>Abrí la caja</h3><p>Registrá el fondo inicial y comenzá el turno de trabajo.</p></article><article><span>02</span><div className="gda-step-icon"><ShoppingCart /></div><h3>Registrá tus ventas</h3><p>Buscá productos, armá el pedido y cargá el medio de pago.</p></article><article><span>03</span><div className="gda-step-icon"><ClipboardCheck /></div><h3>Rendí el turno</h3><p>Revisá los importes de caja y completá el cierre con el conteo.</p></article></div></section>
+        <section className="gda-workflow" id="como-funciona" data-reveal><div className="gda-workflow-intro"><div className="gda-eyebrow"><i /> UN FLUJO SIMPLE</div><h2>De la apertura<br />al cierre.</h2><p>El equipo trabaja con pasos claros y la información queda en el mismo sistema para que puedas seguir la operación.</p><Link to="/login" className="gda-text-link">Ingresar a GDA POS <ArrowRight /></Link></div><div className="gda-steps"><article><span>01</span><div className="gda-step-icon"><Wallet /></div><h3>Abrí la caja</h3><p>Registrá el fondo inicial y comenzá el turno de trabajo.</p></article><article><span>02</span><div className="gda-step-icon"><ShoppingCart /></div><h3>Registrá tus ventas</h3><p>Buscá productos, armá el pedido y cargá el medio de pago.</p></article><article><span>03</span><div className="gda-step-icon"><ClipboardCheck /></div><h3>Rendí el turno</h3><p>Revisá los importes de caja y completá el cierre con el conteo.</p></article></div></section>
 
-        <section className="gda-why"><div className="gda-why-art"><div className="gda-grid-art" /><div className="gda-why-card"><div className="gda-why-card-top"><span>GDA POS</span><i>●</i></div><small>OPERACIÓN DEL NEGOCIO</small><b>Una vista.<br />Más claridad.</b><div className="gda-why-bars"><i /><i /><i /><i /><i /><i /><i /><i /></div><div className="gda-why-labels"><span>VENTAS</span><span>CAJA</span><span>STOCK</span></div></div><div className="gda-why-badge"><Check /> Datos de tu empresa</div></div><div className="gda-why-copy"><div className="gda-eyebrow"><i /> CONTROL DESDE UN MISMO LUGAR</div><h2>Menos pasos.<br /><span>Más visibilidad.</span></h2><p>Cuando la caja y los productos usan la misma información, podés seguir mejor lo que ocurre durante el día.</p><ul><li><Check /> Acceso a funciones según el rol de cada usuario</li><li><Check /> Ventas vinculadas al control de caja</li><li><Check /> Inventario asociado a los productos</li><li><Check /> Interfaz para escritorio y aplicación móvil</li></ul><Link className="gda-btn-primary" to="/login">Acceder a mi negocio <ArrowRight /></Link></div></section>
+        <section className="gda-why" data-reveal><div className="gda-why-art"><div className="gda-grid-art" /><div className="gda-why-card"><div className="gda-why-card-top"><span>GDA POS</span><i>●</i></div><small>OPERACIÓN DEL NEGOCIO</small><b>Una vista.<br />Más claridad.</b><div className="gda-why-bars"><i /><i /><i /><i /><i /><i /><i /><i /></div><div className="gda-why-labels"><span>VENTAS</span><span>CAJA</span><span>STOCK</span></div></div><div className="gda-why-badge"><Check /> Datos de tu empresa</div></div><div className="gda-why-copy"><div className="gda-eyebrow"><i /> CONTROL DESDE UN MISMO LUGAR</div><h2>Menos pasos.<br /><span>Más visibilidad.</span></h2><p>Cuando la caja y los productos usan la misma información, podés seguir mejor lo que ocurre durante el día.</p><ul><li><Check /> Acceso a funciones según el rol de cada usuario</li><li><Check /> Ventas vinculadas al control de caja</li><li><Check /> Inventario asociado a los productos</li><li><Check /> Interfaz para escritorio y aplicación móvil</li></ul><Link className="gda-btn-primary" to="/login">Acceder a mi negocio <ArrowRight /></Link></div></section>
 
-        <section className="gda-mobile-section"><div className="gda-mobile-copy"><div className="gda-eyebrow"><i /> GDA POS EN TU CELULAR</div><h2>Tu operación<br /><span>te acompaña.</span></h2><p>Accedé a las funciones móviles de GDA POS desde el teléfono. Usá tus credenciales y trabajá con los datos de tu negocio.</p><div className="gda-mobile-points"><span><Check /> Punto de venta móvil</span><span><Check /> Productos y clientes</span><span><Check /> Caja e informes</span></div><a className="gda-btn-light" href="https://gda-pos-mobile.vercel.app" target="_blank" rel="noreferrer">Abrir GDA POS móvil <ArrowRight /></a></div><div className="gda-phone-wrap"><div className="gda-phone"><div className="gda-phone-notch" /><div className="gda-phone-head"><span>GDA POS</span><i>●</i></div><div className="gda-phone-greeting"><small>BUEN DÍA</small><b>Tu negocio,<br />en marcha.</b></div><div className="gda-phone-card"><small>Acceso rápido</small><div><ShoppingCart /><b>Vender</b><ArrowRight /></div><div><Wallet /><b>Caja</b><ArrowRight /></div><div><Package /><b>Productos</b><ArrowRight /></div></div><div className="gda-phone-nav"><span>⌂</span><span>▦</span><span>▤</span><span>◷</span></div></div><div className="gda-phone-orbit" /></div></section>
+        <section className="gda-mobile-section" data-reveal><div className="gda-mobile-copy"><div className="gda-eyebrow"><i /> GDA POS EN TU CELULAR</div><h2>Tu operación<br /><span>te acompaña.</span></h2><p>Accedé a las funciones móviles de GDA POS desde el teléfono. Usá tus credenciales y trabajá con los datos de tu negocio.</p><div className="gda-mobile-points"><span><Check /> Punto de venta móvil</span><span><Check /> Productos y clientes</span><span><Check /> Caja e informes</span></div><a className="gda-btn-light" href="https://gda-pos-mobile.vercel.app" target="_blank" rel="noreferrer">Abrir GDA POS móvil <ArrowRight /></a></div><div className="gda-phone-wrap"><div className="gda-phone"><div className="gda-phone-notch" /><div className="gda-phone-head"><span>GDA POS</span><i>●</i></div><div className="gda-phone-greeting"><small>BUEN DÍA</small><b>Tu negocio,<br />en marcha.</b></div><div className="gda-phone-card"><small>Acceso rápido</small><div><ShoppingCart /><b>Vender</b><ArrowRight /></div><div><Wallet /><b>Caja</b><ArrowRight /></div><div><Package /><b>Productos</b><ArrowRight /></div></div><div className="gda-phone-nav"><span>⌂</span><span>▦</span><span>▤</span><span>◷</span></div></div><div className="gda-phone-orbit" /></div></section>
 
-        <section className="gda-faq" id="faq"><div className="gda-faq-title"><div className="gda-eyebrow"><i /> PREGUNTAS FRECUENTES</div><h2>¿Querés saber<br /><span>algo más?</span></h2><p>Información práctica para empezar a usar GDA POS.</p></div><div className="gda-faq-list">{faqs.map(([question, answer], index) => <article key={question} className={openFaq === index ? 'active' : ''}><button onClick={() => setOpenFaq(openFaq === index ? -1 : index)} aria-expanded={openFaq === index}><span>{question}</span><i>{openFaq === index ? '−' : '+'}</i></button>{openFaq === index && <p>{answer}</p>}</article>)}</div></section>
+        <section className="gda-faq" id="faq" data-reveal><div className="gda-faq-title"><div className="gda-eyebrow"><i /> PREGUNTAS FRECUENTES</div><h2>¿Querés saber<br /><span>algo más?</span></h2><p>Información práctica para empezar a usar GDA POS.</p></div><div className="gda-faq-list">{faqs.map(([question, answer], index) => <article key={question} className={openFaq === index ? 'active' : ''}><button onClick={() => setOpenFaq(openFaq === index ? -1 : index)} aria-expanded={openFaq === index}><span>{question}</span><i>{openFaq === index ? '−' : '+'}</i></button>{openFaq === index && <p>{answer}</p>}</article>)}</div></section>
 
-        <section className="gda-cta"><div className="gda-cta-orb" /><div className="gda-eyebrow"><i /> EMPEZÁ CON GDA POS</div><h2>Tu negocio merece<br />una vista completa.</h2><p>Ingresá a tu cuenta para continuar con la operación.</p><Link className="gda-btn-light" to="/login">Ingresar al sistema <ArrowRight /></Link><span className="gda-cta-note">El acceso depende de tu usuario y sus permisos.</span></section>
+        <section className="gda-cta" data-reveal><div className="gda-cta-orb" /><div className="gda-eyebrow"><i /> EMPEZÁ CON GDA POS</div><h2>Tu negocio merece<br />una vista completa.</h2><p>Ingresá a tu cuenta para continuar con la operación.</p><Link className="gda-btn-light" to="/login">Ingresar al sistema <ArrowRight /></Link><span className="gda-cta-note">El acceso depende de tu usuario y sus permisos.</span></section>
       </main>
       <footer className="gda-footer"><a href="#inicio" className="gda-brand"><span className="gda-brand-icon">G</span><span>GDA <b>POS</b><small>GESTIÓN SIMPLE. NEGOCIO EN CONTROL.</small></span></a><span>Ventas, caja e inventario en un solo sistema.</span><div><a href="#modulos">Módulos</a><a href="#faq">Ayuda</a><Link to="/login">Ingresar</Link></div><small>© {new Date().getFullYear()} GDA POS</small></footer>
     </div>

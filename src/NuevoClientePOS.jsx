@@ -1,11 +1,14 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { supabase } from './supabaseClient';
 import { sonidoExito } from './utils/sonido';
 import { useEmpresaInfo } from './utils/useEmpresa';
+import { useConfiguracionEmpresa } from './utils/useConfiguracionEmpresa';
 import { useNotificacion } from './NotificacionContext';
 
 const NuevoClientePOS = ({ onGuardado, onCerrar }) => {
     const { id: empresaId, nombre: nombreDelNegocio } = useEmpresaInfo();
+    const { ajustes: ajustesEmpresa, cargando: cargandoAjustesEmpresa } = useConfiguracionEmpresa(empresaId);
+    const limitePredeterminadoAplicado = useRef(false);
     const { notificar } = useNotificacion();
     const [esEmpresa, setEsEmpresa] = useState(false);
     const [tipoDoc, setTipoDoc] = useState('RUC');
@@ -38,6 +41,13 @@ const NuevoClientePOS = ({ onGuardado, onCerrar }) => {
     const [terminoPagoNum, setTerminoPagoNum] = useState('');
     const [terminoPagoTipo, setTerminoPagoTipo] = useState('Seleccione');
     const [limiteCredito, setLimiteCredito] = useState('0');
+
+    useEffect(() => {
+        if (cargandoAjustesEmpresa || limitePredeterminadoAplicado.current) return;
+        limitePredeterminadoAplicado.current = true;
+        const limite = Number(ajustesEmpresa.default_credit_limit);
+        if (Number.isFinite(limite) && limite > 0) setLimiteCredito(String(limite));
+    }, [ajustesEmpresa.default_credit_limit, cargandoAjustesEmpresa]);
 
     const [mostrarUbicacion, setMostrarUbicacion] = useState(true);
     const [mostrarCredito, setMostrarCredito] = useState(true);
@@ -479,7 +489,7 @@ const NuevoClientePOS = ({ onGuardado, onCerrar }) => {
                                     <div className="md:col-span-2"><label className="block font-bold text-slate-700 uppercase mb-2 text-[10px]">Grupo de clientes</label><select className="w-full border border-slate-300 rounded-xl p-3 bg-white focus:border-[#f59e0b] focus:ring-2 focus:ring-[#f59e0b]/30 outline-none transition-all" value={grupoClientes} onChange={(e) => setGrupoClientes(e.target.value)}><option value="Ninguna">Ninguna</option></select></div>
                                     <div><label className="block font-bold text-slate-700 uppercase mb-2 text-[10px]">Saldo inicial</label><input type="number" className="w-full border border-slate-300 rounded-xl p-3 bg-white outline-none focus:border-[#f59e0b] focus:ring-2 focus:ring-[#f59e0b]/30 transition-all" value={saldoInicial} onChange={(e) => setSaldoInicial(e.target.value)} /></div>
                                     <div className="md:col-span-2"><label className="block font-bold text-slate-700 uppercase mb-2 text-[10px]">Término de pago</label><div className="flex gap-2"><input type="number" className="w-1/2 border border-slate-300 rounded-xl p-3 bg-white outline-none focus:border-[#f59e0b] focus:ring-2 focus:ring-[#f59e0b]/30 transition-all" placeholder="N°" value={terminoPagoNum} onChange={(e) => setTerminoPagoNum(e.target.value)} /><select className="w-1/2 border border-slate-300 rounded-xl p-3 bg-white focus:border-[#f59e0b] focus:ring-2 focus:ring-[#f59e0b]/30 outline-none transition-all" value={terminoPagoTipo} onChange={(e) => setTerminoPagoTipo(e.target.value)}><option value="Seleccione">Seleccione</option><option value="Dias">Días</option><option value="Meses">Meses</option></select></div></div>
-                                    <div><label className="block font-bold text-slate-700 uppercase mb-2 text-[10px]">Límite de crédito</label><input type="number" className="w-full border border-slate-300 rounded-xl p-3 bg-white outline-none focus:border-[#f59e0b] focus:ring-2 focus:ring-[#f59e0b]/30 transition-all" value={limiteCredito} onChange={(e) => setLimiteCredito(e.target.value)} /><p className="text-[10px] text-slate-400 mt-1">Crédito predeterminado (0)</p></div>
+                                    <div><label className="block font-bold text-slate-700 uppercase mb-2 text-[10px]">Límite de crédito</label><input type="number" className="w-full border border-slate-300 rounded-xl p-3 bg-white outline-none focus:border-[#f59e0b] focus:ring-2 focus:ring-[#f59e0b]/30 transition-all" value={limiteCredito} onChange={(e) => setLimiteCredito(e.target.value)} /><p className="text-[10px] text-slate-400 mt-1">Predeterminado de empresa: {Number(ajustesEmpresa.default_credit_limit) || 0}</p></div>
                                 </div>
                             )}
                         </div>

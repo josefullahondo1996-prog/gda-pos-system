@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { supabase } from './supabaseClient';
 import { useEmpresaInfo } from './utils/useEmpresa';
+import { useConfiguracionEmpresa } from './utils/useConfiguracionEmpresa';
 import { generateReceipt } from './utils/generateReceipt';
 import { generateNotaRemision } from './utils/generateNotaRemision';
 import { consultarFacturaElectronica, getBadgeSifen } from './utils/goekuaService';
@@ -11,6 +12,21 @@ import autoTable from 'jspdf-autotable';
 import { useNotificacion } from './NotificacionContext';
 
 const formatGs = (v) => `Gs ${Number(v || 0).toLocaleString('es-PY')}`;
+const formatVenta = (venta, campo) => {
+    const moneda = ['PYG', 'USD', 'EUR', 'BRL'].includes(venta?.moneda_venta) ? venta.moneda_venta : 'PYG';
+    const valor = venta?.[`${campo}_moneda`] ?? (campo === 'monto_pagado' && venta?.monto_pagado == null
+        ? totalPagadoVenta(venta)
+        : venta?.[campo] ?? 0);
+    const cantidad = Number(valor).toLocaleString(moneda === 'BRL' ? 'pt-BR' : 'es-PY', {
+        minimumFractionDigits: moneda === 'PYG' ? 0 : 2,
+        maximumFractionDigits: moneda === 'PYG' ? 0 : 2,
+    });
+    return moneda === 'BRL' ? `R$ ${cantidad}` : moneda === 'USD' ? `USD ${cantidad}` : moneda === 'EUR' ? `€ ${cantidad}` : `Gs ${cantidad}`;
+};
+const formatPagoEnMonedaVenta = (venta, montoPyg) => {
+    const tasa = Number(venta?.tasa_negocio) || 1;
+    return formatVenta({ moneda_venta: venta?.moneda_venta || 'PYG', monto_pagado_moneda: (Number(montoPyg) || 0) / tasa }, 'monto_pagado');
+};
 const formatFecha = (f) => (f ? new Date(f).toLocaleDateString('es-PY') + ' ' + new Date(f).toLocaleTimeString('es-PY', { hour: '2-digit', minute: '2-digit' }) : '—');
 const totalPagadoVenta = (venta) => venta.monto_pagado != null ? Number(venta.monto_pagado) || 0 : Math.max(0, (Number(venta.total) || 0) - (Number(venta.saldo_pendiente) || 0));
 const plantillaVentaPredeterminada = (canal) => ({
@@ -30,7 +46,9 @@ const badgeEstado = (estado) => {
 };
 
 export default function TodasLasVentas({ onNuevaVenta, perfilUsuario }) {
-    const { id: empresaId, nombre: nombreEmpresa, direccion: direccionEmpresa, telefono: telefonoEmpresa, ruc: rucEmpresa } = useEmpresaInfo();
+    const { id: empresaId, nombre: nombreEmpresa, direccion: direccionEmpresa, telefono: telefonoEmpresa, ruc: rucEmpresa, logo_url: logoEmpresa } = useEmpresaInfo();
+    const { ajustes: ajustesEmpresa } = useConfiguracionEmpresa(empresaId);
+    const etiquetaCampoVenta1 = String(ajustesEmpresa.label_sell_1 || '').trim() || 'Campo Personalizado 1';
     const { confirmar } = useNotificacion();
     const esAdmin = (perfilUsuario?.roles?.nombre || '').toLowerCase().includes('admin');
     const permisosVentas = perfilUsuario?.roles?.permisos?.ventas_pos || {};
@@ -51,6 +69,10 @@ export default function TodasLasVentas({ onNuevaVenta, perfilUsuario }) {
 
     // Toolbar tipo CDEpos: entradas por página, paginación y columnas visibles
     const [entradasPorPagina, setEntradasPorPagina] = useState(25);
+    useEffect(() => {
+        const valor = ajustesEmpresa.default_datatable_page_entries;
+        if (valor !== undefined && valor !== '') setEntradasPorPagina(valor === 'Todos' ? 0 : Math.max(1, Number(valor) || 25));
+    }, [ajustesEmpresa.default_datatable_page_entries]);
     const [paginaActual, setPaginaActual] = useState(1);
     const [mostrarMenuColumnas, setMostrarMenuColumnas] = useState(false);
     const [columnasVisibles, setColumnasVisibles] = useState({
@@ -335,7 +357,7 @@ export default function TodasLasVentas({ onNuevaVenta, perfilUsuario }) {
         const clienteRuc = rucPorCliente[venta.cliente] || '';
         generateReceipt(
             { ...venta, cliente_nombre: venta.cliente, cliente_ruc: clienteRuc, items },
-            { nombre: nombreEmpresa, direccion: direccionEmpresa, telefono: telefonoEmpresa, ruc: rucEmpresa },
+            { nombre: nombreEmpresa, direccion: direccionEmpresa, telefono: telefonoEmpresa, ruc: rucEmpresa, logo_url: logoEmpresa },
             '80mm',
             true
         );
@@ -394,10 +416,10 @@ export default function TodasLasVentas({ onNuevaVenta, perfilUsuario }) {
         contact_name: ventaNotificacion.cliente || 'Cliente Ocasional',
         invoice_number: ventaNotificacion.numero_factura || String(ventaNotificacion.id),
         invoice_url: ventaNotificacion.kude_url || '',
-        total_amount: formatGs(ventaNotificacion.total),
-        paid_amount: formatGs(totalPagadoVenta(ventaNotificacion)),
-        due_amount: formatGs(ventaNotificacion.saldo_pendiente),
-        cumulative_due_amount: formatGs(ventaNotificacion.saldo_pendiente),
+                        total_amount: formatVenta(ventaNotificacion, 'total'),
+                        paid_amount: formatVenta(ventaNotificacion, 'monto_pagado'),
+                        due_amount: formatVenta(ventaNotificacion, 'saldo_pendiente'),
+                        cumulative_due_amount: formatVenta(ventaNotificacion, 'saldo_pendiente'),
         due_date: ventaNotificacion.fecha_vencimiento ? formatFecha(ventaNotificacion.fecha_vencimiento) : '',
         location_name: ubicaciones[ventaNotificacion.ubicacion_id] || nombreEmpresa || '',
         location_phone: telefonoEmpresa || '',
@@ -435,7 +457,7 @@ export default function TodasLasVentas({ onNuevaVenta, perfilUsuario }) {
         { key: 'estadoEnvio', label: 'Estado del Envio' },
         { key: 'articulos', label: 'Total Articulos' },
         { key: 'tipoServicio', label: 'Tipos de Servicio' },
-        { key: 'campoPersonalizado1', label: 'Campo Personalizado 1' },
+        { key: 'campoPersonalizado1', label: etiquetaCampoVenta1 },
         { key: 'añadidoPor', label: 'Añadido por' },
         { key: 'notaVenta', label: 'Nota de Venta' },
         { key: 'notaPersonal', label: 'Nota del Personal' },
@@ -655,14 +677,15 @@ export default function TodasLasVentas({ onNuevaVenta, perfilUsuario }) {
                             <option value={200}>200</option>
                             <option value={500}>500</option>
                             <option value={1000}>1.000</option>
+                            <option value={0}>Todos</option>
                             <option value={0}>Todas</option>
                         </select>
                         <span>entradas</span>
                     </div>
 
                     <div className="flex flex-wrap gap-2" onClick={(e) => e.stopPropagation()}>
-                        <button onClick={exportarCSV} className="border rounded px-3 py-1.5 text-xs font-bold text-gray-600 hover:bg-gray-50">📄 Exportar a CSV</button>
-                        <button onClick={exportarExcel} className="border rounded px-3 py-1.5 text-xs font-bold text-gray-600 hover:bg-gray-50">📊 Exportar a Excel</button>
+                        {ajustesEmpresa.system_settings_explicit && ajustesEmpresa.is_enabled_export === false ? null : <><button onClick={exportarCSV} className="border rounded px-3 py-1.5 text-xs font-bold text-gray-600 hover:bg-gray-50">📄 Exportar a CSV</button>
+                        <button onClick={exportarExcel} className="border rounded px-3 py-1.5 text-xs font-bold text-gray-600 hover:bg-gray-50">📊 Exportar a Excel</button></>}
                         <button onClick={() => window.print()} className="border rounded px-3 py-1.5 text-xs font-bold text-gray-600 hover:bg-gray-50">🖨️ Imprimir</button>
                         <div className="relative">
                             <button onClick={() => setMostrarMenuColumnas((v) => !v)} className="border rounded px-3 py-1.5 text-xs font-bold text-gray-600 hover:bg-gray-50">📋 Visibilidad de columnas</button>
@@ -673,7 +696,7 @@ export default function TodasLasVentas({ onNuevaVenta, perfilUsuario }) {
                                         sifen: 'SIFEN', metodoPago: 'Método de Pago', gsPyg: 'GS PYG',
                                         creditosOtorgados: 'Creditos Ortogados', creditoDevolucion: 'Credito por Devolucion',
                                         estadoEnvio: 'Estado del Envío', totalArticulos: 'Total Artículos',
-                                        tipoServicio: 'Tipos de Servicio', campoPersonalizado1: 'Campo Personalizado 1',
+                                        tipoServicio: 'Tipos de Servicio', campoPersonalizado1: etiquetaCampoVenta1,
                                         añadidoPor: 'Añadido por', notaVenta: 'Nota de Venta', notaPersonal: 'Nota del Personal',
                                         detallesEnvio: 'Detalles de Envío', personalServicio: 'Personal de Servicio',
                                     }).map(([key, label]) => (
@@ -689,7 +712,7 @@ export default function TodasLasVentas({ onNuevaVenta, perfilUsuario }) {
                                 </div>
                             )}
                         </div>
-                        <button onClick={exportarPDF} className="border rounded px-3 py-1.5 text-xs font-bold text-gray-600 hover:bg-gray-50">📕 Exportar a PDF</button>
+                        {ajustesEmpresa.system_settings_explicit && ajustesEmpresa.is_enabled_export === false ? null : <button onClick={exportarPDF} className="border rounded px-3 py-1.5 text-xs font-bold text-gray-600 hover:bg-gray-50">📕 Exportar a PDF</button>}
                     </div>
 
                     <input
@@ -723,7 +746,7 @@ export default function TodasLasVentas({ onNuevaVenta, perfilUsuario }) {
                                 {columnasVisibles.estadoEnvio && <th className="p-3">Estado del Envío</th>}
                                 {columnasVisibles.totalArticulos && <th className="p-3 text-right">Total Artículos</th>}
                                 {columnasVisibles.tipoServicio && <th className="p-3">Tipos de Servicio</th>}
-                                {columnasVisibles.campoPersonalizado1 && <th className="p-3">Campo Personalizado 1</th>}
+                                {columnasVisibles.campoPersonalizado1 && <th className="p-3">{etiquetaCampoVenta1}</th>}
                                 {columnasVisibles.añadidoPor && <th className="p-3">Añadido por</th>}
                                 {columnasVisibles.notaVenta && <th className="p-3">Nota de Venta</th>}
                                 {columnasVisibles.notaPersonal && <th className="p-3">Nota del Personal</th>}
@@ -794,10 +817,10 @@ export default function TodasLasVentas({ onNuevaVenta, perfilUsuario }) {
                                                 </td>
                                             )}
                                             {columnasVisibles.metodoPago && <td className="p-3 text-gray-500">{venta.metodo_pago || '—'}</td>}
-                                            <td className="p-3 text-right font-bold text-gray-700">{formatGs(venta.total)}</td>
-                                            <td className="p-3 text-right text-gray-600">{formatGs(totalPagadoReal)}</td>
+                                            <td className="p-3 text-right font-bold text-gray-700">{formatVenta(venta, 'total')}</td>
+                                            <td className="p-3 text-right text-gray-600">{formatVenta(venta, 'monto_pagado')}</td>
                                             {columnasVisibles.gsPyg && <td className="p-3 text-gray-500">{formatGs(totalPagadoReal)}</td>}
-                                            {columnasVisibles.creditosOtorgados && <td className="p-3 text-right font-bold text-red-600">{formatGs(venta.saldo_pendiente)}</td>}
+                                            {columnasVisibles.creditosOtorgados && <td className="p-3 text-right font-bold text-red-600">{formatVenta(venta, 'saldo_pendiente')}</td>}
                                             {columnasVisibles.creditoDevolucion && <td className="p-3 text-right text-gray-600">{formatGs(creditosPorDevolucion[String(venta.id)] || 0)}</td>}
                                             {columnasVisibles.estadoEnvio && <td className="p-3 text-gray-600">{enviosPorVenta[String(venta.id)] || 'Sin envío'}</td>}
                                             {columnasVisibles.totalArticulos && <td className="p-3 text-right">{venta.articulos ?? 0}</td>}
@@ -883,9 +906,9 @@ export default function TodasLasVentas({ onNuevaVenta, perfilUsuario }) {
                             <p><span className="font-bold text-gray-600">Fecha:</span> {formatFecha(ventaDetalle.venta.fecha)}</p>
                             <p><span className="font-bold text-gray-600">Estado:</span> <span className={badgeEstado(ventaDetalle.venta.estado_pago)}>{ventaDetalle.venta.estado_pago}</span></p>
                             <p><span className="font-bold text-gray-600">Método de pago:</span> {ventaDetalle.venta.metodo_pago || '—'}</p>
-                            <p><span className="font-bold text-gray-600">Monto pagado:</span> {formatGs(ventaDetalle.venta.monto_pagado)}</p>
-                            <p><span className="font-bold text-gray-600">Saldo pendiente:</span> {formatGs(ventaDetalle.venta.saldo_pendiente)}</p>
-                            <p><span className="font-bold text-gray-600">Total:</span> {formatGs(ventaDetalle.venta.total)}</p>
+                            <p><span className="font-bold text-gray-600">Monto pagado:</span> {formatVenta(ventaDetalle.venta, 'monto_pagado')}</p>
+                            <p><span className="font-bold text-gray-600">Saldo pendiente:</span> {formatVenta(ventaDetalle.venta, 'saldo_pendiente')}</p>
+                            <p><span className="font-bold text-gray-600">Total:</span> {formatVenta(ventaDetalle.venta, 'total')}</p>
                             {ventaDetalle.venta.nota_venta && <p><span className="font-bold text-gray-600">Nota:</span> {ventaDetalle.venta.nota_venta}</p>}
                             {ventaDetalle.venta.motivo_anulacion && <p><span className="font-bold text-gray-600">Motivo de anulación:</span> {ventaDetalle.venta.motivo_anulacion}</p>}
 
@@ -904,7 +927,7 @@ export default function TodasLasVentas({ onNuevaVenta, perfilUsuario }) {
                                                     <tr key={it.id} className="border-b border-gray-50">
                                                         <td className="py-1">{it.nombre_producto}</td>
                                                         <td className="py-1 text-right">{it.cantidad}</td>
-                                                        <td className="py-1 text-right">{formatGs(it.subtotal)}</td>
+                                                        <td className="py-1 text-right">{it.subtotal_moneda != null ? formatVenta({ moneda_venta: ventaDetalle.venta.moneda_venta, subtotal_moneda: it.subtotal_moneda }, 'subtotal') : formatGs(it.subtotal)}</td>
                                                     </tr>
                                                 ))}
                                             </tbody>
@@ -920,10 +943,10 @@ export default function TodasLasVentas({ onNuevaVenta, perfilUsuario }) {
                                     ) : ventaDetalle.pagos?.length ? (
                                         <div className="overflow-x-auto rounded border">
                                             <table className="w-full text-xs"><thead className="bg-gray-50"><tr><th className="p-2 text-left">Método</th><th className="p-2 text-left">Cuenta</th><th className="p-2 text-left">Nota</th><th className="p-2 text-right">Monto</th></tr></thead><tbody>
-                                                {ventaDetalle.pagos.map((pago, index) => <tr key={`${pago.cuenta_id || 'pago'}-${index}`} className="border-t"><td className="p-2">{pago.metodo_pago || '—'}</td><td className="p-2">{pago.cuenta_id || '—'}</td><td className="p-2">{pago.nota || '—'}</td><td className="p-2 text-right font-semibold">{formatGs(pago.monto)}</td></tr>)}
+                                                {ventaDetalle.pagos.map((pago, index) => <tr key={`${pago.cuenta_id || 'pago'}-${index}`} className="border-t"><td className="p-2">{pago.metodo_pago || '—'}</td><td className="p-2">{pago.cuenta_id || '—'}</td><td className="p-2">{pago.nota || '—'}</td><td className="p-2 text-right font-semibold">{formatPagoEnMonedaVenta(ventaDetalle.venta, pago.monto)}</td></tr>)}
                                             </tbody></table>
                                         </div>
-                                    ) : <p className="text-xs text-gray-500">{ventaDetalle.venta.nota_venta?.toLowerCase().includes('pago múltiple') ? `El POS guardó este resumen en la nota: ${ventaDetalle.venta.nota_venta}. No hay un desglose por cuenta disponible para esta venta.` : `Esta venta no tiene filas de pago múltiple. Total pagado registrado: ${formatGs(totalPagadoVenta(ventaDetalle.venta))} · Método: ${ventaDetalle.venta.metodo_pago || '—'}.`}</p>}
+                                    ) : <p className="text-xs text-gray-500">{ventaDetalle.venta.nota_venta?.toLowerCase().includes('pago múltiple') ? `El POS guardó este resumen en la nota: ${ventaDetalle.venta.nota_venta}. No hay un desglose por cuenta disponible para esta venta.` : `Esta venta no tiene filas de pago múltiple. Total pagado registrado: ${formatVenta(ventaDetalle.venta, 'monto_pagado')} · Método: ${ventaDetalle.venta.metodo_pago || '—'}.`}</p>}
                                 </div>
                             )}
                         </div>
@@ -962,7 +985,7 @@ export default function TodasLasVentas({ onNuevaVenta, perfilUsuario }) {
                                 <input className="w-full border border-gray-300 rounded p-2.5 text-sm" value={formEdit.detalles_envio} onChange={(e) => setFormEdit({ ...formEdit, detalles_envio: e.target.value })} placeholder="Dirección, transportista, etc." />
                             </div>
                             <div>
-                                <label className="block text-sm font-bold text-gray-700 mb-1">Campo personalizado 1:</label>
+                                <label className="block text-sm font-bold text-gray-700 mb-1">{etiquetaCampoVenta1}:</label>
                                 <input className="w-full border border-gray-300 rounded p-2.5 text-sm" value={formEdit.campo_personalizado_1} onChange={(e) => setFormEdit({ ...formEdit, campo_personalizado_1: e.target.value })} />
                             </div>
                             <div>

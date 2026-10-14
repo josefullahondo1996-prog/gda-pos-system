@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { supabase } from './supabaseClient';
 import { sonidoExito, sonidoError } from './utils/sonido';
 import { useEmpresaInfo } from './utils/useEmpresa';
+import { useConfiguracionEmpresa } from './utils/useConfiguracionEmpresa';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { generateReceipt } from './utils/generateReceipt';
@@ -12,7 +13,8 @@ import { registrarPagoCliente } from './utils/registrarPagoCliente';
 
 export default function Clientes() {
   const { t } = useLanguage();
-  const { id: empresaId, nombre: nombreDelNegocio, direccion: direccionEmpresa, telefono: telefonoEmpresa } = useEmpresaInfo();
+  const { id: empresaId, nombre: nombreDelNegocio, direccion: direccionEmpresa, telefono: telefonoEmpresa, logo_url: logoEmpresa } = useEmpresaInfo();
+  const { ajustes: ajustesEmpresa } = useConfiguracionEmpresa(empresaId);
   const { notificar, confirmar } = useNotificacion();
   const [clientes, setClientes] = useState([]);
   const [ventasRaw, setVentasRaw] = useState([]);
@@ -36,6 +38,10 @@ export default function Clientes() {
 
   // Tabla: paginación y columnas visibles
   const [entradasPorPagina, setEntradasPorPagina] = useState(25);
+  useEffect(() => {
+    const valor = ajustesEmpresa.default_datatable_page_entries;
+    if (valor !== undefined && valor !== '') setEntradasPorPagina(valor === 'Todos' ? 0 : Math.max(1, Number(valor) || 25));
+  }, [ajustesEmpresa.default_datatable_page_entries]);
   const [paginaActual, setPaginaActual] = useState(1);
   const [mostrarMenuColumnas, setMostrarMenuColumnas] = useState(false);
   const [columnasVisibles, setColumnasVisibles] = useState({
@@ -185,6 +191,14 @@ export default function Clientes() {
   const [terminoPagoNum, setTerminoPagoNum] = useState('');
   const [terminoPagoTipo, setTerminoPagoTipo] = useState('Dias');
   const [limiteCredito, setLimiteCredito] = useState('0');
+
+  useEffect(() => {
+    if (!mostrarModalAñadir || clienteEditando) return;
+    const predeterminado = Number(ajustesEmpresa.default_credit_limit);
+    if (Number.isFinite(predeterminado) && predeterminado > 0) {
+      setLimiteCredito((actual) => (actual === '0' || actual === '' ? String(predeterminado) : actual));
+    }
+  }, [ajustesEmpresa.default_credit_limit, clienteEditando, mostrarModalAñadir]);
 
   const manejarCambioTipoDoc = (nuevoTipoDoc) => {
     setTipoDoc(nuevoTipoDoc);
@@ -427,7 +441,7 @@ export default function Clientes() {
     const clienteRuc = clienteLibroMayor?.documento_nro || '';
     generateReceipt(
       { ...venta, cliente_nombre: venta.cliente, cliente_ruc: clienteRuc, items },
-      { nombre: nombreDelNegocio, direccion: direccionEmpresa, telefono: telefonoEmpresa },
+      { nombre: nombreDelNegocio, direccion: direccionEmpresa, telefono: telefonoEmpresa, logo_url: logoEmpresa },
       '80mm',
       true
     );
@@ -569,9 +583,9 @@ export default function Clientes() {
   }, [clientesEnriquecidos, busqueda, filtroGrupo, filtroEstado, filtroCreditosOtorgados, filtroPagoRealizado, filtroCreditoAFavor, filtroSaldoInicial, filtroSinVenta, filtroVendedor]);
 
   // Paginación
-  const totalPaginas = Math.max(1, Math.ceil(clientesFiltrados.length / entradasPorPagina));
+  const totalPaginas = entradasPorPagina === 0 ? 1 : Math.max(1, Math.ceil(clientesFiltrados.length / entradasPorPagina));
   const paginaSegura = Math.min(paginaActual, totalPaginas);
-  const clientesPagina = clientesFiltrados.slice(
+  const clientesPagina = entradasPorPagina === 0 ? clientesFiltrados : clientesFiltrados.slice(
     (paginaSegura - 1) * entradasPorPagina,
     paginaSegura * entradasPorPagina
   );
@@ -1169,13 +1183,14 @@ export default function Clientes() {
                 <option value={25}>25</option>
                 <option value={50}>50</option>
                 <option value={100}>100</option>
+                <option value={200}>200</option><option value={500}>500</option><option value={1000}>1.000</option><option value={0}>Todos</option>
               </select>
               <span>{t('entries')}</span>
             </div>
 
             <div className="flex flex-wrap gap-2">
-              <button onClick={exportarCSV} className="border rounded px-3 py-1.5 text-xs font-bold text-gray-600 hover:bg-gray-50">Exportar a CSV</button>
-              <button onClick={exportarExcel} className="border rounded px-3 py-1.5 text-xs font-bold text-gray-600 hover:bg-gray-50">{t('exportExcel')}</button>
+              {ajustesEmpresa.system_settings_explicit && ajustesEmpresa.is_enabled_export === false ? null : <button onClick={exportarCSV} className="border rounded px-3 py-1.5 text-xs font-bold text-gray-600 hover:bg-gray-50">Exportar a CSV</button>}
+              {ajustesEmpresa.system_settings_explicit && ajustesEmpresa.is_enabled_export === false ? null : <button onClick={exportarExcel} className="border rounded px-3 py-1.5 text-xs font-bold text-gray-600 hover:bg-gray-50">{t('exportExcel')}</button>}
               <button onClick={() => window.print()} className="border rounded px-3 py-1.5 text-xs font-bold text-gray-600 hover:bg-gray-50">{t('print')}</button>
               <div className="relative">
                 <button onClick={() => setMostrarMenuColumnas(!mostrarMenuColumnas)} className="border rounded px-3 py-1.5 text-xs font-bold text-gray-600 hover:bg-gray-50">Visibilidad de columnas</button>
@@ -1202,7 +1217,7 @@ export default function Clientes() {
                   </div>
                 )}
               </div>
-              <button onClick={exportarPDF} className="border border-slate-200 rounded-lg px-3 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-50">{t('exportPdf')}</button>
+              {ajustesEmpresa.system_settings_explicit && ajustesEmpresa.is_enabled_export === false ? null : <button onClick={exportarPDF} className="border border-slate-200 rounded-lg px-3 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-50">{t('exportPdf')}</button>}
             </div>
 
             <label className="relative block w-full sm:w-64">
@@ -2712,7 +2727,7 @@ export default function Clientes() {
                         </div>
 
                         <div className="flex flex-wrap gap-2">
-                          <button onClick={exportarVentasCSV} className="border rounded px-3 py-1.5 text-xs font-bold text-gray-600 hover:bg-gray-50">Exportar a CSV</button>
+                          {ajustesEmpresa.system_settings_explicit && ajustesEmpresa.is_enabled_export === false ? null : <button onClick={exportarVentasCSV} className="border rounded px-3 py-1.5 text-xs font-bold text-gray-600 hover:bg-gray-50">Exportar a CSV</button>}
                           <button onClick={exportarVentasExcel} className="border rounded px-3 py-1.5 text-xs font-bold text-gray-600 hover:bg-gray-50">Exportar a Excel</button>
                           <button onClick={() => window.print()} className="border rounded px-3 py-1.5 text-xs font-bold text-gray-600 hover:bg-gray-50">Imprimir</button>
                           <div className="relative">

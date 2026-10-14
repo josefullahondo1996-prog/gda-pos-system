@@ -1,5 +1,6 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { getAuthenticatedUser, unauthorized } from '../_shared/auth.ts';
+import { getGoekuaCredential } from '../_shared/goekua.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -22,6 +23,9 @@ Deno.serve(async (req) => {
   }
 
   try {
+    if (Deno.env.get('GOEKUA_STAGING_EMISSION_ENABLED') !== 'true') {
+      return new Response(JSON.stringify({ error: 'La emisión de pruebas está bloqueada hasta terminar la revisión fiscal y técnica.' }), { status: 503, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    }
     const { user, error: authError } = await getAuthenticatedUser(req);
     if (!user) return unauthorized(authError || 'No autorizado.', corsHeaders);
 
@@ -53,7 +57,7 @@ Deno.serve(async (req) => {
     // ──────────────────────────────────────────────────────────
     const { data: empresa, error: empresaError } = await supabase
       .from('empresas')
-      .select('fe_api_key, fe_activa, fe_proveedor, ruc, nombre, direccion, telefono, email')
+      .select('ruc, nombre, direccion, telefono, email')
       .eq('id', empresaId)
       .single();
 
@@ -61,9 +65,10 @@ Deno.serve(async (req) => {
       throw new Error('Empresa no encontrada: ' + (empresaError?.message || ''));
     }
 
-    if (!empresa.fe_activa || !empresa.fe_api_key) {
+    const goekua = await getGoekuaCredential(supabase, empresaId);
+    if (!goekua || goekua.ambiente !== 'staging') {
       return new Response(
-        JSON.stringify({ error: 'La facturación electrónica no está activa o falta la API Key. Configurala en Ajustes → Facturación Electrónica.' }),
+        JSON.stringify({ error: 'No hay credenciales cifradas de staging configuradas. La emisión en producción está bloqueada.' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
@@ -243,11 +248,11 @@ Deno.serve(async (req) => {
     // 7. Enviar a la API de Goekua
     // ──────────────────────────────────────────────────────────
     const response = await fetch(
-      'https://api.goekua.com.py/api/electronic-document/generate-invoice',
+      `${goekua.baseUrl}/api/electronic-document/generate-invoice`,
       {
         method: 'POST',
         headers: {
-          'x-api-key': empresa.fe_api_key,
+          'x-api-key': goekua.apiKey,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify(payloadGoekua),
