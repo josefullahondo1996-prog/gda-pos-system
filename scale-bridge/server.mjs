@@ -68,11 +68,49 @@ const server = http.createServer(async (req, res) => {
   if (req.method === 'OPTIONS') {
     res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+    if (req.headers['access-control-request-private-network'] === 'true') res.setHeader('Access-Control-Allow-Private-Network', 'true');
     res.writeHead(204).end();
     return;
   }
   if (req.method === 'GET' && req.url === '/health') {
-    res.writeHead(200).end(JSON.stringify({ ok: true, service: 'gda-scale-bridge' }));
+    res.writeHead(200).end(JSON.stringify({ ok: true, service: 'gda-local-device-bridge' }));
+    return;
+  }
+  if (req.method === 'POST' && req.url === '/api/printer/print') {
+    let body = '';
+    for await (const chunk of req) {
+      body += chunk;
+      if (body.length > 180000) { res.writeHead(413).end(JSON.stringify({ ok: false, error: 'Ticket demasiado grande.' })); return; }
+    }
+    try {
+      const cfg = JSON.parse(body || '{}');
+      const port = Number(cfg.port || 9100);
+      if (!privateIPv4(cfg.ip)) throw new Error('La IP de la impresora debe ser privada IPv4 (LAN).');
+      if (port !== 9100) throw new Error('La impresora ESC/POS debe usar el puerto RAW 9100.');
+      if (typeof cfg.bytesBase64 !== 'string' || cfg.bytesBase64.length < 8 || cfg.bytesBase64.length > 160000 || !/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(cfg.bytesBase64)) {
+        throw new Error('Los datos ESC/POS no son válidos.');
+      }
+      const bytes = Buffer.from(cfg.bytesBase64, 'base64');
+      if (!bytes.length || bytes.length > 120000) throw new Error('El ticket supera el tamaño permitido.');
+      await new Promise((resolve, reject) => {
+        const socket = net.createConnection({ host: cfg.ip, port });
+        const timer = setTimeout(() => finish(new Error('Tiempo de espera agotado al conectar con la impresora.')), 8000);
+        let finished = false;
+        const finish = (error) => {
+          if (finished) return;
+          finished = true;
+          clearTimeout(timer);
+          socket.destroy();
+          error ? reject(error) : resolve();
+        };
+        socket.once('connect', () => socket.end(bytes, () => finish()));
+        socket.once('error', (error) => finish(new Error(`No se pudo enviar el ticket ESC/POS: ${error.message}`)));
+        socket.once('close', (hadError) => { if (!finished && hadError) finish(new Error('La conexión con la impresora se cerró antes de completar el envío.')); });
+      });
+      res.writeHead(200).end(JSON.stringify({ ok: true, sent: true, note: 'Datos enviados al puerto RAW; el puente no puede confirmar la impresión física.' }));
+    } catch (error) {
+      res.writeHead(400).end(JSON.stringify({ ok: false, error: error.message || 'Falló el envío a la impresora.' }));
+    }
     return;
   }
   if (req.method !== 'POST' || req.url !== '/api/scale/read') {

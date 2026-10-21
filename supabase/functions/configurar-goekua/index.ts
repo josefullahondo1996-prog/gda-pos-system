@@ -30,7 +30,7 @@ Deno.serve(async (req) => {
   if (apiKey.length < 12 || apiKey.length > 500) return json({ error: 'Ingresá la API key de staging válida de Goekua.' }, 400);
   let url: URL;
   try { url = new URL(baseUrlText); } catch { return json({ error: 'La URL de staging no es válida.' }, 400); }
-  if (url.protocol !== 'https:' || !/(^|\.)goekua\.com\.py$/i.test(url.hostname) || !/staging/i.test(url.hostname) || url.pathname !== '') {
+  if (url.protocol !== 'https:' || !/(^|\.)goekua\.com\.py$/i.test(url.hostname) || !/staging/i.test(url.hostname) || !['', '/'].includes(url.pathname) || url.search || url.hash) {
     return json({ error: 'La base debe ser el host HTTPS de staging confirmado por Goekua (sin rutas).' }, 400);
   }
   const encoded = Deno.env.get('GOEKUA_ENCRYPTION_KEY') || '';

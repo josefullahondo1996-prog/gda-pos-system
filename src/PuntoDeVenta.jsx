@@ -10,6 +10,7 @@ import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { sonidoExito, sonidoError } from './utils/sonido';
 import { generateReceipt } from './utils/generateReceipt';
+import { checkPrinterBridge, printEscPos } from './utils/escposPrinter';
 import { useEmpresaInfo } from './utils/useEmpresa';
 import { useConfiguracionEmpresa } from './utils/useConfiguracionEmpresa';
 import { useUbicacionUsuario } from './utils/useUbicacion';
@@ -27,6 +28,7 @@ const PuntoDeVenta = ({ cajaInfo, session, perfilUsuario, onVolver, onSolicitarC
   const { ajustes: ajustesEmpresa, cargando: cargandoAjustesEmpresa } = useConfiguracionEmpresa(empresaId);
   const { notificar } = useNotificacion();
   const [formatoTicket, setFormatoTicket] = useState(() => localStorage.getItem('gda_formato_ticket') || '80mm');
+  const [impresoraConfig, setImpresoraConfig] = useState(null);
   const [balanzaConfig, setBalanzaConfig] = useState(null);
   const [mostrarBalanza, setMostrarBalanza] = useState(false);
   const [productoBalanzaId, setProductoBalanzaId] = useState('');
@@ -41,6 +43,7 @@ const PuntoDeVenta = ({ cajaInfo, session, perfilUsuario, onVolver, onSolicitarC
   useEffect(() => {
     if (!empresaId) return;
     let activo = true;
+    setImpresoraConfig(null);
     (async () => {
       const { data, error } = await supabase.from('empresas').select('configuracion').eq('id', empresaId).maybeSingle();
       if (!activo) return;
@@ -53,6 +56,7 @@ const PuntoDeVenta = ({ cajaInfo, session, perfilUsuario, onVolver, onSolicitarC
       setBalanzaConfig(Array.isArray(balanzas) ? (balanzas.find((scale) => scale.is_default) || balanzas[0] || null) : null);
       const predeterminada = Array.isArray(impresoras) ? (impresoras.find((p) => p.is_default) || impresoras[0]) : null;
       if (!predeterminada) return;
+      setImpresoraConfig(predeterminada);
       const formato = Number(predeterminada.characters || 42) <= 32 ? '58mm' : '80mm';
       setFormatoTicket(formato);
       localStorage.setItem('gda_formato_ticket', formato);
@@ -897,12 +901,27 @@ const PuntoDeVenta = ({ cajaInfo, session, perfilUsuario, onVolver, onSolicitarC
           subtotal_moneda: convertirDesdeGs((item.precio_venta || item.precio || 0) * item.cantidad),
         })),
       };
-      generateReceipt(
-        ventaParaTicket,
-        { nombre: nombreEmpresa, direccion: direccionEmpresa, telefono: telefonoEmpresa, ruc: rucEmpresa, logo_url: logoEmpresa },
-        formatoTicket,
-        true
-      );
+      const empresaTicket = { nombre: nombreEmpresa, direccion: direccionEmpresa, telefono: telefonoEmpresa, ruc: rucEmpresa, logo_url: logoEmpresa };
+      if (impresoraConfig?.connection === 'Network') {
+        try {
+          await checkPrinterBridge();
+        } catch {
+          // Si el agente no está instalado/iniciado, conserva la impresión estándar del navegador.
+          generateReceipt(ventaParaTicket, empresaTicket, formatoTicket, true);
+          notificar.info('Puente ESC/POS no disponible; se abrió la impresión del navegador.');
+          vaciarCarrito();
+          setCliente('Cliente Ocasional');
+          return ventaId;
+        }
+        try {
+          await printEscPos(impresoraConfig, ventaParaTicket, empresaTicket);
+          notificar.exito('Ticket enviado a la impresora ESC/POS.');
+        } catch (printError) {
+          alert(`La venta se guardó, pero no se pudo enviar el ticket a la impresora ESC/POS.\n\n${printError.message}\n\nPodés reimprimir el comprobante desde el historial de ventas.`);
+        }
+      } else {
+        generateReceipt(ventaParaTicket, empresaTicket, formatoTicket, true);
+      }
       vaciarCarrito();
       setCliente('Cliente Ocasional');
       return ventaId;

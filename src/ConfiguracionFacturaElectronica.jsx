@@ -9,7 +9,7 @@ export default function ConfiguracionFacturaElectronica() {
     const { t } = useLanguage();
     const { id: empresaId, nombre: nombreEmpresa, ruc: rucEmpresa } = useEmpresaInfo();
     const [apiKey, setApiKey] = useState('');
-    const [baseUrl, setBaseUrl] = useState('');
+    const [baseUrl, setBaseUrl] = useState('https://staging-api.goekua.com.py');
     const [estado, setEstado] = useState(null);
     const [cargando, setCargando] = useState(true);
     const [guardando, setGuardando] = useState(false);
@@ -21,7 +21,7 @@ export default function ConfiguracionFacturaElectronica() {
     const cargarConfiguracion = async () => {
         setCargando(true);
         const { data, error } = await supabase.functions.invoke('configurar-goekua', { body: { action: 'status', empresaId } });
-        if (!error && data) { setEstado(data); setBaseUrl(data.baseUrl || ''); }
+        if (!error && data) { setEstado(data); setBaseUrl(data.baseUrl || 'https://staging-api.goekua.com.py'); }
         setCargando(false);
     };
 
@@ -74,7 +74,7 @@ export default function ConfiguracionFacturaElectronica() {
 
                 <div>
                     <label className="block text-xs font-bold text-gray-600 mb-1">URL base de staging confirmada por Goekua</label>
-                    <input type="url" className="w-full border border-gray-300 rounded p-2.5 text-sm" placeholder="https://staging-…goekua.com.py" value={baseUrl} onChange={(e) => setBaseUrl(e.target.value)} />
+                    <input type="url" className="w-full border border-gray-300 rounded p-2.5 text-sm" value={baseUrl} onChange={(e) => setBaseUrl(e.target.value)} />
                 </div>
                 <div>
                     <label className="block text-xs font-bold text-gray-600 mb-1">API key de staging</label>

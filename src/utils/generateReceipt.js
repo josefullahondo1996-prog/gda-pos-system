@@ -153,9 +153,12 @@ export const generateReceipt = (venta, empresa = {}, formato = '80mm', autoImpri
       width: ${bodyWidth};
       margin: 0 auto;
       padding: 5px;
-      font-size: 11px;
+      font-size: 12px;
+      font-weight: 600;
       background: #fff;
       color: #000;
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
     }
     .text-center { text-align: center; }
     .text-right  { text-align: right; }
@@ -172,7 +175,7 @@ export const generateReceipt = (venta, empresa = {}, formato = '80mm', autoImpri
       border-bottom: 1px dashed #000;
       padding-bottom: 3px;
     }
-    td { font-size: 10px; }
+    td { font-size: 11px; font-weight: 600; }
     .right { text-align: right; }
   </style>
 </head>

@@ -6,6 +6,7 @@
     "dev": "vite",
     "build": "vite build",
     "scale-bridge": "node scale-bridge/server.mjs",
+    "device-bridge": "node scale-bridge/server.mjs",
     "preview": "vite preview",
     "web": "vite build",
     "android:sync": "npm run build && npx cap copy android",
