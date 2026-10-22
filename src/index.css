@@ -577,6 +577,12 @@ button[class*="chat-window-toggle"][aria-expanded="true"] svg,
   animation: gda-app-loading-progress 1.2s ease-in-out infinite alternate;
 }
 
+.gda-dashboard-skeleton {
+  background: linear-gradient(100deg, #e2e8f0 0%, #e2e8f0 34%, #ffffff 50%, #e2e8f0 66%, #e2e8f0 100%);
+  background-size: 220% 100%;
+  animation: gda-dashboard-skeleton-shimmer 900ms linear infinite;
+}
+
 @keyframes gda-navigation-progress {
   0% { transform: scaleX(0); opacity: 1; }
   65% { transform: scaleX(0.78); opacity: 1; }
@@ -589,7 +595,16 @@ button[class*="chat-window-toggle"][aria-expanded="true"] svg,
   to { transform: translateX(300%); }
 }
 
+@keyframes gda-dashboard-skeleton-shimmer {
+  from { background-position: 100% 0; }
+  to { background-position: -120% 0; }
+}
+
 @media (prefers-reduced-motion: reduce) {
+  .sidebar-submenu {
+    transition: none !important;
+  }
+
   .pos-cart-row-fade-0,
   .pos-cart-row-fade-1 {
     animation-duration: 1ms;
@@ -602,5 +617,10 @@ button[class*="chat-window-toggle"][aria-expanded="true"] svg,
   .gda-app-loading-progress {
     animation: none;
     transform: none;
+  }
+
+  .gda-dashboard-skeleton {
+    animation: none;
+    background: #e2e8f0;
   }
 }

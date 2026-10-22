@@ -176,6 +176,8 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
   const navigate = useNavigate();
   const [vistaActiva, setVistaActiva] = useState(soloPOS ? 'pos' : initialView);
   const [menuExpandido, setMenuExpandido] = useState('ventas');
+  const [menuRenderizado, setMenuRenderizado] = useState('ventas');
+  const submenuTimerRef = useRef(null);
   const [cajaActual, setCajaActual] = useState(null);
   const [cargandoCaja, setCargandoCaja] = useState(true);
   const [reporteCierre, setReporteCierre] = useState(null);
@@ -370,9 +372,33 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
   // Si el sidebar está colapsado y el usuario abre un submenú, expandimos primero
   const toggleMenu = (menu) => {
     if (sidebarColapsado) setSidebarColapsado(false);
-    if (menuExpandido === menu) setMenuExpandido(null);
-    else setMenuExpandido(menu);
+    window.clearTimeout(submenuTimerRef.current);
+    if (menuExpandido === menu) {
+      setMenuExpandido(null);
+      // Mantener el contenido montado hasta que termine el cierre visual.
+      submenuTimerRef.current = window.setTimeout(() => setMenuRenderizado(null), 520);
+    } else {
+      setMenuRenderizado(menu);
+      setMenuExpandido(menu);
+    }
   };
+
+  const estiloSubmenu = (menu) => ({
+    // El menú vive dentro de una columna flex con scroll. Evitar flex-shrink
+    // impide que el navegador aplaste el submenú hasta dejar visible una sola fila.
+    maxHeight: menuExpandido === menu ? '720px' : '0px',
+    opacity: menuExpandido === menu ? 1 : 0,
+    transform: menuExpandido === menu ? 'translateY(0)' : 'translateY(-7px)',
+    overflow: 'hidden',
+    flexShrink: 0,
+    transition: 'max-height 500ms cubic-bezier(0.22, 1, 0.36, 1), opacity 360ms ease, transform 420ms cubic-bezier(0.22, 1, 0.36, 1)',
+    pointerEvents: menuExpandido === menu ? 'auto' : 'none',
+  });
+
+  useEffect(() => () => window.clearTimeout(submenuTimerRef.current), []);
+  useEffect(() => {
+    if (menuExpandido) setMenuRenderizado(menuExpandido);
+  }, [menuExpandido]);
 
   useEffect(() => {
     const path = location.pathname.toLowerCase();
@@ -1084,8 +1110,8 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
                     <span className="ml-auto inline-flex shrink-0 items-center text-slate-500 group-hover:text-[#ff4d00]"><ChevronLeft size={14} strokeWidth={2} /></span>
                   )}
                 </button>
-                {menuExpandido === 'usuarios' && !sidebarColapsado && (
-                  <div className="mx-1.5 flex flex-col rounded-b bg-[#1e1f35] py-1.5">
+                {menuRenderizado === 'usuarios' && !sidebarColapsado && (
+                  <div aria-hidden={menuExpandido !== 'usuarios'} inert={menuExpandido !== 'usuarios'} style={estiloSubmenu('usuarios')} className="sidebar-submenu mx-1.5 flex flex-col rounded-b bg-[#1e1f35] py-1.5">
                     {tieneCategoria('usuarios') && (
                       <Link to="/usuarios" onClick={() => irA('usuarios', '/usuarios')} className={estiloSubItem('usuarios')}>🠖 {t('users')}</Link>
                     )}
@@ -1106,8 +1132,8 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
                     <span className="ml-auto inline-flex shrink-0 items-center text-slate-500 group-hover:text-[#ff4d00]"><ChevronLeft size={14} strokeWidth={2} /></span>
                   )}
                 </button>
-                {menuExpandido === 'contactos' && !sidebarColapsado && (
-                  <div className="mx-1.5 flex flex-col rounded-b bg-[#1e1f35] py-1.5">
+                {menuRenderizado === 'contactos' && !sidebarColapsado && (
+                  <div aria-hidden={menuExpandido !== 'contactos'} inert={menuExpandido !== 'contactos'} style={estiloSubmenu('contactos')} className="sidebar-submenu mx-1.5 flex flex-col rounded-b bg-[#1e1f35] py-1.5">
                     <Link to="/proveedores" onClick={() => irA('proveedores', '/proveedores')} className={estiloSubItem('proveedores')}>🠖 {t('suppliers')}</Link>
                     <Link to="/clientes" onClick={() => irA('clientes', '/clientes')} className={estiloSubItem('clientes')}>🠖 {t('customers')}</Link>
                     <Link to="/grupos_clientes" onClick={() => irA('grupos_clientes', '/grupos_clientes')} className={estiloSubItem('grupos_clientes')}>🠖 {t('customerGroups')}</Link>
@@ -1120,14 +1146,14 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
             {/* MENÚ: PRODUCTOS */}
             {tieneCategoria('productos') && (
               <>
-                <button onClick={() => toggleMenu('productos')} className={estiloBotonDesplegable('productos')} title={t('products')}>
+                <button onClick={() => toggleMenu('productos')} aria-expanded={menuExpandido === 'productos'} aria-controls="submenu-productos" className={estiloBotonDesplegable('productos')} title={t('products')}>
                   <div className="flex items-center gap-3"><Package size={18} strokeWidth={2} /> {!sidebarColapsado && t('products')}</div>
                   {!sidebarColapsado && (
                     <span className="ml-auto inline-flex shrink-0 items-center text-slate-500 group-hover:text-[#ff4d00]"><ChevronLeft size={14} strokeWidth={2} /></span>
                   )}
                 </button>
-                {menuExpandido === 'productos' && !sidebarColapsado && (
-                  <div className="mx-1.5 flex flex-col rounded-b bg-[#1e1f35] py-1.5">
+                {menuRenderizado === 'productos' && !sidebarColapsado && (
+                  <div id="submenu-productos" aria-hidden={menuExpandido !== 'productos'} inert={menuExpandido !== 'productos'} style={estiloSubmenu('productos')} className="sidebar-submenu mx-1.5 flex flex-col rounded-b bg-[#1e1f35] py-1.5">
                     <Link to="/catalogo" onClick={() => irA('catalogo', '/catalogo')} className={estiloSubItem('catalogo')}>🠖 {t('productList')}</Link>
                     <Link to="/agregar_producto" onClick={() => irA('agregar_producto', '/agregar_producto')} className={estiloSubItem('agregar_producto')}>🠖 {t('addProduct')}</Link>
                     <Link to="/imprimir-etiquetas" onClick={() => irA('imprimir_etiquetas', '/imprimir-etiquetas')} className={estiloSubItem('imprimir_etiquetas')}>🠖 Imprimir etiquetas</Link>
@@ -1166,8 +1192,8 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
                     <span className="ml-auto inline-flex shrink-0 items-center text-slate-500 group-hover:text-[#ff4d00]"><ChevronLeft size={14} strokeWidth={2} /></span>
                   )}
                 </button>
-                {menuExpandido === 'compras' && !sidebarColapsado && (
-                  <div className="mx-1.5 flex flex-col rounded-b bg-[#1e1f35] py-1.5">
+                {menuRenderizado === 'compras' && !sidebarColapsado && (
+                  <div aria-hidden={menuExpandido !== 'compras'} inert={menuExpandido !== 'compras'} style={estiloSubmenu('compras')} className="sidebar-submenu mx-1.5 flex flex-col rounded-b bg-[#1e1f35] py-1.5">
                     <Link to="/compras" onClick={() => irA('compras', '/compras')} className={estiloSubItem('compras')}>🠖 {t('purchaseList')}</Link>
                     <Link to="/agregar_compra" onClick={() => irA('agregar_compra', '/agregar_compra')} className={estiloSubItem('agregar_compra')}>🠖 {t('addPurchase')}</Link>
                     <Link to="/devoluciones_compra" onClick={() => irA('devoluciones_compra', '/devoluciones_compra')} className={estiloSubItem('devoluciones_compra')}>🠖 {t('purchaseReturns')}</Link>
@@ -1185,8 +1211,8 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
                     <span className="ml-auto inline-flex shrink-0 items-center text-slate-500 group-hover:text-[#ff4d00]"><ChevronLeft size={14} strokeWidth={2} /></span>
                   )}
                 </button>
-                {menuExpandido === 'ventas' && !sidebarColapsado && (
-                  <div className="mx-1.5 flex flex-col rounded-b bg-[#1e1f35] py-1.5">
+                {menuRenderizado === 'ventas' && !sidebarColapsado && (
+                  <div aria-hidden={menuExpandido !== 'ventas'} inert={menuExpandido !== 'ventas'} style={estiloSubmenu('ventas')} className="sidebar-submenu mx-1.5 flex flex-col rounded-b bg-[#1e1f35] py-1.5">
                     <Link to="/todas_ventas" onClick={() => irA('todas_ventas', '/todas_ventas')} className={estiloSubItem('todas_ventas')}>🠖 {t('allSales')}</Link>
                     <Link to="/pos" onClick={() => irA('pos', '/pos')} className={estiloSubItem('pos')}>🠖 {t('pos')}</Link>
                     <Link to="/cobros" onClick={() => irA('cobros', '/cobros')} className={estiloSubItem('cobros')}>🠖 {t('pendingOrders')}</Link>
@@ -1219,7 +1245,7 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
                   <div className="flex items-center gap-3"><ArrowRightLeft size={18} strokeWidth={2} /> {!sidebarColapsado && 'Transferencias de stock'}</div>
                   {!sidebarColapsado && <span className="ml-auto inline-flex shrink-0 items-center text-slate-500 group-hover:text-[#ff4d00]"><ChevronLeft size={14} strokeWidth={2} /></span>}
                 </button>
-                {menuExpandido === 'transferencias_stock' && !sidebarColapsado && <div className="mx-1.5 flex flex-col rounded-b bg-[#1e1f35] py-1.5">
+                {menuRenderizado === 'transferencias_stock' && !sidebarColapsado && <div aria-hidden={menuExpandido !== 'transferencias_stock'} inert={menuExpandido !== 'transferencias_stock'} style={estiloSubmenu('transferencias_stock')} className="sidebar-submenu mx-1.5 flex flex-col rounded-b bg-[#1e1f35] py-1.5">
                   <Link to="/transferencias-stock" onClick={() => irA('transferencias_stock', '/transferencias-stock')} className={estiloSubItem('transferencias_stock', '/transferencias-stock')}>🠖 Listar transferencias</Link>
                   <Link to="/transferencias-stock/nuevo" onClick={() => irA('transferencias_stock', '/transferencias-stock/nuevo')} className={estiloSubItem('', '/transferencias-stock/nuevo')}>🠖 Agregar transferencia</Link>
                 </div>}
@@ -1232,7 +1258,7 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
                   <div className="flex items-center gap-3"><ClipboardCheck size={18} strokeWidth={2} /> {!sidebarColapsado && 'Control de stock'}</div>
                   {!sidebarColapsado && <span className="ml-auto inline-flex shrink-0 items-center text-slate-500 group-hover:text-[#ff4d00]"><ChevronLeft size={14} strokeWidth={2} /></span>}
                 </button>
-                {menuExpandido === 'control_stock' && !sidebarColapsado && <div className="mx-1.5 flex flex-col rounded-b bg-[#1e1f35] py-1.5">
+                {menuRenderizado === 'control_stock' && !sidebarColapsado && <div aria-hidden={menuExpandido !== 'control_stock'} inert={menuExpandido !== 'control_stock'} style={estiloSubmenu('control_stock')} className="sidebar-submenu mx-1.5 flex flex-col rounded-b bg-[#1e1f35] py-1.5">
                   <Link to="/control-stock" onClick={() => irA('ajustes_stock', '/control-stock')} className={estiloSubItem('ajustes_stock', '/control-stock')}>🠖 Listar controles de stock</Link>
                   <Link to="/control-stock/nuevo" onClick={() => irA('ajustes_stock', '/control-stock/nuevo')} className={estiloSubItem('', '/control-stock/nuevo')}>🠖 Nuevo control de stock</Link>
                 </div>}
@@ -1248,8 +1274,8 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
                     <span className="ml-auto inline-flex shrink-0 items-center text-slate-500 group-hover:text-[#ff4d00]"><ChevronLeft size={14} strokeWidth={2} /></span>
                   )}
                 </button>
-                {menuExpandido === 'gastos' && !sidebarColapsado && (
-                  <div className="mx-1.5 flex flex-col rounded-b bg-[#1e1f35] py-1.5">
+                {menuRenderizado === 'gastos' && !sidebarColapsado && (
+                  <div aria-hidden={menuExpandido !== 'gastos'} inert={menuExpandido !== 'gastos'} style={estiloSubmenu('gastos')} className="sidebar-submenu mx-1.5 flex flex-col rounded-b bg-[#1e1f35] py-1.5">
                     <Link to="/gastos" onClick={() => irA('gastos', '/gastos')} className={estiloSubItem('gastos')}>🠖 {t('expenseList')}</Link>
                     <Link to="/gastos/agregar" onClick={() => irA('agregar_gasto', '/gastos/agregar')} className={estiloSubItem('agregar_gasto')}>🠖 {t('addExpense')}</Link>
                     <Link to="/gastos/categorias" onClick={() => irA('categorias_gastos', '/gastos/categorias')} className={estiloSubItem('categorias_gastos')}>🠖 {t('expenseCategories')}</Link>
@@ -1267,8 +1293,8 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
                     <span className="ml-auto inline-flex shrink-0 items-center text-slate-500 group-hover:text-[#ff4d00]"><ChevronLeft size={14} strokeWidth={2} /></span>
                   )}
                 </button>
-                {menuExpandido === 'caja_banco' && !sidebarColapsado && (
-                  <div className="mx-1.5 flex flex-col rounded-b bg-[#1e1f35] py-1.5">
+                {menuRenderizado === 'caja_banco' && !sidebarColapsado && (
+                  <div aria-hidden={menuExpandido !== 'caja_banco'} inert={menuExpandido !== 'caja_banco'} style={estiloSubmenu('caja_banco')} className="sidebar-submenu mx-1.5 flex flex-col rounded-b bg-[#1e1f35] py-1.5">
                     <Link to="/cajas" onClick={() => irA('cajas', '/cajas')} className={estiloSubItem('cajas')}>🠖 {t('cashRegisters')}</Link>
                     <Link to="/informe-caja-pago" onClick={() => irA('informe_caja-pago', '/informe-caja-pago')} className={estiloSubItem('informe_caja_pago')}>🠖 {t('paymentReport')}</Link>
                   </div>
@@ -1283,7 +1309,7 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
                   <div className="flex items-center gap-3"><BarChart3 size={18} strokeWidth={2} /> {!sidebarColapsado && t('reports')}</div>
                   {!sidebarColapsado && <span className="ml-auto inline-flex shrink-0 items-center text-slate-500 group-hover:text-[#ff4d00]"><ChevronLeft size={14} strokeWidth={2} /></span>}
                 </button>
-                {menuExpandido === 'informes' && !sidebarColapsado && <div className="mx-1.5 flex flex-col rounded-b bg-[#1e1f35] py-1.5">
+                {menuRenderizado === 'informes' && !sidebarColapsado && <div aria-hidden={menuExpandido !== 'informes'} inert={menuExpandido !== 'informes'} style={estiloSubmenu('informes')} className="sidebar-submenu mx-1.5 flex flex-col rounded-b bg-[#1e1f35] py-1.5">
                   <Link to="/ganancias_perdidas" onClick={() => irA('ganancias_perdidas', '/ganancias_perdidas')} className={estiloSubItem('', '/ganancias_perdidas')}>🠖 Ganancias y Pérdidas</Link>
                   <Link to="/informes/compras-ventas" onClick={() => irA('informes_micdepos', '/informes/compras-ventas')} className={estiloSubItem('', '/informes/compras-ventas')}>🠖 Compras y Ventas</Link>
                   <Link to="/informes/iva" onClick={() => irA('informes_operativos', '/informes/iva')} className={estiloSubItem('', '/informes/iva')}>🠖 Informe Fiscal (IVA)</Link>
@@ -1324,8 +1350,8 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
                   <span className="ml-auto inline-flex shrink-0 items-center text-slate-500 group-hover:text-[#ff4d00]"><ChevronLeft size={14} strokeWidth={2} /></span>
                 )}
               </button>
-              {menuExpandido === 'configuraciones' && !sidebarColapsado && (
-                <div className="mx-1.5 flex flex-col rounded-b bg-[#1e1f35] py-1.5">
+              {menuRenderizado === 'configuraciones' && !sidebarColapsado && (
+                <div aria-hidden={menuExpandido !== 'configuraciones'} inert={menuExpandido !== 'configuraciones'} style={estiloSubmenu('configuraciones')} className="sidebar-submenu mx-1.5 flex flex-col rounded-b bg-[#1e1f35] py-1.5">
                   <Link to="/config_empresa" onClick={() => irA('config_empresa', '/config_empresa')} className={estiloSubItem('config_empresa')}>🠖 {t('companySettings')}</Link>
                     <Link to="/ubicaciones_comerciales" onClick={() => irA('ubicaciones_comerciales', '/ubicaciones_comerciales')} className={estiloSubItem('ubicaciones_comerciales')}>🠖 {t('commercialLocations')}</Link>
                     <Link to="/invoice-schemes" onClick={() => irA('config_modulos', '/invoice-schemes')} className={estiloSubItem('config_modulos', '/invoice-schemes')}>🠖 Configuración de factura</Link>

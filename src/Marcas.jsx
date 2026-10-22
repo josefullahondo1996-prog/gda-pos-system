@@ -1,4 +1,7 @@
 import { useEffect, useState } from 'react';
+import * as XLSX from 'xlsx';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
 import { supabase } from './supabaseClient';
 import { useEmpresaInfo } from './utils/useEmpresa';
 import { useNotificacion } from './NotificacionContext';
@@ -12,6 +15,8 @@ export default function Marcas() {
 
     const [paginaActual, setPaginaActual] = useState(1);
     const [porPagina, setPorPagina] = useState(25);
+    const [mostrarColumnas, setMostrarColumnas] = useState(false);
+    const [columnas, setColumnas] = useState({ marca: true, nota: true, accion: true });
 
     const [mostrarForm, setMostrarForm] = useState(false);
     const [editando, setEditando] = useState(null);
@@ -34,9 +39,9 @@ export default function Marcas() {
 
     const marcasFiltradas = marcas.filter((m) => m.nombre.toLowerCase().includes(busqueda.toLowerCase()));
 
-    const totalPaginas = Math.max(1, Math.ceil(marcasFiltradas.length / porPagina));
+    const totalPaginas = Math.max(1, porPagina === 0 ? 1 : Math.ceil(marcasFiltradas.length / porPagina));
     const paginaSegura = Math.min(paginaActual, totalPaginas);
-    const marcasPagina = marcasFiltradas.slice((paginaSegura - 1) * porPagina, paginaSegura * porPagina);
+    const marcasPagina = porPagina === 0 ? marcasFiltradas : marcasFiltradas.slice((paginaSegura - 1) * porPagina, paginaSegura * porPagina);
 
     useEffect(() => { setPaginaActual(1); }, [busqueda, porPagina]);
 
@@ -94,7 +99,7 @@ export default function Marcas() {
 
     const exportarCSV = () => {
         const filas = [['Marca', 'Descripción', 'Uso para reparación'], ...marcasFiltradas.map((m) => [m.nombre, m.descripcion || m.nota || '', m.uso_reparacion ? 'Sí' : 'No'])];
-        const csv = filas.map((f) => f.join(',')).join('\n');
+        const csv = filas.map((f) => f.map((valor) => `"${String(valor).replace(/"/g, '""')}"`).join(',')).join('\n');
         const blob = new Blob([csv], { type: 'text/csv' });
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
@@ -102,6 +107,21 @@ export default function Marcas() {
         a.download = 'marcas.csv';
         a.click();
         URL.revokeObjectURL(url);
+    };
+
+    const exportarExcel = () => {
+        const filas = marcasFiltradas.map((m) => ({ Marca: m.nombre, Nota: m.descripcion || m.nota || '', 'Uso para reparación': m.uso_reparacion ? 'Sí' : 'No' }));
+        const hoja = XLSX.utils.json_to_sheet(filas);
+        const libro = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(libro, hoja, 'Marcas');
+        XLSX.writeFile(libro, 'marcas.xlsx');
+    };
+
+    const exportarPDF = () => {
+        const pdf = new jsPDF();
+        pdf.text('Marcas', 14, 15);
+        autoTable(pdf, { startY: 22, head: [['Marca', 'Nota', 'Uso para reparación']], body: marcasFiltradas.map((m) => [m.nombre, m.descripcion || m.nota || '', m.uso_reparacion ? 'Sí' : 'No']) });
+        pdf.save('marcas.pdf');
     };
 
     return (
@@ -127,7 +147,16 @@ export default function Marcas() {
                                 <option value={25}>Mostrar 25</option>
                                 <option value={50}>Mostrar 50</option>
                                 <option value={100}>Mostrar 100</option>
+                                <option value={200}>Mostrar 200</option>
+                                <option value={500}>Mostrar 500</option>
+                                <option value={1000}>Mostrar 1.000</option>
+                                <option value={0}>Mostrar todas</option>
                             </select>
+                        </div>
+                        <div className="flex flex-wrap items-center gap-1">
+                            <button onClick={exportarExcel} className="bg-gray-100 border text-gray-600 px-2.5 py-1 rounded text-xs font-semibold hover:bg-gray-200">📊 Exportar a Excel</button>
+                            <button onClick={exportarPDF} className="bg-gray-100 border text-gray-600 px-2.5 py-1 rounded text-xs font-semibold hover:bg-gray-200">📄 Exportar a PDF</button>
+                            <div className="relative"><button onClick={() => setMostrarColumnas((v) => !v)} className="bg-gray-100 border text-gray-600 px-2.5 py-1 rounded text-xs font-semibold hover:bg-gray-200">Visibilidad de columnas</button>{mostrarColumnas && <div className="absolute z-20 right-0 mt-1 w-48 rounded-lg border bg-white p-3 shadow-lg">{[['marca','Marcas'],['nota','Nota'],['accion','Acción']].map(([key,titulo]) => <label key={key} className="flex items-center gap-2 py-1 text-xs"><input type="checkbox" checked={columnas[key]} onChange={() => setColumnas((prev) => ({ ...prev, [key]: !prev[key] }))} />{titulo}</label>)}</div>}</div>
                         </div>
                         <input
                             type="text"
@@ -141,22 +170,22 @@ export default function Marcas() {
                     <table className="w-full text-left text-sm border-collapse">
                         <thead>
                             <tr className="border-b border-gray-200 bg-gray-50 text-gray-500 font-bold uppercase text-xs">
-                                <th className="p-3">Marcas</th>
-                                <th className="p-3">Nota</th>
-                                <th className="p-3 w-56">Acción</th>
+                                {columnas.marca && <th className="p-3">Marcas</th>}
+                                {columnas.nota && <th className="p-3">Nota</th>}
+                                {columnas.accion && <th className="p-3 w-56">Acción</th>}
                             </tr>
                         </thead>
                         <tbody>
                             {cargando ? (
-                                <tr><td colSpan={3} className="text-center py-8 text-gray-400">Cargando...</td></tr>
+                                <tr><td colSpan={Object.values(columnas).filter(Boolean).length || 1} className="text-center py-8 text-gray-400">Cargando...</td></tr>
                             ) : marcasPagina.length === 0 ? (
-                                <tr><td colSpan={3} className="text-center py-8 text-gray-400">No hay marcas registradas.</td></tr>
+                                <tr><td colSpan={Object.values(columnas).filter(Boolean).length || 1} className="text-center py-8 text-gray-400">No hay marcas registradas.</td></tr>
                             ) : (
                                 marcasPagina.map((m) => (
                                     <tr key={m.id} className="border-b hover:bg-gray-50">
-                                        <td className="p-3 font-medium text-gray-700">{m.nombre}</td>
-                                        <td className="p-3 text-gray-500">{m.descripcion || m.nota || '—'}</td>
-                                        <td className="p-3">
+                                        {columnas.marca && <td className="p-3 font-medium text-gray-700">{m.nombre}</td>}
+                                        {columnas.nota && <td className="p-3 text-gray-500">{m.descripcion || m.nota || '—'}</td>}
+                                        {columnas.accion && <td className="p-3">
                                             <div className="flex gap-2">
                                                 <button onClick={() => abrirEditar(m)} className="bg-orange-500 hover:bg-orange-600 text-white text-xs font-bold px-3 py-1.5 rounded flex items-center gap-1">
                                                     ✏️ Editar
@@ -165,7 +194,7 @@ export default function Marcas() {
                                                     🗑️ Borrar
                                                 </button>
                                             </div>
-                                        </td>
+                                        </td>}
                                     </tr>
                                 ))
                             )}
