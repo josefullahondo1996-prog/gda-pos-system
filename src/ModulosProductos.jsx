@@ -94,7 +94,7 @@ export function ImportarStockInicial() {
   </div>;
 }
 
-export function GruposPreciosVenta() {
+export function PreciosPorProductoGrupo() {
   const { id: empresaId } = useEmpresaInfo(); const [productos, setProductos] = useState([]); const [busqueda, setBusqueda] = useState(''); const [producto, setProducto] = useState(null); const [grupos, setGrupos] = useState([]); const [guardando, setGuardando] = useState(false); const [error, setError] = useState('');
   const cargar = async () => { if (!empresaId) return; const { data, error: err } = await supabase.from('productos').select('id,nombre,codigo,precio_venta,grupos_precio').eq('empresa_id', empresaId).order('nombre'); if (err) setError(`No se pudieron cargar los grupos de precios: ${err.message}`); else { setError(''); setProductos(data || []); } };
   useEffect(() => { cargar(); }, [empresaId]);
@@ -104,6 +104,48 @@ export function GruposPreciosVenta() {
   return <div className="space-y-5 p-4 md:p-6"><header><p className="text-xs font-bold uppercase tracking-widest text-blue-600">Productos</p><h1 className="text-2xl font-bold text-slate-900">Grupo de precios de venta</h1><p className="mt-1 text-sm text-slate-500">Administrá el precio especial de cada producto por grupo de cliente.</p></header>{error && <p className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}</p>}<section className="rounded-xl border bg-white p-4 shadow-sm"><label className="mb-4 flex max-w-md items-center gap-2 rounded-lg border px-3"><Search size={16} className="text-slate-400"/><Campo value={busqueda} onChange={(e) => setBusqueda(e.target.value)} placeholder="Buscar productos o grupos" className="border-0 px-0"/></label><div className="overflow-x-auto"><table className="w-full text-left text-sm"><thead className="bg-slate-100 text-xs uppercase text-slate-500"><tr><th className="p-3">Producto</th><th className="p-3">Precio base</th><th className="p-3">Grupos y precios</th><th className="p-3 text-right">Acción</th></tr></thead><tbody className="divide-y">{filtrados.map((p) => <tr key={p.id}><td className="p-3 font-medium">{p.nombre}<small className="block text-slate-400">{p.codigo || '—'}</small></td><td className="p-3">{money(p.precio_venta)}</td><td className="p-3"><div className="flex flex-wrap gap-1">{(p.grupos_precio || []).map((g) => <span key={g.nombre} className="rounded-full bg-blue-50 px-2 py-1 text-xs text-blue-700">{g.nombre}: {money(g.precioVenta)}</span>)}{!p.grupos_precio?.length && <span className="text-xs text-slate-400">Sin precios por grupo</span>}</div></td><td className="p-3 text-right"><Button onClick={() => editar(p)} className="border border-slate-300 bg-white text-slate-700"><Pencil size={14}/> Editar</Button></td></tr>)}</tbody></table></div></section>
     {producto && <div className="fixed inset-0 z-[80] grid place-items-center overflow-y-auto bg-slate-950/50 p-3"><form onSubmit={guardar} className="my-auto w-full max-w-2xl space-y-4 rounded-2xl bg-white p-5 shadow-xl"><div className="flex items-start justify-between"><div><h2 className="font-bold">Precios por grupo</h2><p className="text-sm text-slate-500">{producto.nombre} · precio base {money(producto.precio_venta)}</p></div><button type="button" onClick={() => setProducto(null)} aria-label="Cerrar"><X size={18}/></button></div>{grupos.map((g, i) => <div key={`${g.nombre}-${i}`} className="grid gap-2 rounded-lg border p-3 sm:grid-cols-[1fr_120px_1fr_auto]"><Campo value={g.nombre || ''} placeholder="Nombre del grupo" onChange={(e) => setGrupos((xs) => xs.map((x, j) => j === i ? { ...x, nombre: e.target.value } : x))}/><Campo type="number" value={g.margen ?? 0} placeholder="Margen %" onChange={(e) => setGrupos((xs) => xs.map((x, j) => j === i ? { ...x, margen: e.target.value } : x))}/><Campo type="number" min="0" value={g.precioVenta ?? ''} placeholder="Precio de venta" onChange={(e) => setGrupos((xs) => xs.map((x, j) => j === i ? { ...x, precioVenta: e.target.value } : x))}/><Button type="button" onClick={() => setGrupos((xs) => xs.filter((_, j) => j !== i))} className="border text-red-600">Quitar</Button></div>)}<Button type="button" onClick={() => setGrupos((xs) => [...xs, { nombre: '', margen: 0, precioVenta: producto.precio_venta }])} className="border text-slate-700"><Plus size={15}/> Agregar grupo</Button><div className="flex justify-end gap-2 border-t pt-3"><Button type="button" onClick={() => setProducto(null)} className="border text-slate-600">Cancelar</Button><Button disabled={guardando} className="bg-slate-900 text-white">{guardando ? <LoaderCircle size={16} className="animate-spin"/> : 'Guardar precios'}</Button></div></form></div>}
   </div>;
+}
+
+export function EditorPreciosGrupoProducto({ producto: productoInicial, onClose, onSaved }) {
+  const { id: empresaId } = useEmpresaInfo();
+  const [producto, setProducto] = useState(productoInicial);
+  const [grupos, setGrupos] = useState(() => Array.isArray(productoInicial?.grupos_precio) ? productoInicial.grupos_precio.map((g) => ({ ...g })) : []);
+  const [catalogo, setCatalogo] = useState([]);
+  const [guardando, setGuardando] = useState(false);
+  const [error, setError] = useState('');
+  const [guardado, setGuardado] = useState(false);
+  useEffect(() => {
+    if (!empresaId) return;
+    supabase.from('grupos_precios_venta').select('nombre,margen_default').eq('empresa_id', empresaId).eq('activo', true).order('nombre')
+      .then(({ data, error: err }) => {
+        if (err) setError(`No se pudo cargar el catálogo de grupos. Aplicá la migración de grupos de precios en Supabase. ${err.message}`);
+        else {
+          const disponibles = data || [];
+          setCatalogo(disponibles);
+          setGrupos((actuales) => {
+            const nombres = new Set(actuales.map((g) => String(g.nombre || '').toLocaleLowerCase('es')));
+            return [...actuales, ...disponibles.filter((g) => !nombres.has(g.nombre.toLocaleLowerCase('es'))).map((g) => ({ nombre: g.nombre, margen: Number(g.margen_default) || 0, precioVenta: 0 }))];
+          });
+        }
+      });
+  }, [empresaId]);
+  const guardar = async (e) => {
+    e.preventDefault();
+    if (!producto || !empresaId) return;
+    setGuardando(true); setError('');
+    const payload = grupos.filter((g) => g.nombre?.trim()).map((g) => ({ nombre: g.nombre.trim(), margen: Number(g.margen) || 0, precioVenta: Math.max(0, Math.round(Number(g.precioVenta) || 0)) }));
+    const { error: err } = await supabase.from('productos').update({ grupos_precio: payload }).eq('id', producto.id).eq('empresa_id', empresaId);
+    setGuardando(false);
+    if (err) { setError(`No se pudieron guardar los precios del grupo: ${err.message}`); return; }
+    setProducto((actual) => ({ ...actual, grupos_precio: payload }));
+    setGuardado(true);
+    onSaved?.({ ...producto, grupos_precio: payload });
+  };
+  if (!producto) return <div className="space-y-4 p-6"><h1 className="text-2xl font-bold text-slate-800">Agregar o editar precios de grupo</h1><p className="text-slate-600">No se recibió un producto para editar.</p><Button type="button" onClick={onClose} className="bg-orange-500 text-white">Volver a productos</Button></div>;
+  return <main className="min-h-full space-y-5 bg-slate-50 p-4 md:p-6"><header className="flex flex-wrap items-center justify-between gap-3"><div><p className="text-xs font-bold uppercase tracking-widest text-blue-600">Productos</p><h1 className="mt-1 text-2xl font-bold text-slate-900">Agregar o editar precios de grupo</h1><p className="mt-1 text-sm text-slate-600">Producto: <strong>{producto.nombre}</strong></p></div><Button type="button" onClick={onClose} className="border border-slate-300 bg-white text-slate-700">← Volver a productos</Button></header>
+    {error && <p role="alert" className="rounded border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}</p>}{guardado && <p role="status" className="rounded border border-emerald-200 bg-emerald-50 p-3 text-sm font-medium text-emerald-800">Los precios de grupo se guardaron correctamente.</p>}
+    <form onSubmit={guardar} className="overflow-hidden rounded border border-slate-100 bg-white shadow-[0_2px_12px_rgba(15,23,42,0.045)]"><div className="border-b border-slate-100 px-4 py-3"><h2 className="font-semibold text-slate-800">Precio de venta por grupo</h2></div><div className="overflow-x-auto"><table className="min-w-full border-collapse text-center text-xs"><thead><tr className="bg-slate-50/80">{['PRECIO DE VENTA PREDETERMINADO (IMPUESTOS INC.)', ...grupos.map((g) => g.nombre)].map((nombre) => <th key={nombre} className="min-w-40 border-b border-r border-slate-100 px-3 py-4 font-bold uppercase text-slate-600 last:border-r-0">{nombre}</th>)}</tr></thead><tbody><tr className="divide-x divide-slate-100"><td className="px-3 py-4 font-bold text-slate-800">{money(producto.precio_venta)}</td>{grupos.map((g, i) => <td key={`${g.nombre}-${i}`} className="px-2 py-3"><input aria-label={`Precio de ${g.nombre}`} type="number" min="0" step="1" value={g.precioVenta ?? 0} onChange={(e) => { setGuardado(false); setGrupos((xs) => xs.map((x, j) => j === i ? { ...x, precioVenta: e.target.value } : x)); }} className="w-32 rounded border border-slate-200 px-2 py-2 text-center text-sm shadow-[0_1px_2px_rgba(15,23,42,0.035)] focus:border-orange-300 focus:outline-none focus:ring-2 focus:ring-orange-100" /></td>)}</tr></tbody></table></div>{!grupos.length && !error && <p className="m-4 text-sm text-slate-500">No hay grupos activos. Creá uno en Productos → Grupo de precios de venta.</p>}<div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 bg-slate-50/70 px-4 py-3"><p className="text-xs text-slate-500">Los importes se guardan como precios de venta del producto para cada grupo.</p><Button disabled={guardando} className="bg-orange-500 text-white hover:bg-orange-600">{guardando ? <LoaderCircle size={16} className="animate-spin"/> : 'Guardar'}</Button></div></form>
+  </main>;
 }
 
 export function GarantiasProductos() {

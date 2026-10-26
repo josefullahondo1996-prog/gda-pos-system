@@ -96,6 +96,7 @@ const PuntoDeVenta = ({ cajaInfo, session, perfilUsuario, onVolver, onSolicitarC
   const [calculadoraB, setCalculadoraB] = useState('');
   const [operacionCalculadora, setOperacionCalculadora] = useState('+');
   const [cuentasCaja, setCuentasCaja] = useState([]);
+  const [tasasCambioDia, setTasasCambioDia] = useState({});
   const [clientesDisponibles, setClientesDisponibles] = useState([]);
   const [gruposClientes, setGruposClientes] = useState([]);
   const [reglasDescuento, setReglasDescuento] = useState([]);
@@ -339,7 +340,7 @@ const PuntoDeVenta = ({ cajaInfo, session, perfilUsuario, onVolver, onSolicitarC
       if (!empresaId) return;
       const { data, error } = await supabase
         .from('cuentas_caja')
-        .select('id, nombre, tipo_cuenta')
+        .select('id, nombre, tipo_cuenta, moneda')
         .eq('empresa_id', empresaId)
         .eq('activo', true)
         .order('nombre');
@@ -347,6 +348,35 @@ const PuntoDeVenta = ({ cajaInfo, session, perfilUsuario, onVolver, onSolicitarC
     };
     cargarCuentasCaja();
   }, [empresaId]);
+
+  // El modal de Pago Múltiple usa la cotización de compra fijada en Mesa de
+  // Cambios, porque representa lo que se reconoce cuando el cliente entrega
+  // USD/EUR/BRL. Si todavía no hay una tasa del día, no inventamos una.
+  useEffect(() => {
+    if (!empresaId) { setTasasCambioDia({}); return undefined; }
+    let vigente = true;
+    const fechaHoy = new Intl.DateTimeFormat('en-CA', {
+      timeZone: ajustesEmpresa.time_zone || 'America/Asuncion',
+      year: 'numeric', month: '2-digit', day: '2-digit',
+    }).format(new Date());
+    const cargarTasasDelDia = async () => {
+      const { data, error } = await supabase
+        .from('cotizaciones_cambio_diarias')
+        .select('tasas')
+        .eq('empresa_id', empresaId)
+        .eq('fecha', fechaHoy)
+        .maybeSingle();
+      if (!vigente) return;
+      if (error) {
+        if (error.code !== '42P01') console.warn('No se pudieron cargar las tasas de Mesa de Cambios:', error.message);
+        setTasasCambioDia({});
+        return;
+      }
+      setTasasCambioDia(data?.tasas && typeof data.tasas === 'object' ? data.tasas : {});
+    };
+    cargarTasasDelDia();
+    return () => { vigente = false; };
+  }, [empresaId, ajustesEmpresa.time_zone]);
 
   const cargarProductos = async () => {
     if (!empresaId) return;
@@ -714,6 +744,9 @@ const PuntoDeVenta = ({ cajaInfo, session, perfilUsuario, onVolver, onSolicitarC
     return valor * tasaCambio;
   };
   const totalEnMoneda = convertirDesdeGs(totalConAjustes);
+  const monedasCotizacion = ajustesEmpresa.enable_multicurrency
+    ? monedasDisponibles.filter((codigo) => codigo !== 'PYG')
+    : [];
   const montoPagadoEnGs = convertirAGs(Number(montoPagado) || 0);
   const vuelto = montoPagadoEnGs > totalConAjustes ? montoPagadoEnGs - totalConAjustes : 0;
   const saldoPendiente = montoPagadoEnGs < totalConAjustes && Number(montoPagado) > 0
@@ -740,7 +773,9 @@ const PuntoDeVenta = ({ cajaInfo, session, perfilUsuario, onVolver, onSolicitarC
     // Si viene del modal de Pago Múltiple, usamos esos valores; si no,
     // seguimos leyendo los mismos estados de siempre (montoPagado, metodoPago,
     // notaVenta) para no cambiar en nada el comportamiento de los botones existentes.
-    let montoPagadoFinal = datosPagoMultiple ? convertirAGs(datosPagoMultiple.montoPagado) : convertirAGs(Number(montoPagado) || 0);
+    let montoPagadoFinal = datosPagoMultiple
+      ? Number(datosPagoMultiple.montoPagadoGs ?? convertirAGs(datosPagoMultiple.montoPagado))
+      : convertirAGs(Number(montoPagado) || 0);
     
     // Si el usuario hace clic en "COBRAR" (tipoOperacion 'venta') sin escribir un monto, 
     // asumimos que pagó el total exacto.
@@ -783,7 +818,9 @@ const PuntoDeVenta = ({ cajaInfo, session, perfilUsuario, onVolver, onSolicitarC
     else if (montoPagadoFinal === 0 && totalConAjustes > 0) estadoPago = 'Credito';
     else if (montoPagadoFinal > 0 && montoPagadoFinal < totalConAjustes) estadoPago = 'Pago Parcial';
 
-    const saldoPendienteFinal = datosPagoMultiple ? convertirAGs(datosPagoMultiple.saldoPendiente) : saldoPendiente;
+    const saldoPendienteFinal = datosPagoMultiple
+      ? Number(datosPagoMultiple.saldoPendienteGs ?? convertirAGs(datosPagoMultiple.saldoPendiente))
+      : saldoPendiente;
 
     const nuevaVenta = {
       empresa_id: empresaId,
@@ -807,6 +844,24 @@ const PuntoDeVenta = ({ cajaInfo, session, perfilUsuario, onVolver, onSolicitarC
       tasa_referencia: tasaReferencia,
       margen_porcentaje: margenNegocio,
       tasa_negocio: tasaCambio,
+      detalle_pagos: datosPagoMultiple?.filas?.map((fila, index) => ({
+        moneda: fila.moneda || monedaVenta,
+        monto: Number(fila.cantidad) || 0,
+        monto_gs: Number(fila.montoGs ?? convertirAGs(fila.cantidad, fila.moneda || monedaVenta)) || 0,
+        tasa_cambio: Number(fila.tasa) || 1,
+        metodo_pago: fila.metodo,
+        cuenta_id: fila.cuentaId || null,
+        nota: fila.nota || null,
+        ...(index === 0 && Number(datosPagoMultiple?.montoVueltoGs) > 0 ? {
+          vuelto: {
+            monto_gs: Number(datosPagoMultiple.montoVueltoGs) || 0,
+            monto_entregado_gs: Number(datosPagoMultiple.montoVueltoEntregadoGs) || 0,
+            sin_vuelto: Boolean(datosPagoMultiple.sinVuelto),
+            metodo_pago: datosPagoMultiple.metodoVuelto || null,
+            cuenta_id: datosPagoMultiple.cuentaVueltoId || null,
+          },
+        } : {}),
+      })) || null,
       fecha: new Date().toISOString(),
       caja_id: cajaInfo?.id || null,
       ubicacion_id: ubicacionActivaId,
@@ -1002,10 +1057,10 @@ const PuntoDeVenta = ({ cajaInfo, session, perfilUsuario, onVolver, onSolicitarC
       const filasParaGuardar = resumen.filas.map((f) => ({
         empresa_id: empresaId,
         venta_id: ventaId,
-        monto: convertirAGs(f.cantidad),
+        monto: Number(f.montoGs ?? convertirAGs(f.cantidad, f.moneda || monedaVenta)),
         metodo_pago: f.metodo,
         cuenta_id: f.cuentaId || null,
-        nota: f.nota || null,
+        nota: [f.nota, f.moneda && f.moneda !== 'PYG' ? `${f.moneda} ${f.cantidad} · tasa ${f.tasa}` : ''].filter(Boolean).join(' | ') || null,
       }));
       const { error: errorDetalle } = await supabase.from('detalle_pagos_venta').insert(filasParaGuardar);
       if (errorDetalle) {
@@ -1441,6 +1496,14 @@ const PuntoDeVenta = ({ cajaInfo, session, perfilUsuario, onVolver, onSolicitarC
           <button onClick={vaciarCarrito} className="shrink-0 whitespace-nowrap rounded-md bg-red-600 px-3 py-2 text-xs font-bold text-white hover:bg-red-700">× Cancelar</button>
           {!ajustesEmpresa.hide_recent_trans && <button onClick={abrirTransaccionesRecientes} className="shrink-0 whitespace-nowrap rounded-md bg-orange-600 px-3 py-2 text-xs font-bold text-white hover:bg-orange-700">◷ Transacciones recientes</button>}
           </div>
+          {monedasCotizacion.length > 0 && <div className="flex shrink-0 gap-2">{monedasCotizacion.map((codigo) => {
+            const tasaCompra = Number(tasasCambioDia?.[codigo]?.compra);
+            const equivalente = tasaCompra > 0 ? totalConAjustes / tasaCompra : null;
+            return <div key={codigo} className="flex h-[68px] w-[142px] shrink-0 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-md" aria-label={equivalente === null ? `Cotización ${codigo} no disponible` : `Equivalente ${formatMoneda(equivalente, codigo)}; 1 ${codigo} = ${formatMoneda(tasaCompra, 'PYG')}`}>
+              <div className="flex w-[54px] flex-col items-center justify-center bg-white px-1 text-center"><span className="text-[8px] font-bold uppercase tracking-[.12em] text-slate-400">Cotiz.</span><span className="text-[8px] font-bold text-slate-500">{codigo}</span></div>
+              <div className="flex min-w-0 flex-1 flex-col items-center justify-center rounded-l-xl bg-slate-900 px-2 text-white"><strong className="text-base leading-tight">{equivalente === null ? '—' : equivalente.toLocaleString('es-PY', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong><span className="mt-1 whitespace-nowrap text-[7px] text-slate-400">{tasaCompra > 0 ? `1 ${codigo} = ${tasaCompra.toLocaleString('es-PY')} Gs` : 'Sin cotización de hoy'}</span></div>
+            </div>;
+          })}</div>}
           <div className="flex min-w-[205px] shrink-0 flex-col items-end rounded-xl bg-slate-900 px-5 py-2 text-white shadow-lg"><span className="text-[10px] font-black tracking-[.16em] text-slate-300">TOTAL A PAGAR</span><strong className="text-2xl leading-tight">{formatMoneda(totalEnMoneda, monedaVenta)}</strong></div>
           <div aria-label="Marca PyPOS" className="flex shrink-0 items-center justify-center px-1"><LogoPyPos size={32} /></div>
         </div>
@@ -1493,7 +1556,11 @@ const PuntoDeVenta = ({ cajaInfo, session, perfilUsuario, onVolver, onSolicitarC
         onCerrar={() => setMostrarPagoMultiple(false)}
         totalArticulos={totalArticulos}
         totalAPagar={totalEnMoneda}
+        totalAPagarGs={totalConAjustes}
         moneda={monedaVenta}
+        tasaFactura={tasaCambio}
+        tasasCambio={tasasCambioDia}
+        monedasDisponibles={monedasDisponibles}
         cuentasCaja={cuentasCaja}
         ajustesEmpresa={ajustesEmpresa}
         onFinalizar={finalizarPagoMultiple}

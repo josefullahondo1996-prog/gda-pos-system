@@ -701,10 +701,10 @@ export default function ListaProductos() {
                   <button onClick={() => { setProductoStockInicial(prod); setAccionAbierta(null); }} className="w-full text-left px-4 py-2 hover:bg-gray-50 flex items-center gap-2">📦 {t('initialStock')}</button>
                   <button onClick={() => abrirHistorialExistencias(prod)} className="w-full text-left px-4 py-2 hover:bg-gray-50 flex items-center gap-2">🕘 {t('stockHistory')}</button>
                   <button
-                    onClick={() => { setAccionAbierta(null); alert('Tu sistema todavía no tiene "grupos de precios" (precios distintos por tipo de cliente/canal) armados. Si te sirve, lo construimos.'); }}
+                    onClick={() => { setAccionAbierta(null); navigate('/productos/precio-grupo', { state: { producto: prod } }); }}
                     className="w-full text-left px-4 py-2 hover:bg-gray-50 flex items-center gap-2"
                   >
-                    💰 {t('groupPrices')}
+                    💰 Agregar o editar precio de grupo
                   </button>
                   <button onClick={() => duplicarProducto(prod)} className="w-full text-left px-4 py-2 hover:bg-gray-50 flex items-center gap-2">📄 {t('duplicateProduct')}</button>
                 </>

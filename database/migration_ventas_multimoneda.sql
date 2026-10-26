@@ -1,6 +1,65 @@
--- Moneda original por operación. Los importes históricos y efectos de caja/stock
--- siguen en PYG en las columnas existentes; estas columnas conservan el valor y
--- tasa que vio/cobró el cliente para imprimir y consultar la venta correctamente.
+-- Moneda original por producto y venta.
+-- Esta variante coincide con el esquema activo de GDA POS: productos.id,
+-- ventas.id, detalle_ventas.venta_id y detalle_ventas.producto_id son int4;
+-- registrar_venta devuelve bigint. Aplicar después de la migración que creó
+-- el RPC transaccional actual. El preflight aborta antes del DDL si eso cambió.
+
+DO $$
+DECLARE
+    v_producto_id_type text;
+    v_venta_id_type text;
+    v_detalle_venta_id_type text;
+    v_detalle_producto_id_type text;
+    v_rpc_return_type text;
+BEGIN
+    SELECT udt_name INTO v_producto_id_type
+    FROM information_schema.columns
+    WHERE table_schema = 'public' AND table_name = 'productos' AND column_name = 'id';
+
+    SELECT udt_name INTO v_venta_id_type
+    FROM information_schema.columns
+    WHERE table_schema = 'public' AND table_name = 'ventas' AND column_name = 'id';
+
+    SELECT udt_name INTO v_detalle_venta_id_type
+    FROM information_schema.columns
+    WHERE table_schema = 'public' AND table_name = 'detalle_ventas' AND column_name = 'venta_id';
+
+    SELECT udt_name INTO v_detalle_producto_id_type
+    FROM information_schema.columns
+    WHERE table_schema = 'public' AND table_name = 'detalle_ventas' AND column_name = 'producto_id';
+
+    IF v_producto_id_type IS DISTINCT FROM 'int4'
+       OR v_venta_id_type IS DISTINCT FROM 'int4'
+       OR v_detalle_venta_id_type IS DISTINCT FROM 'int4'
+       OR v_detalle_producto_id_type IS DISTINCT FROM 'int4' THEN
+        RAISE EXCEPTION 'Migración multimoneda cancelada: requiere int4 en productos.id, ventas.id, detalle_ventas.venta_id y detalle_ventas.producto_id. Tipos actuales: productos.id=%, ventas.id=%, detalle_ventas.venta_id=%, detalle_ventas.producto_id=%. No se aplicaron cambios.',
+            COALESCE(v_producto_id_type, 'no existe'),
+            COALESCE(v_venta_id_type, 'no existe'),
+            COALESCE(v_detalle_venta_id_type, 'no existe'),
+            COALESCE(v_detalle_producto_id_type, 'no existe');
+    END IF;
+
+    SELECT pg_catalog.format_type(p.prorettype, NULL)
+      INTO v_rpc_return_type
+    FROM pg_catalog.pg_proc AS p
+    JOIN pg_catalog.pg_namespace AS n ON n.oid = p.pronamespace
+    WHERE n.nspname = 'public'
+      AND p.proname = 'registrar_venta'
+      AND pg_catalog.pg_get_function_identity_arguments(p.oid) =
+          'p_venta jsonb, p_items jsonb, p_ubicacion_id uuid';
+
+    IF v_rpc_return_type IS DISTINCT FROM 'bigint' THEN
+        RAISE EXCEPTION 'Migración multimoneda cancelada: se esperaba registrar_venta(... ) RETURNS bigint y se encontró %. No se aplicaron cambios.',
+            COALESCE(v_rpc_return_type, 'función no encontrada');
+    END IF;
+
+    IF pg_catalog.to_regprocedure('public.mi_empresa_id()') IS NULL
+       OR pg_catalog.to_regprocedure('public.tiene_permiso(text,text)') IS NULL THEN
+        RAISE EXCEPTION 'Migración multimoneda cancelada: faltan las funciones de empresa/permisos que usa registrar_venta.';
+    END IF;
+END;
+$$;
+
 ALTER TABLE public.productos
     ADD COLUMN IF NOT EXISTS moneda_precio text NOT NULL DEFAULT 'PYG',
     ADD COLUMN IF NOT EXISTS precio_compra_moneda numeric(20,4),
@@ -24,153 +83,214 @@ ALTER TABLE public.detalle_ventas
     ADD COLUMN IF NOT EXISTS precio_unitario_moneda numeric(20,4),
     ADD COLUMN IF NOT EXISTS subtotal_moneda numeric(20,4);
 
-CREATE OR REPLACE FUNCTION registrar_venta(
+CREATE OR REPLACE FUNCTION public.registrar_venta(
     p_venta jsonb,
     p_items jsonb,
-    p_ubicacion_id uuid DEFAULT NULL
+    p_ubicacion_id uuid DEFAULT NULL::uuid
 )
-RETURNS uuid
+RETURNS bigint
 LANGUAGE plpgsql
 SECURITY DEFINER
-SET search_path = public
+SET search_path TO 'public'
 AS $$
 DECLARE
-    v_empresa_id uuid;
-    v_venta_id uuid;
-    v_ubicacion_id uuid;
+    v_empresa_id uuid := public.mi_empresa_id();
+    v_venta_id bigint;
     v_item jsonb;
-    v_producto productos%ROWTYPE;
-    v_producto_id uuid;
+    v_producto_id integer;
     v_cantidad numeric;
     v_precio numeric;
-    v_componente jsonb;
-    v_subproducto productos%ROWTYPE;
-    v_subproducto_id uuid;
-    v_cantidad_componente numeric;
-    v_moneda text;
-    v_tasa numeric;
+    v_precio_moneda numeric;
+    v_subtotal_moneda numeric;
+    v_stock_actual numeric;
+    v_fila_ubicacion_id uuid;
+    v_cantidad_ubicacion numeric;
+    v_subtotal_calculado numeric := 0;
+    v_descuento numeric := COALESCE((p_venta->>'descuento')::numeric, 0);
+    v_cargo_embalaje numeric := COALESCE((p_venta->>'cargo_embalaje')::numeric, 0);
+    v_total_enviado numeric := COALESCE((p_venta->>'total')::numeric, 0);
+    v_total_calculado numeric;
+    v_monto_pagado numeric := COALESCE((p_venta->>'monto_pagado')::numeric, 0);
+    v_saldo_calculado numeric;
+    v_moneda text := upper(COALESCE(NULLIF(p_venta->>'moneda_venta', ''), 'PYG'));
+    v_tasa numeric := COALESCE(NULLIF(p_venta->>'tasa_negocio', '')::numeric, 1);
+    v_total_moneda numeric;
+    v_monto_pagado_moneda numeric;
+    v_saldo_pendiente_moneda numeric;
 BEGIN
     IF auth.uid() IS NULL THEN
         RAISE EXCEPTION 'Se requiere una sesión autenticada';
     END IF;
 
-    v_empresa_id := NULLIF(p_venta->>'empresa_id', '')::uuid;
-    v_moneda := upper(COALESCE(NULLIF(p_venta->>'moneda_venta', ''), 'PYG'));
-    v_tasa := COALESCE(NULLIF(p_venta->>'tasa_negocio', '')::numeric, 1);
-    v_ubicacion_id := COALESCE(p_ubicacion_id, NULLIF(p_venta->>'ubicacion_id', '')::uuid);
-    IF v_empresa_id IS NULL OR jsonb_typeof(p_items) <> 'array' OR jsonb_array_length(p_items) = 0 THEN
+    IF NOT EXISTS (
+        SELECT 1 FROM public.usuarios
+        WHERE auth_user_id = auth.uid()
+          AND empresa_id = v_empresa_id
+          AND activo = true
+          AND permitir_acceso = true
+    ) THEN
+        RAISE EXCEPTION 'Usuario inactivo o sin permiso de acceso';
+    END IF;
+
+    IF NOT public.tiene_permiso('ventas_pos', 'Acceder al Punto de Venta')
+       AND NOT EXISTS (
+            SELECT 1
+            FROM public.usuarios AS u
+            JOIN public.roles AS r ON r.id = u.rol_id
+            WHERE u.auth_user_id = auth.uid()
+              AND u.empresa_id = v_empresa_id
+              AND lower(r.nombre) LIKE '%admin%'
+       ) THEN
+        RAISE EXCEPTION 'No tenés permiso para registrar ventas';
+    END IF;
+
+    IF v_empresa_id IS NULL
+       OR jsonb_typeof(p_items) <> 'array'
+       OR jsonb_array_length(p_items) = 0 THEN
         RAISE EXCEPTION 'Datos de venta incompletos';
     END IF;
     IF v_moneda NOT IN ('PYG', 'USD', 'EUR', 'BRL') OR v_tasa <= 0 THEN
         RAISE EXCEPTION 'Moneda o tasa de cambio inválida';
     END IF;
-
-    IF NOT EXISTS (
-        SELECT 1 FROM usuarios
-        WHERE auth_user_id = auth.uid()
-          AND empresa_id = v_empresa_id
-          AND activo = true
-    ) THEN
-        RAISE EXCEPTION 'No tenés acceso a esta empresa';
+    IF v_descuento < 0 OR v_cargo_embalaje < 0 THEN
+        RAISE EXCEPTION 'Descuento o cargo de embalaje inválido';
     END IF;
-
-    INSERT INTO ventas (
-        empresa_id, cliente, total, metodo_pago, estado_pago, monto_pagado,
-        saldo_pendiente, articulos, descuento, cargo_embalaje, nota_venta,
-        fecha, caja_id, usuario_nombre, personal_servicio, ubicacion_id,
-        moneda_venta, tasa_negocio, total_moneda, monto_pagado_moneda, saldo_pendiente_moneda
-    ) VALUES (
-        v_empresa_id,
-        p_venta->>'cliente',
-        COALESCE((p_venta->>'total')::numeric, 0),
-        p_venta->>'metodo_pago',
-        p_venta->>'estado_pago',
-        COALESCE((p_venta->>'monto_pagado')::numeric, 0),
-        COALESCE((p_venta->>'saldo_pendiente')::numeric, 0),
-        COALESCE((p_venta->>'articulos')::numeric, 0),
-        COALESCE((p_venta->>'descuento')::numeric, 0),
-        COALESCE((p_venta->>'cargo_embalaje')::numeric, 0),
-        p_venta->>'nota_venta',
-        COALESCE((p_venta->>'fecha')::timestamptz, now()),
-        NULLIF(p_venta->>'caja_id', '')::uuid,
-        p_venta->>'usuario_nombre',
-        p_venta->>'personal_servicio',
-        v_ubicacion_id,
-        v_moneda, v_tasa,
-        COALESCE(NULLIF(p_venta->>'total_moneda', '')::numeric, COALESCE((p_venta->>'total')::numeric, 0) / v_tasa),
-        COALESCE(NULLIF(p_venta->>'monto_pagado_moneda', '')::numeric, COALESCE((p_venta->>'monto_pagado')::numeric, 0) / v_tasa),
-        COALESCE(NULLIF(p_venta->>'saldo_pendiente_moneda', '')::numeric, COALESCE((p_venta->>'saldo_pendiente')::numeric, 0) / v_tasa)
-    )
-    RETURNING id INTO v_venta_id;
 
     FOR v_item IN SELECT value FROM jsonb_array_elements(p_items)
     LOOP
-        v_producto_id := NULLIF(v_item->>'producto_id', '')::uuid;
         v_cantidad := COALESCE((v_item->>'cantidad')::numeric, 0);
         v_precio := COALESCE((v_item->>'precio_unitario')::numeric, 0);
+        v_precio_moneda := COALESCE(NULLIF(v_item->>'precio_unitario_moneda', '')::numeric, v_precio / v_tasa);
+        IF NULLIF(v_item->>'producto_id', '')::integer IS NULL
+           OR v_cantidad <= 0 OR v_precio < 0 OR v_precio_moneda < 0 THEN
+            RAISE EXCEPTION 'Ítem de venta inválido';
+        END IF;
+        v_subtotal_calculado := v_subtotal_calculado + (v_cantidad * v_precio);
+    END LOOP;
+
+    IF v_descuento > v_subtotal_calculado THEN
+        RAISE EXCEPTION 'El descuento no puede superar el subtotal';
+    END IF;
+    v_total_calculado := GREATEST(0, v_subtotal_calculado - v_descuento + v_cargo_embalaje);
+    IF abs(v_total_enviado - v_total_calculado) > 0.01 THEN
+        RAISE EXCEPTION 'El total de la venta no coincide con sus líneas';
+    END IF;
+    IF v_monto_pagado < 0 THEN
+        RAISE EXCEPTION 'El monto pagado no puede ser negativo';
+    END IF;
+    v_saldo_calculado := GREATEST(0, v_total_calculado - v_monto_pagado);
+
+    v_total_moneda := COALESCE(NULLIF(p_venta->>'total_moneda', '')::numeric, v_total_calculado / v_tasa);
+    v_monto_pagado_moneda := COALESCE(NULLIF(p_venta->>'monto_pagado_moneda', '')::numeric, v_monto_pagado / v_tasa);
+    v_saldo_pendiente_moneda := COALESCE(NULLIF(p_venta->>'saldo_pendiente_moneda', '')::numeric, v_saldo_calculado / v_tasa);
+    IF v_total_moneda < 0 OR v_monto_pagado_moneda < 0 OR v_saldo_pendiente_moneda < 0 THEN
+        RAISE EXCEPTION 'Los importes en la moneda de venta no pueden ser negativos';
+    END IF;
+
+    IF p_ubicacion_id IS NOT NULL AND NOT EXISTS (
+        SELECT 1 FROM public.ubicaciones_comerciales
+        WHERE id = p_ubicacion_id AND empresa_id = v_empresa_id AND activo = true
+    ) THEN
+        RAISE EXCEPTION 'Ubicación no válida para esta empresa';
+    END IF;
+
+    INSERT INTO public.ventas (
+        empresa_id, cliente, total, metodo_pago, estado_pago, monto_pagado,
+        saldo_pendiente, articulos, descuento, cargo_embalaje, nota_venta,
+        fecha, caja_id, grupo_precio, tipo_servicio, personal_servicio,
+        detalle_pagos, ubicacion_id, moneda_venta, tasa_negocio, total_moneda,
+        monto_pagado_moneda, saldo_pendiente_moneda
+    ) VALUES (
+        v_empresa_id,
+        p_venta->>'cliente',
+        v_total_calculado,
+        p_venta->>'metodo_pago',
+        p_venta->>'estado_pago',
+        v_monto_pagado,
+        v_saldo_calculado,
+        COALESCE((p_venta->>'articulos')::int, 0),
+        v_descuento,
+        v_cargo_embalaje,
+        p_venta->>'nota_venta',
+        COALESCE((p_venta->>'fecha')::timestamptz, now()),
+        NULLIF(p_venta->>'caja_id', '')::bigint,
+        p_venta->>'grupo_precio',
+        p_venta->>'tipo_servicio',
+        p_venta->>'personal_servicio',
+        p_venta->'detalle_pagos',
+        p_ubicacion_id,
+        v_moneda,
+        v_tasa,
+        v_total_moneda,
+        v_monto_pagado_moneda,
+        v_saldo_pendiente_moneda
+    ) RETURNING id INTO v_venta_id;
+
+    FOR v_item IN SELECT value FROM jsonb_array_elements(p_items)
+    LOOP
+        v_producto_id := NULLIF(v_item->>'producto_id', '')::integer;
+        v_cantidad := COALESCE((v_item->>'cantidad')::numeric, 0);
+        v_precio := COALESCE((v_item->>'precio_unitario')::numeric, 0);
+        v_precio_moneda := COALESCE(NULLIF(v_item->>'precio_unitario_moneda', '')::numeric, v_precio / v_tasa);
+        v_subtotal_moneda := COALESCE(NULLIF(v_item->>'subtotal_moneda', '')::numeric, (v_cantidad * v_precio) / v_tasa);
 
         IF v_producto_id IS NULL OR v_cantidad <= 0 THEN
             RAISE EXCEPTION 'Ítem de venta inválido';
         END IF;
 
-        SELECT * INTO v_producto
-        FROM productos
+        SELECT stock_actual INTO v_stock_actual
+        FROM public.productos
         WHERE id = v_producto_id AND empresa_id = v_empresa_id
         FOR UPDATE;
-
         IF NOT FOUND THEN
             RAISE EXCEPTION 'Producto no encontrado en la empresa';
         END IF;
-        IF v_producto.stock_actual < v_cantidad THEN
-            RAISE EXCEPTION 'Stock insuficiente para el producto %', v_producto.nombre;
+        IF v_stock_actual IS NOT NULL AND v_stock_actual < v_cantidad THEN
+            RAISE EXCEPTION 'Stock insuficiente para el producto %: disponible %, solicitado %',
+                v_item->>'nombre_producto', v_stock_actual, v_cantidad;
         END IF;
 
-        UPDATE productos
+        UPDATE public.productos
         SET stock_actual = stock_actual - v_cantidad
         WHERE id = v_producto_id AND empresa_id = v_empresa_id;
 
-        INSERT INTO detalle_ventas (
+        INSERT INTO public.detalle_ventas (
             empresa_id, venta_id, producto_id, nombre_producto, cantidad,
-            precio_unitario, precio_costo, subtotal, moneda_venta,
+            precio_unitario, subtotal, moneda_venta,
             precio_unitario_moneda, subtotal_moneda
         ) VALUES (
-            v_empresa_id, v_venta_id, v_producto_id,
-            COALESCE(v_item->>'nombre_producto', v_producto.nombre),
-            v_cantidad, v_precio, COALESCE(v_producto.precio_compra, 0),
-            COALESCE((v_item->>'subtotal')::numeric, v_cantidad * v_precio),
-            v_moneda,
-            COALESCE(NULLIF(v_item->>'precio_unitario_moneda', '')::numeric, v_precio / v_tasa),
-            COALESCE(NULLIF(v_item->>'subtotal_moneda', '')::numeric, COALESCE((v_item->>'subtotal')::numeric, v_cantidad * v_precio) / v_tasa)
+            v_empresa_id, v_venta_id::integer, v_producto_id,
+            v_item->>'nombre_producto', v_cantidad, v_precio,
+            v_cantidad * v_precio, v_moneda, v_precio_moneda, v_subtotal_moneda
         );
 
-        PERFORM ajustar_stock_ubicacion_tx(v_empresa_id, v_producto_id, v_ubicacion_id, -v_cantidad);
+        IF p_ubicacion_id IS NOT NULL THEN
+            SELECT id, cantidad INTO v_fila_ubicacion_id, v_cantidad_ubicacion
+            FROM public.producto_stock_ubicacion
+            WHERE empresa_id = v_empresa_id
+              AND producto_id = v_producto_id
+              AND ubicacion_id = p_ubicacion_id
+            FOR UPDATE;
 
-        IF jsonb_typeof(v_producto.combo_productos) = 'array' THEN
-            FOR v_componente IN SELECT value FROM jsonb_array_elements(v_producto.combo_productos)
-            LOOP
-                v_subproducto_id := NULLIF(COALESCE(v_componente->>'id', v_componente->>'producto_id'), '')::uuid;
-                v_cantidad_componente := COALESCE((v_componente->>'cantidad')::numeric, 1) * v_cantidad;
-                IF v_subproducto_id IS NULL OR v_cantidad_componente <= 0 THEN
-                    RAISE EXCEPTION 'Componente de combo inválido';
-                END IF;
-
-                SELECT * INTO v_subproducto
-                FROM productos
-                WHERE id = v_subproducto_id AND empresa_id = v_empresa_id
-                FOR UPDATE;
-
-                IF NOT FOUND OR v_subproducto.stock_actual < v_cantidad_componente THEN
-                    RAISE EXCEPTION 'Stock insuficiente para un componente del combo %', v_producto.nombre;
-                END IF;
-
-                UPDATE productos
-                SET stock_actual = stock_actual - v_cantidad_componente
-                WHERE id = v_subproducto_id AND empresa_id = v_empresa_id;
-                PERFORM ajustar_stock_ubicacion_tx(v_empresa_id, v_subproducto_id, v_ubicacion_id, -v_cantidad_componente);
-            END LOOP;
+            IF v_fila_ubicacion_id IS NULL THEN
+                INSERT INTO public.producto_stock_ubicacion (
+                    empresa_id, producto_id, ubicacion_id, cantidad, actualizado_en
+                ) VALUES (
+                    v_empresa_id, v_producto_id, p_ubicacion_id,
+                    GREATEST(0, COALESCE(v_stock_actual, 0) - v_cantidad), now()
+                );
+            ELSE
+                UPDATE public.producto_stock_ubicacion
+                SET cantidad = GREATEST(0, v_cantidad_ubicacion - v_cantidad),
+                    actualizado_en = now()
+                WHERE id = v_fila_ubicacion_id AND empresa_id = v_empresa_id;
+            END IF;
         END IF;
     END LOOP;
 
     RETURN v_venta_id;
 END;
 $$;
+
+REVOKE ALL ON FUNCTION public.registrar_venta(jsonb, jsonb, uuid) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.registrar_venta(jsonb, jsonb, uuid) TO authenticated;

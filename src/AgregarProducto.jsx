@@ -88,6 +88,7 @@ const AgregarProducto = ({ onGuardado, onCancelar, productoEditar, ubicacionId }
     const [gruposPrecio, setGruposPrecio] = useState(
         GRUPOS_PRECIO_INICIALES.map((g) => ({ ...g, precioVenta: 0 }))
     );
+    const [catalogoGruposPrecio, setCatalogoGruposPrecio] = useState([]);
 
     const [guardando, setGuardando] = useState(false);
     const [productoParaStock, setProductoParaStock] = useState(null);
@@ -106,18 +107,20 @@ const AgregarProducto = ({ onGuardado, onCancelar, productoEditar, ubicacionId }
     useEffect(() => {
         const cargarListas = async () => {
             if (!empresaId) return;
-            const [resMarcas, resUnidades, resCategorias, resProductos, resVariaciones] = await Promise.all([
+            const [resMarcas, resUnidades, resCategorias, resProductos, resVariaciones, resGruposPrecio] = await Promise.all([
                 supabase.from('marcas').select('*').eq('empresa_id', empresaId).order('nombre', { ascending: true }),
                 supabase.from('unidades').select('*').eq('empresa_id', empresaId).order('nombre', { ascending: true }),
                 supabase.from('categorias_productos').select('*').eq('empresa_id', empresaId).order('nombre', { ascending: true }),
                 supabase.from('productos').select('*').eq('empresa_id', empresaId).order('nombre', { ascending: true }),
                 supabase.from('plantillas_variaciones').select('id,nombre,valores,activo').eq('empresa_id', empresaId).order('nombre', { ascending: true }),
+                supabase.from('grupos_precios_venta').select('nombre,margen_default,activo').eq('empresa_id', empresaId).eq('activo', true).order('nombre', { ascending: true }),
             ]);
             if (!resMarcas.error && resMarcas.data) setMarcasDisponibles(resMarcas.data);
             if (!resUnidades.error && resUnidades.data) setUnidadesDisponibles(resUnidades.data);
             if (!resCategorias.error && resCategorias.data) setCategoriasDisponibles(resCategorias.data);
             if (!resProductos.error && resProductos.data) setCatalogoProductos(resProductos.data);
             if (!resVariaciones.error && resVariaciones.data) setPlantillasVariaciones(resVariaciones.data);
+            if (!resGruposPrecio.error && resGruposPrecio.data) setCatalogoGruposPrecio(resGruposPrecio.data);
         };
         cargarListas();
     }, [empresaId]);
@@ -418,7 +421,14 @@ const AgregarProducto = ({ onGuardado, onCancelar, productoEditar, ubicacionId }
     const agregarGrupo = () => {
         const nombreGrupo = prompt('Nombre del nuevo grupo de precio:');
         if (!nombreGrupo) return;
-        setGruposPrecio((prev) => [...prev, { nombre: nombreGrupo, margen: 25, precioVenta: 0 }]);
+        const nombreLimpio = nombreGrupo.trim();
+        if (!nombreLimpio) return;
+        if (gruposPrecio.some((g) => String(g.nombre || '').trim().toLowerCase() === nombreLimpio.toLowerCase())) return alert('Este grupo ya está agregado al producto.');
+        const grupoCatalogo = catalogoGruposPrecio.find((g) => g.nombre.trim().toLowerCase() === nombreLimpio.toLowerCase());
+        if (catalogoGruposPrecio.length && !grupoCatalogo) return alert('Primero creá el grupo en Productos → Grupo de precios de venta.');
+        const margenGrupo = Number(grupoCatalogo?.margen_default ?? 25) || 0;
+        const precioVentaGrupo = calcularPrecioVentaConIva(Number(precioCompraSinIva) || 0, margenGrupo, ivaPct);
+        setGruposPrecio((prev) => [...prev, { nombre: grupoCatalogo?.nombre || nombreLimpio, margen: margenGrupo, precioVenta: precioVentaGrupo }]);
     };
 
     const abrirUnidadRapida = () => {

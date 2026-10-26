@@ -19,6 +19,7 @@ export default function GruposClientes() {
     const { notificar, confirmar } = useNotificacion();
 
     const [grupos, setGrupos] = useState([]);
+    const [gruposPreciosDisponibles, setGruposPreciosDisponibles] = useState([]);
     const [busqueda, setBusqueda] = useState('');
     const [cargando, setCargando] = useState(true);
 
@@ -41,8 +42,12 @@ export default function GruposClientes() {
     const cargarGrupos = async () => {
         if (!empresaId) return;
         setCargando(true);
-        const { data, error } = await supabase.from('grupos_clientes').select('*').eq('empresa_id', empresaId).order('nombre', { ascending: true });
+        const [{ data, error }, { data: gruposPrecio }] = await Promise.all([
+            supabase.from('grupos_clientes').select('*').eq('empresa_id', empresaId).order('nombre', { ascending: true }),
+            supabase.from('grupos_precios_venta').select('nombre,margen_default,activo').eq('empresa_id', empresaId).order('nombre', { ascending: true }),
+        ]);
         if (!error && data) setGrupos(data);
+        setGruposPreciosDisponibles(gruposPrecio || []);
         setCargando(false);
     };
 
@@ -258,15 +263,17 @@ export default function GruposClientes() {
                                 </select>
                             </div>
                             <div>
-                                <label className="block text-sm font-bold text-gray-700 mb-1">Porcentaje de cálculo (%): <span className="text-blue-500 cursor-help" title="Porcentaje de descuento o recargo que se aplica a los clientes de este grupo">ℹ</span></label>
-                                <input
-                                    type="number"
-                                    step="0.01"
-                                    className="w-full border border-gray-300 rounded p-2.5 text-sm"
-                                    value={porcentajeForm}
-                                    onChange={(e) => setPorcentajeForm(e.target.value)}
-                                    placeholder="Porcentaje de cálculo (%)"
-                                />
+                                <label className="block text-sm font-bold text-gray-700 mb-1">Grupo de precios de venta:</label>
+                                {gruposPreciosDisponibles.length > 0 ? (
+                                    <select className="w-full border border-gray-300 rounded p-2.5 text-sm bg-white" value={grupoPreciosForm} onChange={(e) => setGrupoPreciosForm(e.target.value)}>
+                                        <option value="">Sin grupo de precios</option>
+                                        {gruposPreciosDisponibles.filter((g) => g.activo || g.nombre === grupoPreciosForm).map((g) => <option key={g.nombre} value={g.nombre}>{g.nombre}{g.activo === false ? ' (inactivo)' : ''}</option>)}
+                                    </select>
+                                ) : (
+                                    <input className="w-full border border-gray-300 rounded p-2.5 text-sm" value={grupoPreciosForm} onChange={(e) => setGrupoPreciosForm(e.target.value)} placeholder="Nombre exacto del grupo de precios" />
+                                )}
+                                <label className="mt-4 block text-sm font-bold text-gray-700 mb-1">Porcentaje de cálculo (%): <span className="text-blue-500 cursor-help" title="Porcentaje de descuento o recargo que se aplica a los clientes de este grupo">ℹ</span></label>
+                                <input type="number" step="0.01" className="w-full border border-gray-300 rounded p-2.5 text-sm" value={porcentajeForm} onChange={(e) => setPorcentajeForm(e.target.value)} placeholder="Porcentaje de cálculo (%)" />
                             </div>
 
                             <div className="flex gap-2 justify-end pt-2 border-t border-gray-100">

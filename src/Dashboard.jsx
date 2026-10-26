@@ -32,6 +32,7 @@ const Inicio = lazy(() => import('./Inicio'));
 const GraficosDashboard = lazy(() => import('./GraficosDashboard'));
 const PuntoDeVenta = lazy(() => import('./PuntoDeVenta'));
 const ListaProductos = lazy(() => import('./ListaProductos'));
+const EditorPreciosGrupoProducto = lazy(() => import('./ModulosProductos').then((modulo) => ({ default: modulo.EditorPreciosGrupoProducto })));
 const HistorialExistencias = lazy(() => import('./HistorialExistencias'));
 const Catalogo = lazy(() => import('./Catalogo'));
 const AgregarProducto = lazy(() => import('./AgregarProducto'));
@@ -77,7 +78,8 @@ const RemisionesElectronicas = lazy(() => import('./RemisionesElectronicas'));
 const CatalogoQR = lazy(() => import('./CatalogoQR'));
 const ImprimirEtiquetasProductos = lazy(() => import('./ModulosProductos').then((m) => ({ default: m.ImprimirEtiquetasProductos })));
 const ImportarStockInicial = lazy(() => import('./ModulosProductos').then((m) => ({ default: m.ImportarStockInicial })));
-const GruposPreciosVenta = lazy(() => import('./ModulosProductos').then((m) => ({ default: m.GruposPreciosVenta })));
+const GruposPreciosVenta = lazy(() => import('./GruposPreciosVenta'));
+const MesaCambios = lazy(() => import('./MesaCambios'));
 const GarantiasProductos = lazy(() => import('./ModulosProductos').then((m) => ({ default: m.GarantiasProductos })));
 
 export default function Dashboard({ session, perfilUsuario, initialView = 'inicio' }) {
@@ -111,7 +113,7 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
         todas_ventas: 'module_2', devoluciones_ventas: 'module_2', pedidos: 'module_2', cotizaciones: 'module_2', cobros: 'module_2', descuentos_ventas: 'module_2', importar_ventas: 'module_2',
         pos: 'module_3', transferencias_stock: 'module_4', ajustes_stock: 'module_5',
         gastos: 'module_6', agregar_gasto: 'module_6', categorias_gastos: 'module_6',
-        cajas: 'module_7', caja_registradora: 'module_7', informe_caja_pago: 'module_7', flujo_fondos: 'module_7',
+        cajas: 'module_7', caja_registradora: 'module_7', informe_caja_pago: 'module_7', flujo_fondos: 'module_7', mesa_cambios: 'module_mesa_cambios',
       };
       const modulo = moduloPorVista[vista];
       if (modulo && ajustesEmpresa[modulo] === false) return false;
@@ -121,7 +123,7 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
       ot: 'ot', config_empresa: 'configuraciones', config_factura: 'configuraciones', config_modulos: 'configuraciones', admin_desarrollador: 'configuraciones',
       ubicaciones_comerciales: 'ubicaciones', clientes: 'clientes_proveedores',
       proveedores: 'clientes_proveedores', grupos_clientes: 'clientes_proveedores',
-      catalogo: 'productos', stock_history: 'productos', agregar_producto: 'productos', marcas: 'productos',
+      catalogo: 'productos', precio_grupo_producto: 'productos', stock_history: 'productos', agregar_producto: 'productos', marcas: 'productos',
       catalogo_qr: 'productos',
       categorias: 'productos', unidades: 'productos', compras: 'compras',
       agregar_compra: 'compras', devoluciones_compra: 'compras', gastos: 'gastos',
@@ -136,6 +138,7 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
       envios: 'ventas_pos',
       remisiones_electronicas: 'ventas_pos',
       flujo_fondos: 'informes',
+      mesa_cambios: 'caja',
       informes_operativos: 'informes',
       informes_micdepos: 'informes',
       plantillas_notificacion: 'configuraciones',
@@ -269,6 +272,7 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
     envios: 'Envíos',
     remisiones_electronicas: 'Remisiones electrónicas',
     flujo_fondos: 'Flujo de fondos',
+    mesa_cambios: 'Mesa de Cambios',
     plantillas_notificacion: 'Plantillas de notificación',
     ot: t('workOrders'),
   })[vistaActiva] || 'GDA POS';
@@ -538,6 +542,10 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
       case '/catalogo':
         setVistaActiva('catalogo');
         break;
+      case '/productos/precio-grupo':
+        setVistaActiva('precio_grupo_producto');
+        setMenuExpandido('productos');
+        break;
       case '/catalogo-qr':
         setVistaActiva('catalogo_qr');
         break;
@@ -567,6 +575,11 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
         break;
       case '/presupuestos':
         setVistaActiva('cotizaciones');
+        break;
+      case '/mesa-cambios':
+      case '/central-exchange-rates':
+        setVistaActiva('mesa_cambios');
+        setMenuExpandido('caja_banco');
         break;
       case '/envios':
       case '/shipments':
@@ -767,6 +780,15 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
       case 'catalogo':
         return <ListaProductos />;
 
+      case 'precio_grupo_producto':
+        return (
+          <EditorPreciosGrupoProducto
+            key={location.key}
+            producto={location.state?.producto || null}
+            onClose={() => irA('catalogo', '/catalogo')}
+          />
+        );
+
       case 'catalogo_qr':
         return <CatalogoQR key={refreshKey} />;
 
@@ -864,6 +886,9 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
 
       case 'flujo_fondos':
         return <FlujoFondos key={refreshKey} />;
+
+      case 'mesa_cambios':
+        return <MesaCambios key={refreshKey} />;
 
       case 'pedidos':
         return <Pedidos />;
@@ -1333,6 +1358,12 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
                 </div>}
               </>
             )}
+            {tieneCategoria('caja') && !soloPOS && (!ajustesEmpresa.module_settings_explicit || ajustesEmpresa.module_mesa_cambios !== false) && (
+              <Link to="/mesa-cambios" onClick={() => irA('mesa_cambios', '/mesa-cambios')} className={estiloBotonSimple('mesa_cambios')} title="Mesa de Cambios">
+                <ArrowRightLeft size={18} strokeWidth={2} /> {!sidebarColapsado && 'Mesa de Cambios'}
+              </Link>
+            )}
+
             {tieneCategoria('ventas_pos') && !soloPOS && (
               <Link to="/pedidos" onClick={() => irA('pedidos', '/pedidos')} className={estiloBotonSimple('pedidos')} title="Pedidos">
                 <ClipboardList size={18} strokeWidth={2} /> {!sidebarColapsado && 'Pedidos'}
@@ -1387,7 +1418,7 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
 
         {/* Header Superior */}
         {!posPantallaCompleta && (
-          <header className="h-14 md:h-16 bg-gradient-to-r from-white via-slate-50/50 to-white shadow-[0_2px_8px_rgba(15,23,42,0.08)] flex items-center justify-between px-4 md:px-6 z-10 border-b border-slate-200/60 backdrop-blur-sm">
+          <header className="relative z-50 h-14 md:h-16 bg-gradient-to-r from-white via-slate-50/50 to-white shadow-[0_2px_8px_rgba(15,23,42,0.08)] flex items-center justify-between px-4 md:px-6 border-b border-slate-200/60 backdrop-blur-sm">
             <div className="flex items-center gap-3 flex-1">
               {/* BOTÓN HAMBURGUESA PARA MÓVIL */}
               <button
@@ -1424,7 +1455,7 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
                   <Bell size={18} />
                   {alertasInventario.length > 0 && <span className="absolute -right-1 -top-1 min-w-4 rounded-full bg-red-600 px-1 text-center text-[10px] font-bold leading-4 text-white shadow">{alertasInventario.length > 99 ? '99+' : alertasInventario.length}</span>}
                 </button>
-                {menuAlertasAbierto && <div className="absolute right-0 top-12 z-50 w-[min(92vw,390px)] overflow-hidden rounded-xl border border-slate-200 bg-white shadow-2xl" role="menu" aria-label="Alertas de inventario">
+                {menuAlertasAbierto && <div className="absolute right-0 top-12 z-[60] w-[min(92vw,390px)] overflow-hidden rounded-xl border border-slate-200 bg-white shadow-2xl" role="menu" aria-label="Alertas de inventario">
                   <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3"><div><p className="text-sm font-bold text-slate-800">Alertas de inventario</p><p className="text-xs text-slate-500">{alertasInventario.length} aviso{alertasInventario.length === 1 ? '' : 's'} activo{alertasInventario.length === 1 ? '' : 's'}</p></div><Bell size={17} className="text-orange-500" /></div>
                   <div className="max-h-[min(60vh,440px)] overflow-y-auto">
                     {cargandoAlertasInventario && <p className="p-5 text-center text-sm text-slate-500">Consultando stock y vencimientos…</p>}
