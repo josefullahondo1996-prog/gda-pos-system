@@ -9,6 +9,66 @@ import { cantidadInterna, cantidadVisible } from './utils/cantidadProducto';
 import { useLanguage } from './LanguageContext';
 import { precioConIva, precioSinIva, precioVentaConIva, margenDesdeVentaConIva, parseIvaPct } from './utils/preciosIva';
 
+const numeroCompraDesdeTexto = (valor) => {
+  let texto = String(valor ?? '').trim().replace(/\s/g, '').replace(/[^\d,.-]/g, '');
+  if (!texto) return 0;
+  const ultimaComa = texto.lastIndexOf(',');
+  const ultimoPunto = texto.lastIndexOf('.');
+  if (ultimaComa > ultimoPunto) {
+    texto = texto.slice(0, ultimaComa).replace(/[.,]/g, '') + '.' + texto.slice(ultimaComa + 1).replace(/[.,]/g, '');
+  } else if ((texto.match(/\./g) || []).length > 1) {
+    const separadorDecimal = texto.lastIndexOf('.');
+    texto = texto.slice(0, separadorDecimal).replace(/\./g, '') + texto.slice(separadorDecimal);
+  } else if (ultimaComa >= 0) {
+    texto = texto.replace(/,/g, '');
+  }
+  const numero = Number(texto);
+  return Number.isFinite(numero) ? numero : 0;
+};
+
+const formatoNumeroCompra = (valor, decimales = 1, minimoDecimales = decimales) =>
+  (Number(valor) || 0).toLocaleString('es-PY', {
+    minimumFractionDigits: minimoDecimales,
+    maximumFractionDigits: decimales,
+  });
+
+function CompraNumero({ value, onChange, decimals = 1, minDecimals = decimals, className = '', readOnly = false, ...props }) {
+  const [focused, setFocused] = useState(false);
+  const [draft, setDraft] = useState(formatoNumeroCompra(value, decimals, minDecimals));
+
+  useEffect(() => {
+    if (!focused) setDraft(formatoNumeroCompra(value, decimals, minDecimals));
+  }, [value, decimals, minDecimals, focused]);
+
+  const mostrarValor = focused ? draft : formatoNumeroCompra(value, decimals, minDecimals);
+
+  return <input
+    {...props}
+    type="text"
+    inputMode={decimals === 0 ? 'numeric' : 'decimal'}
+    value={mostrarValor}
+    readOnly={readOnly}
+    className={className}
+    onFocus={(event) => {
+      setFocused(true);
+      setDraft(String(value ?? ''));
+      props.onFocus?.(event);
+    }}
+    onChange={(event) => {
+      const texto = event.target.value;
+      setDraft(texto);
+      onChange?.(numeroCompraDesdeTexto(texto));
+    }}
+    onBlur={(event) => {
+      const numero = numeroCompraDesdeTexto(draft);
+      onChange?.(numero);
+      setDraft(formatoNumeroCompra(numero, decimals, minDecimals));
+      setFocused(false);
+      props.onBlur?.(event);
+    }}
+  />;
+}
+
 export default function GestorCompras({ vistaInicial = 'lista' }) {
   const { t, locale } = useLanguage();
   const nombreEmpresa = useNombreEmpresa();
@@ -42,6 +102,12 @@ export default function GestorCompras({ vistaInicial = 'lista' }) {
   const { id: ubicacionUsuarioId, ve_todas: usuarioVeTodas } = useUbicacionUsuario();
   const [terminoPagoNum, setTerminoPagoNum] = useState('');
   const [terminoPagoTipo, setTerminoPagoTipo] = useState('Seleccione');
+  const [tipoComprobanteCompra, setTipoComprobanteCompra] = useState('');
+  const [facturaProveedor, setFacturaProveedor] = useState('');
+  const [timbradoProveedor, setTimbradoProveedor] = useState('');
+  const [documentoCompra, setDocumentoCompra] = useState(null);
+  const [documentoCompraUrl, setDocumentoCompraUrl] = useState('');
+  const [gastosAdicionales, setGastosAdicionales] = useState([]);
   
   const [productos, setProductos] = useState([]);
   const [itemsCompra, setItemsCompra] = useState([]);
@@ -246,17 +312,24 @@ export default function GestorCompras({ vistaInicial = 'lista' }) {
 
   const seleccionarProducto = (producto) => {
     if (itemsCompra.find(item => item.id === producto.id)) { notificar.info('Producto ya agregado.'); return; }
-    const ivaPct = parseIvaPct(producto.iva);
+    const iva = producto.iva || 'IVA 10%';
+    const ivaPct = parseIvaPct(iva);
     const costoFactura = Number(producto.precio_compra) || 0;
+    const margenInicial = Number(ajustesEmpresa.default_profit_percent) || 25;
+    const costoSinIva = precioSinIva(costoFactura, ivaPct);
+    const ventaInicial = Number(producto.precio_venta) || Math.round(precioVentaConIva(costoSinIva, margenInicial, ivaPct));
+    const margenVenta = costoSinIva > 0 ? margenDesdeVentaConIva(costoSinIva, ventaInicial, ivaPct) : margenInicial;
     setItemsCompra((itemsActuales) => [...itemsActuales, { 
       id: producto.id, 
       nombre: producto.nombre, 
       codigo: producto.codigo || 'S/N', 
       unidad: producto.unidad || 'UNID',
       cantidad: 1, 
-      iva: producto.iva || 'IVA 10%', 
+      iva,
       costo: costoFactura,
       subtotal: costoFactura,
+      margin: Number(margenVenta.toFixed(1)),
+      precio_venta: ventaInicial,
       fecha_caducidad: ''
     }]);
     setBusquedaProd(''); setFiltrados([]);
@@ -268,13 +341,35 @@ export default function GestorCompras({ vistaInicial = 'lista' }) {
     if (campo === 'cantidad' || campo === 'costo') {
       copia[index].subtotal = (parseFloat(copia[index].cantidad) || 0) * (parseFloat(copia[index].costo) || 0);
     }
+    if (['costo', 'margin', 'iva'].includes(campo)) {
+      const ivaPct = parseIvaPct(copia[index].iva);
+      const costoSinIva = precioSinIva(Number(copia[index].costo) || 0, ivaPct);
+      copia[index].precio_venta = Math.round(precioVentaConIva(costoSinIva, Number(copia[index].margin) || 0, ivaPct));
+    }
+    if (campo === 'precio_venta') {
+      const ivaPct = parseIvaPct(copia[index].iva);
+      const costoSinIva = precioSinIva(Number(copia[index].costo) || 0, ivaPct);
+      copia[index].margin = costoSinIva > 0
+        ? margenDesdeVentaConIva(costoSinIva, Number(valor) || 0, ivaPct).toFixed(1)
+        : 0;
+    }
     setItemsCompra(copia);
+  };
+
+  const montoIvaIncluido = (costoConIva, iva) => {
+    const tasa = parseIvaPct(iva);
+    const costo = Number(costoConIva) || 0;
+    return tasa > 0 ? (costo * tasa) / (100 + tasa) : 0;
   };
 
   const totalArticulos = itemsCompra.reduce((acc, i) => acc + (parseFloat(i.cantidad) || 0), 0);
   const totalNetoItems = itemsCompra.reduce((acc, i) => acc + i.subtotal, 0);
   const descuentoCalculado = tipoDescuento === 'Fijo' ? Number(importeDescuento) : (tipoDescuento === 'Porcentaje' ? (totalNetoItems * (Number(importeDescuento) / 100)) : 0);
-  const totalCompraFinal = totalNetoItems - descuentoCalculado + Number(cargosEnvio);
+  const baseCompra = totalNetoItems - descuentoCalculado;
+  const tasaImpuestoCompra = impuestoCompra === 'IVA 10%' ? 0.10 : impuestoCompra === 'IVA 5%' ? 0.05 : 0;
+  const impuestoCompraCalculado = baseCompra * tasaImpuestoCompra;
+  const gastosAdicionalesTotal = gastosAdicionales.reduce((sum, gasto) => sum + (Number(gasto.importe) || 0), 0);
+  const totalCompraFinal = baseCompra + impuestoCompraCalculado + Number(cargosEnvio) + gastosAdicionalesTotal;
   const saldoPendienteFinal = totalCompraFinal - Number(pagoRealizado);
 
   const guardarCompra = async (e) => {
@@ -282,6 +377,9 @@ export default function GestorCompras({ vistaInicial = 'lista' }) {
     if (!proveedor) return notificar.info('Seleccione un Proveedor.');
     if (itemsCompra.length === 0) return notificar.info('Agregue al menos 1 producto.');
 
+    let rutaDocumentoSubido = null;
+    let compraRpcGuardada = false;
+    let persistenciaCompletaDisponible = true;
     try {
       const datosCompra = {
         proveedor_nombre: proveedor, nro_factura: nroFactura, total: totalCompraFinal,
@@ -300,13 +398,81 @@ export default function GestorCompras({ vistaInicial = 'lista' }) {
         costo_unitario: item.costo,
       }));
 
-      const { error } = await supabase.rpc('registrar_o_editar_compra', {
-        p_compra: datosCompra,
-        p_items: itemsParaRpc,
-        p_compra_id: modoEdicion ? compraEditandoId : null,
-        p_ubicacion_id: ubicacionIdCompra || null,
-      });
-      if (error) throw error;
+      const datosEdicion = {
+        tipo_comprobante: tipoComprobanteCompra,
+        factura_proveedor: facturaProveedor,
+        timbrado_proveedor: timbradoProveedor,
+        documento_url: documentoCompraUrl,
+        termino_pago_numero: terminoPagoNum,
+        termino_pago_tipo: terminoPagoTipo,
+        tipo_descuento: tipoDescuento,
+        importe_descuento: Number(importeDescuento) || 0,
+        impuesto_compra: impuestoCompra,
+        notas_adicionales: notasAdicionales,
+        detalles_envio: detallesEnvio,
+        cargos_envio: Number(cargosEnvio) || 0,
+        gastos_adicionales: gastosAdicionales,
+      };
+      const itemsCompletos = itemsParaRpc.map((item, index) => ({
+        ...item,
+        iva: itemsCompra[index].iva || 'IVA 10%',
+        margen_ganancia: Number(itemsCompra[index].margin) || 0,
+        precio_venta_unitario: Number(itemsCompra[index].precio_venta) || 0,
+        fecha_caducidad: itemsCompra[index].fecha_caducidad || null,
+      }));
+
+      let documentoUrlNuevo = documentoCompraUrl;
+      if (documentoCompra) {
+        const ruta = `${empresaId}/${Date.now()}-${documentoCompra.name}`;
+        const { error: errorSubida } = await supabase.storage.from('documentos-compras').upload(ruta, documentoCompra, { upsert: false, contentType: documentoCompra.type || undefined });
+        if (errorSubida) {
+          const errorTexto = String(errorSubida.message || '');
+          if (/bucket.*not found|documentos-compras/i.test(errorTexto) && /not found|does not exist|404/i.test(errorTexto)) {
+            persistenciaCompletaDisponible = false;
+            notificar.info('No se pudo guardar el adjunto en esta base de datos.');
+          } else {
+            throw errorSubida;
+          }
+        } else {
+          rutaDocumentoSubido = ruta;
+          documentoUrlNuevo = ruta;
+        }
+      }
+      datosEdicion.documento_url = documentoUrlNuevo;
+
+      if (persistenciaCompletaDisponible) {
+        const { error } = await supabase.rpc('registrar_compra_completa', {
+          p_compra: datosCompra,
+          p_items: itemsCompletos,
+          p_compra_id: modoEdicion ? compraEditandoId : null,
+          p_ubicacion_id: ubicacionIdCompra || null,
+          p_datos_edicion: datosEdicion,
+        });
+        if (error) {
+          if (error.code === 'PGRST202' || /registrar_compra_completa.*(function|schema cache)|function .*registrar_compra_completa.*does not exist/i.test(error.message || '')) {
+            persistenciaCompletaDisponible = false;
+            if (rutaDocumentoSubido) {
+              await supabase.storage.from('documentos-compras').remove([rutaDocumentoSubido]);
+              rutaDocumentoSubido = null;
+            }
+          } else {
+            throw error;
+          }
+        } else {
+          compraRpcGuardada = true;
+        }
+      }
+      if (!persistenciaCompletaDisponible) {
+        const { error } = await supabase.rpc('registrar_o_editar_compra', {
+          p_compra: datosCompra,
+          p_items: itemsParaRpc,
+          p_compra_id: modoEdicion ? compraEditandoId : null,
+          p_ubicacion_id: ubicacionIdCompra || null,
+        });
+        if (error) throw error;
+        compraRpcGuardada = true;
+      }
+      compraRpcGuardada = true;
 
       // Si eligieron una caja/cuenta real, le descontamos SOLO el pago nuevo
       // (la diferencia contra lo que ya estaba pagado antes de esta edición),
@@ -326,7 +492,9 @@ export default function GestorCompras({ vistaInicial = 'lista' }) {
       }
 
       sonidoExito();
-      notificar.exito(modoEdicion ? '¡Compra actualizada con éxito!' : '¡Compra registrada con éxito!');
+      notificar.exito(persistenciaCompletaDisponible
+        ? (modoEdicion ? '¡Compra actualizada con éxito!' : '¡Compra registrada con éxito!')
+        : 'Compra guardada. Los campos fiscales y adicionales no se guardaron porque esta base aún no los tiene habilitados.');
       // Notificamos al PuntoDeVenta (y a ListaProductos) para que recarguen
       // los productos con el nuevo stock que entró por esta compra.
       window.dispatchEvent(new Event('stock-actualizado'));
@@ -334,10 +502,15 @@ export default function GestorCompras({ vistaInicial = 'lista' }) {
       setModoEdicion(false);
       setCompraEditandoId(null);
       setItemsCompra([]); setProveedor(''); setNroFactura(''); setPagoRealizado(0);
+      setTipoComprobanteCompra(''); setFacturaProveedor(''); setTimbradoProveedor('');
+      setDocumentoCompra(null); setDocumentoCompraUrl(''); setGastosAdicionales([]);
       setPagoRealizadoOriginal(0);
       setCuentaPago('-- Seleccione cuenta --');
       cargarTodasLasCompras();
-    } catch (err) { notificar.error('Error: ' + err.message); }
+    } catch (err) {
+      if (rutaDocumentoSubido && !compraRpcGuardada) await supabase.storage.from('documentos-compras').remove([rutaDocumentoSubido]);
+      notificar.error('Error: ' + err.message);
+    }
   };
 
   const handleGuardarProveedorRapido = async (e) => {
@@ -577,33 +750,53 @@ export default function GestorCompras({ vistaInicial = 'lista' }) {
     setFechaCompra(compra.fecha ? new Date(compra.fecha).toISOString().slice(0, 16) : new Date().toISOString().slice(0, 16));
     setEstadoCompra(compra.estado_compra || 'Recibido');
     setUbicacionEmpresa(compra.ubicacion || `${nombreEmpresa} (BL0001)`);
+    setUbicacionIdCompra(compra.ubicacion_id || '');
+    const datosEdicion = compra.datos_edicion || {};
+    setTipoComprobanteCompra(datosEdicion.tipo_comprobante || '');
+    setFacturaProveedor(datosEdicion.factura_proveedor || '');
+    setTimbradoProveedor(datosEdicion.timbrado_proveedor || '');
+    setDocumentoCompra(null);
+    setDocumentoCompraUrl(datosEdicion.documento_url || '');
+    setTerminoPagoNum(datosEdicion.termino_pago_numero || '');
+    setTerminoPagoTipo(datosEdicion.termino_pago_tipo || 'Seleccione');
+    setTipoDescuento(datosEdicion.tipo_descuento || 'Ninguna');
+    setImporteDescuento(datosEdicion.importe_descuento || 0);
+    setImpuestoCompra(datosEdicion.impuesto_compra || 'Ninguna');
+    setNotasAdicionales(datosEdicion.notas_adicionales || '');
+    setDetallesEnvio(datosEdicion.detalles_envio || '');
+    setCargosEnvio(datosEdicion.cargos_envio || 0);
+    setGastosAdicionales(Array.isArray(datosEdicion.gastos_adicionales) ? datosEdicion.gastos_adicionales : []);
 
     if (!detalles || detalles.length === 0) {
       notificar.error(`ATENCIÓN: No se encontraron productos cargados para esta compra (ID: ${compra.id}). \n\nPosibles causas:\n1. La compra se guardó sin productos (o falló el guardado parcial).\n2. Permisos de Supabase (RLS) bloquean la lectura de 'detalle_compras'.`);
     }
 
     setItemsCompra(
-      (detalles || []).map((d) => ({
-        id: d.producto_id,
-        nombre: d.nombre_producto,
-        codigo: d.codigo_sku || 'S/N',
-        cantidad: d.cantidad,
-        unidad: productos.find((p) => p.id === d.producto_id)?.unidad || 'UNID',
-        iva: 'IVA 10%',
-        costo: d.costo_unitario,
-        subtotal: d.subtotal,
-        margin: 25,
-        precio_venta: 0,
-        fecha_caducidad: '',
-      }))
+      (detalles || []).map((d) => {
+        const producto = productos.find((p) => p.id === d.producto_id);
+        const datosLinea = d.datos_edicion || {};
+        const iva = datosLinea.iva || producto?.iva || 'IVA 10%';
+        const precioVenta = Number(datosLinea.precio_venta_unitario ?? producto?.precio_venta) || 0;
+        const costoSinIva = precioSinIva(Number(d.costo_unitario) || 0, parseIvaPct(iva));
+        const margen = datosLinea.margen_ganancia ?? (precioVenta && costoSinIva > 0
+          ? margenDesdeVentaConIva(costoSinIva, precioVenta, parseIvaPct(iva))
+          : Number(ajustesEmpresa.default_profit_percent) || 25);
+        return {
+          id: d.producto_id,
+          nombre: d.nombre_producto,
+          codigo: d.codigo_sku || 'S/N',
+          cantidad: d.cantidad,
+          unidad: producto?.unidad || 'UNID',
+          iva,
+          costo: d.costo_unitario,
+          subtotal: d.subtotal,
+          margin: margen,
+          precio_venta: precioVenta || Math.round(precioVentaConIva(costoSinIva, Number(margen) || 0, parseIvaPct(iva))),
+          fecha_caducidad: datosLinea.fecha_caducidad || '',
+        };
+      })
     );
 
-    setTipoDescuento('Ninguna');
-    setImporteDescuento(0);
-    setImpuestoCompra('Ninguna');
-    setNotasAdicionales('');
-    setDetallesEnvio('');
-    setCargosEnvio(0);
     setPagoRealizado(Number(compra.total || 0) - Number(compra.saldo_pendiente || 0));
     setPagoRealizadoOriginal(Number(compra.total || 0) - Number(compra.saldo_pendiente || 0));
     setMetodoPago('Efectivo');
@@ -614,6 +807,25 @@ export default function GestorCompras({ vistaInicial = 'lista' }) {
     setMostrarFormulario(true);
     setMenuAbierto(null);
   };
+
+  const abrirDocumentoCompra = async () => {
+    if (!documentoCompraUrl) return;
+    const { data, error } = await supabase.storage.from('documentos-compras').createSignedUrl(documentoCompraUrl, 120);
+    if (error) return notificar.error(`No se pudo abrir el documento: ${error.message}`);
+    window.open(data.signedUrl, '_blank', 'noopener,noreferrer');
+  };
+
+  const seleccionarDocumentoCompra = (archivo) => {
+    if (!archivo) return;
+    const extensionesPermitidas = ['pdf', 'csv', 'zip', 'doc', 'docx', 'jpeg', 'jpg', 'png', 'p12'];
+    const extension = archivo.name.split('.').pop()?.toLowerCase();
+    if (archivo.size > 5 * 1024 * 1024) return notificar.info('El documento no puede superar 5 MB.');
+    if (!extensionesPermitidas.includes(extension)) return notificar.info('Tipo de archivo no permitido para el comprobante.');
+    setDocumentoCompra(archivo);
+  };
+
+  const agregarGastoAdicional = () => setGastosAdicionales((actuales) => [...actuales, { nombre: '', importe: 0 }]);
+  const actualizarGastoAdicional = (index, campo, valor) => setGastosAdicionales((actuales) => actuales.map((gasto, i) => i === index ? { ...gasto, [campo]: valor } : gasto));
 
   const abrirModalPagoCompra = (compra) => {
     setMenuAbierto(null);
@@ -757,7 +969,8 @@ export default function GestorCompras({ vistaInicial = 'lista' }) {
           
           <form onSubmit={guardarCompra} className="p-4">
             
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-x-6 gap-y-4 mb-6">
+            <div className="mb-6 rounded-md border border-[#e1e5eb] bg-white p-4 shadow-[0_2px_6px_rgba(15,23,42,0.05)]">
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-x-6 gap-y-4">
               <div>
                 <label className="block text-xs font-bold text-gray-700 mb-1">Proveedor:*</label>
                 <div className="flex gap-1">
@@ -787,6 +1000,32 @@ export default function GestorCompras({ vistaInicial = 'lista' }) {
                   Numero de referencia: <span className="text-blue-400 text-[10px] cursor-help">ⓘ</span>
                 </label>
                 <input className="w-full border rounded p-2 outline-none focus:border-blue-500 text-xs" value={nroFactura} onChange={(e) => setNroFactura(e.target.value)} />
+              </div>
+
+              <div className="md:col-span-2">
+                <label className="block text-xs font-bold text-gray-700 mb-1">Tipo de comprobante recibido:</label>
+                <select className="w-full border rounded p-2 bg-white outline-none text-xs" value={tipoComprobanteCompra} onChange={(e) => setTipoComprobanteCompra(e.target.value)}>
+                  <option value="">-- Sin determinar --</option>
+                  <option value="Factura">Factura (109)</option>
+                  <option value="Nota de crédito">Nota de crédito (110)</option>
+                  <option value="Nota de débito">Nota de débito (111)</option>
+                  <option value="Autofactura">Autofactura (101)</option>
+                  <option value="Despacho de importación">Despacho de importación (107)</option>
+                  <option value="Ticket de máquina registradora">Ticket de máquina registradora (112)</option>
+                  <option value="Boleta RESIMPLE">Boleta RESIMPLE (104)</option>
+                  <option value="Boleta de venta">Boleta de venta (103)</option>
+                  <option value="Comprobante interno">Comprobante interno (sin valor fiscal)</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-gray-700 mb-1">N° factura del proveedor:</label>
+                <input className="w-full border rounded p-2 outline-none focus:border-blue-500 text-xs" placeholder="001-001-0000123" value={facturaProveedor} onChange={(e) => setFacturaProveedor(e.target.value)} />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-gray-700 mb-1">Timbrado del proveedor:</label>
+                <input className="w-full border rounded p-2 outline-none focus:border-blue-500 text-xs" placeholder="Ej.: 16572520" value={timbradoProveedor} onChange={(e) => setTimbradoProveedor(e.target.value)} />
               </div>
 
               <div>
@@ -851,10 +1090,12 @@ export default function GestorCompras({ vistaInicial = 'lista' }) {
               <div className="md:col-span-2">
                 <label className="block text-xs font-bold text-gray-700 mb-1">Documento adjunto:</label>
                 <div className="flex gap-2 items-start">
-                  <button type="button" className="bg-[#fd7e14] text-white px-4 py-2 rounded text-xs font-bold shadow-sm hover:bg-orange-600 flex items-center gap-2 whitespace-nowrap">
+                  <label className="bg-[#fd7e14] text-white px-4 py-2 rounded text-xs font-bold shadow-sm hover:bg-orange-600 flex items-center gap-2 whitespace-nowrap cursor-pointer">
                     <span>📁</span> Examinar..
-                  </button>
+                    <input type="file" className="sr-only" accept=".pdf,.csv,.zip,.doc,.docx,.jpeg,.jpg,.png,.p12" onChange={(e) => seleccionarDocumentoCompra(e.target.files?.[0])} />
+                  </label>
                   <div className="text-[10px] text-gray-500 leading-tight">
+                    {documentoCompra?.name || (documentoCompraUrl ? <button type="button" onClick={abrirDocumentoCompra} className="text-blue-600 underline">Abrir documento adjunto</button> : 'Sin documento adjunto')}<br />
                     Tamaño máximo de archivo: 5MB<br/>
                     Archivo permitido: .pdf, .csv, .zip,<br/>
                     .doc, .docx, .jpeg, .jpg, .png, .p12
@@ -862,8 +1103,10 @@ export default function GestorCompras({ vistaInicial = 'lista' }) {
                 </div>
               </div>
             </div>
+            </div>
 
-            <div className="border-t border-b py-4 mb-6 flex flex-col md:flex-row gap-4 items-center justify-between">
+            <div className="mb-6 rounded-md border border-[#e1e5eb] bg-white p-4 shadow-[0_2px_6px_rgba(15,23,42,0.05)]">
+            <div className="mb-4 flex flex-col md:flex-row gap-4 items-center justify-between">
               <div className="flex items-center gap-2 w-full md:w-2/3">
                 <button type="button" className="bg-[#fd7e14] text-white px-4 py-2 rounded text-xs font-bold shadow-sm whitespace-nowrap">
                   Importar productos
@@ -890,44 +1133,69 @@ export default function GestorCompras({ vistaInicial = 'lista' }) {
                 <button type="button" onClick={() => setMostrarModalProducto(true)} className="text-blue-600 hover:underline flex items-center gap-1">
                   <span className="text-lg">+</span> Agregar nuevo producto
                 </button>
-                <button type="button" className="bg-[#fd7e14] text-white px-4 py-2 rounded shadow-sm flex items-center gap-1">
+                <button type="button" onClick={agregarGastoAdicional} className="bg-[#fd7e14] text-white px-4 py-2 rounded shadow-sm flex items-center gap-1">
                   <span>🏷️</span> Agregar gasto
                 </button>
               </div>
             </div>
 
-            <div className="overflow-x-auto border rounded mb-6">
-              <table className="w-full text-left text-[11px] border-collapse whitespace-nowrap">
-                <thead className="bg-gray-50 border-b text-gray-700 font-black uppercase">
-                  <tr>
-                    <th className="p-3 text-center w-8">#</th>
-                    <th className="p-3">NOMBRE DEL PRODUCTO</th>
-                    <th className="p-3 w-16 text-center">CANT.</th>
-                    <th className="p-3 w-20">IVA</th>
-                    <th className="p-3 w-28 text-right">COSTO UNITARIO<br/>(CON IVA)</th>
-                    <th className="p-3 w-28 text-right">LINEA TOTAL</th>
-                    <th className="p-3 w-24 text-center">PROFIT<br/>MARGIN %</th>
-                    <th className="p-3 w-32 text-center">PRECIO DE VENTA<br/>UNITARIO (IVA INCLUIDO)</th>
-                    <th className="p-3 w-32 text-center">FECHA DE FABRICACIÓN /<br/>FECHA DE CADUCIDAD</th>
-                    <th className="p-3 text-center w-10">🗑️</th>
+            <div className="mb-3 overflow-x-auto rounded-[3px] border border-[#dfe4eb] bg-white">
+              <table className="w-full min-w-[1480px] table-fixed border-collapse text-[11px] text-[#34425a]">
+                <colgroup>
+                  <col style={{ width: '2.4%' }} /><col style={{ width: '21%' }} /><col style={{ width: '10.5%' }} />
+                  <col style={{ width: '10.5%' }} /><col style={{ width: '11%' }} /><col style={{ width: '6%' }} />
+                  <col style={{ width: '11%' }} /><col style={{ width: '11.6%' }} /><col style={{ width: '13.6%' }} /><col style={{ width: '2.4%' }} />
+                </colgroup>
+                <thead className="h-[52px] border-b border-[#e0e5ec] bg-[#f7f8fa] font-semibold uppercase tracking-[0.035em] text-[#66748a]">
+                  <tr className="divide-x divide-[#e7eaf0]">
+                    <th className="px-1 py-3 text-center text-[10px]">#</th>
+                    <th className="px-2 py-3 text-center text-[10px]">NOMBRE DEL PRODUCTO</th>
+                    <th className="px-2 py-3 text-center text-[10px]">CANT.</th>
+                    <th className="px-1 py-3 text-center text-[10px]">IVA</th>
+                    <th className="px-2 py-3 text-center text-[10px] leading-4">COSTO UNITARIO<br/>(CON IVA)</th>
+                    <th className="px-1 py-3 text-center text-[10px] leading-4">LINEA<br/>TOTAL</th>
+                    <th className="px-2 py-3 text-center text-[10px] leading-4">MARGEN DE GANANCIA %</th>
+                    <th className="px-2 py-3 text-center text-[10px] leading-4">PRECIO DE VENTA UNITARIO<br/>(IVA INCLUIDO)</th>
+                    <th className="px-2 py-3 text-center text-[10px] leading-4">FECHA DE FABRICACIÓN /<br/>FECHA DE CADUCIDAD</th>
+                    <th className="px-1 py-3 text-center text-[10px]">▤</th>
                   </tr>
                 </thead>
                 <tbody>
                   {itemsCompra.length === 0 ? (
-                    <tr><td colSpan="10" className="text-center py-10 text-gray-400">Ningún producto agregado a la grilla</td></tr>
+                    <tr><td colSpan="10" className="py-10 text-center text-xs font-normal text-slate-400">Ningún producto agregado a la grilla</td></tr>
                   ) : (
                     itemsCompra.map((item, idx) => (
-                      <tr key={item.id} className="border-b hover:bg-gray-50 font-medium">
-                        <td className="p-3 text-center text-gray-400">{idx + 1}</td>
-                        <td className="p-3 font-bold text-gray-800">{item.nombre}</td>
-                        <td className="p-3"><input type="number" min="0.01" step="0.01" className="w-full border rounded p-1 text-center" value={cantidadVisible(item.cantidad, item.unidad)} onChange={(e) => actualizarCeldaItem(idx, 'cantidad', cantidadInterna(e.target.value, item.unidad))} /></td>
-                        <td className="p-3 text-gray-500">{item.iva}</td>
-                        <td className="p-3"><input type="number" className="w-full border rounded p-1 text-right" value={item.costo} onChange={(e) => actualizarCeldaItem(idx, 'costo', e.target.value)} /></td>
-                        <td className="p-3 font-bold text-gray-800 text-right">{item.subtotal.toLocaleString('es-PY')}</td>
-                        <td className="p-3"><input type="number" className="w-full border rounded p-1 text-center" value={item.margin} onChange={(e) => actualizarCeldaItem(idx, 'margin', e.target.value)} /></td>
-                        <td className="p-3 text-center font-bold text-gray-800">{Number(item.precio_venta).toLocaleString('es-PY')}</td>
-                        <td className="p-3"><input type="date" className="w-full border rounded p-1 text-gray-600" value={item.fecha_caducidad} onChange={(e) => actualizarCeldaItem(idx, 'fecha_caducidad', e.target.value)} /></td>
-                        <td className="p-3 text-center"><button type="button" onClick={() => setItemsCompra(itemsCompra.filter(x => x.id !== item.id))} className="text-gray-400 hover:text-red-500 font-bold">🗑️</button></td>
+                      <tr key={item.id} className="h-[76px] divide-x divide-[#edf0f4] border-b border-[#e7ebf0] font-medium transition-colors odd:bg-white even:bg-[#fcfcfd] hover:bg-[#f8fafc]">
+                        <td className="px-1 py-2 text-center align-middle text-[11px] text-[#55647b]">{idx + 1}</td>
+                        <td className="px-3 py-2 text-center align-middle text-[11px] font-medium leading-[1.35] text-[#34425a]">
+                          <div className="break-words">{item.nombre}</div>
+                          {item.codigo && item.codigo !== 'S/N' && <div className="mt-0.5 break-words text-[10px] font-normal text-[#59677d]">({item.codigo})</div>}
+                        </td>
+                        <td className="px-2 py-2 align-middle">
+                          <CompraNumero aria-label={`Cantidad de ${item.nombre}`} min="0.01" step="0.01" decimals={2} minDecimals={0} className="h-[39px] w-full rounded-[2px] border border-[#d8e0e9] bg-white px-2 text-center text-[12px] text-[#33435d] outline-none focus:border-[#8caed7] focus:ring-1 focus:ring-[#dce9f7]" value={cantidadVisible(item.cantidad, item.unidad)} onChange={(valor) => actualizarCeldaItem(idx, 'cantidad', cantidadInterna(valor, item.unidad))} />
+                          <div className="mt-0.5 text-center text-[10px] leading-3 text-[#34425a]">{item.unidad || 'UNID'}</div>
+                        </td>
+                        <td className="px-1 py-2 align-middle">
+                          <div className="flex items-center justify-center gap-[3px]">
+                            <select aria-label={`IVA de ${item.nombre}`} className="h-[36px] min-w-0 flex-1 rounded-[2px] border border-[#d8e0e9] bg-white px-1 text-[10px] text-[#34425a] outline-none focus:border-[#8caed7]" value={item.iva} onChange={(e) => actualizarCeldaItem(idx, 'iva', e.target.value)}><option>Ninguna</option><option>IVA 10%</option><option>IVA 5%</option><option>EXENTA</option></select>
+                            <CompraNumero aria-label={`Importe IVA de ${item.nombre}`} className="h-[36px] w-[76px] shrink-0 rounded-[2px] border border-[#d8e0e9] bg-white px-1 text-right text-[10px] text-[#34425a] outline-none" value={montoIvaIncluido(item.costo, item.iva)} readOnly />
+                          </div>
+                        </td>
+                        <td className="px-2 py-2 align-middle">
+                          <CompraNumero aria-label={`Costo unitario de ${item.nombre}`} step="any" className="h-[39px] w-full rounded-[2px] border border-[#d8e0e9] bg-white px-2 text-right text-[12px] text-[#34425a] outline-none focus:border-[#8caed7] focus:ring-1 focus:ring-[#dce9f7]" value={item.costo} onChange={(valor) => actualizarCeldaItem(idx, 'costo', valor)} />
+                        </td>
+                        <td className="px-1 py-2 text-center align-middle text-[11px] font-semibold text-[#34425a]">{formatoNumeroCompra(item.subtotal)}</td>
+                        <td className="px-2 py-2 align-middle">
+                          <CompraNumero aria-label={`Margen de ganancia de ${item.nombre}`} step="0.1" className="h-[39px] w-full rounded-[2px] border border-[#d8e0e9] bg-white px-2 text-center text-[12px] text-[#34425a] outline-none focus:border-[#8caed7] focus:ring-1 focus:ring-[#dce9f7]" value={item.margin} onChange={(valor) => actualizarCeldaItem(idx, 'margin', valor)} />
+                        </td>
+                        <td className="px-2 py-2 align-middle">
+                          <CompraNumero aria-label={`Precio de venta de ${item.nombre}`} step="any" className="h-[39px] w-full rounded-[2px] border border-[#d8e0e9] bg-white px-2 text-right text-[12px] text-[#34425a] outline-none focus:border-[#8caed7] focus:ring-1 focus:ring-[#dce9f7]" value={item.precio_venta} onChange={(valor) => actualizarCeldaItem(idx, 'precio_venta', valor)} />
+                        </td>
+                        <td className="px-2 py-2 align-middle">
+                          <label className="mb-1 block text-[9px] font-semibold leading-3 text-[#34425a]">Fecha de caducidad:</label>
+                          <input aria-label={`Fecha de caducidad de ${item.nombre}`} type="date" className="h-[38px] w-full min-w-0 rounded-[2px] border border-[#d8e0e9] bg-[#f7f8fa] px-2 text-[11px] text-[#34425a] outline-none focus:border-[#8caed7]" value={item.fecha_caducidad} onChange={(e) => actualizarCeldaItem(idx, 'fecha_caducidad', e.target.value)} />
+                        </td>
+                        <td className="px-1 py-2 text-center align-middle"><button type="button" aria-label={`Quitar ${item.nombre}`} onClick={() => setItemsCompra(itemsCompra.filter(x => x.id !== item.id))} className="rounded p-1 text-[18px] font-semibold leading-none text-[#e34b55] hover:bg-red-50">×</button></td>
                       </tr>
                     ))
                   )}
@@ -935,11 +1203,13 @@ export default function GestorCompras({ vistaInicial = 'lista' }) {
               </table>
             </div>
 
-            <div className="flex flex-col gap-4 text-xs text-gray-700 font-bold mb-6 border-b pb-6">
-              <div className="flex justify-end gap-16 pr-4">
+            <div className="flex justify-end gap-16 border-t border-[#e7ebf0] pt-3 pr-4 text-xs font-bold text-gray-700">
                 <div>Total artículos: <span className="ml-2 font-normal">{totalArticulos}</span></div>
                 <div>Total a Pagar con IVA: <span className="ml-2 font-normal">{totalNetoItems.toLocaleString('es-PY')}</span></div>
-              </div>
+            </div>
+            </div>
+
+            <div className="flex flex-col gap-4 text-xs text-gray-700 font-bold mb-6 border-b pb-6">
               <div className="grid grid-cols-1 md:grid-cols-4 gap-6 items-end mt-2">
                 <div>
                   <label className="block mb-1">Tipo de descuento:</label>
@@ -964,7 +1234,7 @@ export default function GestorCompras({ vistaInicial = 'lista' }) {
                     <option value="IVA 5%">IVA 5%</option>
                   </select>
                 </div>
-                <div className="col-start-3 text-gray-500 font-normal self-center">Impuesto de compra: <span className="font-bold">(+) 0</span></div>
+                <div className="col-start-3 text-gray-500 font-normal self-center">Impuesto de compra: <span className="font-bold">(+) {impuestoCompraCalculado.toLocaleString('es-PY')}</span></div>
               </div>
             </div>
 
@@ -982,6 +1252,14 @@ export default function GestorCompras({ vistaInicial = 'lista' }) {
                   <label className="block mb-1">(+) Cargos de envío adicionales:*</label>
                   <input type="number" className="w-full border rounded p-2 outline-none font-normal" value={cargosEnvio} onChange={(e) => setCargosEnvio(e.target.value)} />
                 </div>
+                {gastosAdicionales.length > 0 && <div className="space-y-2 border-t pt-2">
+                  <p className="font-bold">Gastos adicionales:</p>
+                  {gastosAdicionales.map((gasto, index) => <div key={index} className="flex gap-2">
+                    <input aria-label={`Nombre del gasto ${index + 1}`} className="w-full border rounded p-2 outline-none font-normal" placeholder="Nombre del gasto" value={gasto.nombre} onChange={(e) => actualizarGastoAdicional(index, 'nombre', e.target.value)} />
+                    <input aria-label={`Importe del gasto ${index + 1}`} type="number" min="0" className="w-36 border rounded p-2 outline-none font-normal" placeholder="Importe" value={gasto.importe} onChange={(e) => actualizarGastoAdicional(index, 'importe', e.target.value)} />
+                    <button type="button" aria-label="Quitar gasto" onClick={() => setGastosAdicionales((actuales) => actuales.filter((_, i) => i !== index))} className="px-2 text-red-600">×</button>
+                  </div>)}
+                </div>}
                 <div className="text-right text-sm mt-auto">Total compra: <span className="text-lg text-gray-900">{totalCompraFinal.toLocaleString('es-PY')} Gs</span></div>
               </div>
             </div>
@@ -1062,7 +1340,7 @@ export default function GestorCompras({ vistaInicial = 'lista' }) {
           <div className="bg-white rounded-lg shadow-sm border-t-2 border-[#004284]">
             <div className="p-4 border-b flex justify-between items-center">
               <h3 className="text-base font-bold text-gray-700">{t('allPurchases')}</h3>
-              <button onClick={() => { setModoEdicion(false); setCompraEditandoId(null); setItemsCompra([]); setProveedor(''); setNroFactura(''); setPagoRealizado(0); setPagoRealizadoOriginal(0); setCuentaPago('-- Seleccione cuenta --'); setMostrarFormulario(true); }} className="bg-[#fd7e14] text-white px-4 py-1.5 rounded text-sm font-bold hover:bg-[#e86e04] shadow-sm flex items-center gap-1">+ {t('add')}</button>
+              <button onClick={() => { setModoEdicion(false); setCompraEditandoId(null); setItemsCompra([]); setProveedor(''); setNroFactura(''); setPagoRealizado(0); setPagoRealizadoOriginal(0); setCuentaPago('-- Seleccione cuenta --'); setTipoComprobanteCompra(''); setFacturaProveedor(''); setTimbradoProveedor(''); setDocumentoCompra(null); setDocumentoCompraUrl(''); setTerminoPagoNum(''); setTerminoPagoTipo('Seleccione'); setTipoDescuento('Ninguna'); setImporteDescuento(0); setImpuestoCompra('Ninguna'); setNotasAdicionales(''); setDetallesEnvio(''); setCargosEnvio(0); setGastosAdicionales([]); setMostrarFormulario(true); }} className="bg-[#fd7e14] text-white px-4 py-1.5 rounded text-sm font-bold hover:bg-[#e86e04] shadow-sm flex items-center gap-1">+ {t('add')}</button>
             </div>
 
             <div className="p-4">

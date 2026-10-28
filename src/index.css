@@ -21,6 +21,16 @@ input, textarea {
   user-select: text; /* Estos sí dejan */
 }
 
+.product-list-table th,
+.product-list-table td {
+  border-right: 1px solid #edf0f4;
+}
+
+.product-list-table th:last-child,
+.product-list-table td:last-child {
+  border-right: 0;
+}
+
 /* Permitir seleccionar y copiar texto en el chatbot */
 .n8n-chat,
 .n8n-chat *,

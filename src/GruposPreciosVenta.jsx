@@ -104,13 +104,13 @@ export default function GruposPreciosVenta() {
       : await supabase.from('grupos_precios_venta').insert({ ...datos, empresa_id: empresaId, activo: true });
     setGuardando(false);
     if (err) { setError(`No se pudo guardar el grupo: ${err.message}`); return; }
-    setModalAbierto(false); notificar.exito(editando ? 'Grupo de precios actualizado.' : 'Grupo de precios creado.'); await cargar();
+    setModalAbierto(false); window.dispatchEvent(new Event('grupos-precios-venta-actualizados')); notificar.exito(editando ? 'Grupo de precios actualizado.' : 'Grupo de precios creado.'); await cargar();
   };
 
   const alternarActivo = async (grupo) => {
     const { error: err } = await supabase.from('grupos_precios_venta').update({ activo: !grupo.activo }).eq('id', grupo.id).eq('empresa_id', empresaId);
     if (err) return setError(`No se pudo cambiar el estado del grupo: ${err.message}`);
-    notificar.exito(grupo.activo ? 'Grupo desactivado.' : 'Grupo activado.'); await cargar();
+    window.dispatchEvent(new Event('grupos-precios-venta-actualizados')); notificar.exito(grupo.activo ? 'Grupo desactivado.' : 'Grupo activado.'); await cargar();
   };
 
   const borrar = async (grupo) => {
@@ -121,7 +121,7 @@ export default function GruposPreciosVenta() {
     if (!(await confirmar(`¿Borrar permanentemente el grupo “${grupo.nombre}”?`))) return;
     const { error: err } = await supabase.from('grupos_precios_venta').delete().eq('id', grupo.id).eq('empresa_id', empresaId);
     if (err) return setError(`No se pudo borrar el grupo: ${err.message}`);
-    notificar.exito('Grupo de precios eliminado.'); await cargar();
+    window.dispatchEvent(new Event('grupos-precios-venta-actualizados')); notificar.exito('Grupo de precios eliminado.'); await cargar();
   };
 
   const exportarGrupos = (formato) => {

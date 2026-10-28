@@ -5,6 +5,7 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { createPortal } from 'react-dom';
 import { jsPDF } from 'jspdf';
+import { Check, LoaderCircle, Pencil, X } from 'lucide-react';
 import { supabase } from './supabaseClient';
 import { useEmpresaInfo } from './utils/useEmpresa';
 import { useConfiguracionEmpresa } from './utils/useConfiguracionEmpresa';
@@ -39,6 +40,10 @@ export default function ListaProductos() {
   const { sucursalActiva, nombreSucursalActiva } = useSucursalActiva();
   const [mapaStockUbicacion, setMapaStockUbicacion] = useState({});
   const [productos, setProductos] = useState([]);
+  const [gruposPrecioVenta, setGruposPrecioVenta] = useState([]);
+  const [precioGrupoEditando, setPrecioGrupoEditando] = useState(null);
+  const [guardandoPrecioGrupo, setGuardandoPrecioGrupo] = useState(false);
+  const [errorPrecioGrupo, setErrorPrecioGrupo] = useState('');
   const [busqueda, setBusqueda] = useState('');
 
   // Estados para los Filtros Superiores (igual que antes)
@@ -83,6 +88,23 @@ export default function ListaProductos() {
 
   useEffect(() => {
     cargarProductos();
+  }, [empresaId]);
+
+  useEffect(() => {
+    if (!empresaId) return undefined;
+    const cargarGruposPrecioVenta = async () => {
+      const { data, error } = await supabase.from('grupos_precios_venta')
+        .select('id,nombre,margen_default').eq('empresa_id', empresaId).eq('activo', true).order('nombre');
+      if (error) {
+        setErrorPrecioGrupo(`No se pudieron cargar los grupos de precio: ${error.message}`);
+        return;
+      }
+      setErrorPrecioGrupo('');
+      setGruposPrecioVenta(data || []);
+    };
+    cargarGruposPrecioVenta();
+    window.addEventListener('grupos-precios-venta-actualizados', cargarGruposPrecioVenta);
+    return () => window.removeEventListener('grupos-precios-venta-actualizados', cargarGruposPrecioVenta);
   }, [empresaId]);
 
   useEffect(() => {
@@ -142,6 +164,53 @@ export default function ListaProductos() {
   };
 
   const stockFormateado = (producto, cantidad) => formatearStock(cantidad, producto.unidad);
+
+  const editarPrecioGrupo = (producto, grupo) => {
+    const precioGuardado = (Array.isArray(producto.grupos_precio) ? producto.grupos_precio : [])
+      .find((item) => String(item.nombre || '').trim().toLocaleLowerCase('es') === grupo.nombre.trim().toLocaleLowerCase('es'));
+    setErrorPrecioGrupo('');
+    setPrecioGrupoEditando({ productoId: producto.id, grupoNombre: grupo.nombre, valor: String(precioGuardado?.precioVenta ?? 0) });
+  };
+
+  const guardarPrecioGrupo = async (producto) => {
+    if (guardandoPrecioGrupo) return;
+    if (!precioGrupoEditando || String(precioGrupoEditando.productoId) !== String(producto.id)) return;
+    if (precioGrupoEditando.valor === '') {
+      setErrorPrecioGrupo('Ingresá un precio o cancelá la edición.');
+      return;
+    }
+    const precio = Number(precioGrupoEditando.valor);
+    if (!Number.isFinite(precio) || precio < 0) {
+      setErrorPrecioGrupo('Ingresá un precio de grupo igual o mayor que cero.');
+      return;
+    }
+    const grupo = gruposPrecioVenta.find((item) => item.nombre === precioGrupoEditando.grupoNombre);
+    if (!grupo) {
+      setErrorPrecioGrupo('Ese grupo ya no está activo. Actualizá la lista de productos.');
+      return;
+    }
+    const preciosActuales = Array.isArray(producto.grupos_precio) ? producto.grupos_precio : [];
+    const claveGrupo = grupo.nombre.trim().toLocaleLowerCase('es');
+    const precioExistente = preciosActuales.some((item) => String(item.nombre || '').trim().toLocaleLowerCase('es') === claveGrupo);
+    const preciosActualizados = precioExistente
+      ? preciosActuales.map((item) => String(item.nombre || '').trim().toLocaleLowerCase('es') === claveGrupo
+        ? { ...item, nombre: grupo.nombre, precioVenta: Math.round(precio) }
+        : item)
+      : [...preciosActuales, { nombre: grupo.nombre, margen: Number(grupo.margen_default) || 0, precioVenta: Math.round(precio) }];
+    setGuardandoPrecioGrupo(true);
+    setErrorPrecioGrupo('');
+    const { error } = await supabase.from('productos').update({ grupos_precio: preciosActualizados })
+      .eq('id', producto.id).eq('empresa_id', empresaId);
+    setGuardandoPrecioGrupo(false);
+    if (error) {
+      setErrorPrecioGrupo(`No se pudo guardar el precio de ${grupo.nombre}: ${error.message}`);
+      return;
+    }
+    setProductos((actuales) => actuales.map((item) => String(item.id) === String(producto.id)
+      ? { ...item, grupos_precio: preciosActualizados }
+      : item));
+    setPrecioGrupoEditando(null);
+  };
 
   useEffect(() => {
     if (!empresaId) return;
@@ -307,13 +376,14 @@ export default function ListaProductos() {
 
   const exportarCSV = () => {
     const filas = [
-      ['Producto', 'Ubicación', 'Precio Compra', 'Precio Venta', 'Stock', 'Categoría', 'Marca', 'IVA', 'SKU'],
+      ['Producto', 'Ubicación', 'Precio Compra', 'Precio Venta', ...gruposPrecioVenta.map((grupo) => `Precio ${grupo.nombre}`), 'Stock', 'Categoría', 'Marca', 'IVA', 'SKU'],
       ...productosFiltrados.map((p) => [
         p.nombre, nombreUbicacionStockVisible || nombreEmpresa, p.precio_compra || 0, p.precio_venta || 0,
+        ...gruposPrecioVenta.map((grupo) => (p.grupos_precio || []).find((precio) => String(precio.nombre || '').trim().toLocaleLowerCase('es') === grupo.nombre.trim().toLocaleLowerCase('es'))?.precioVenta ?? ''),
         stockVisible(p), p.categoria || '', p.marca || '', p.iva || 'IVA 10%', p.codigo || '',
       ]),
     ];
-    const csv = filas.map((f) => f.join(',')).join('\n');
+    const csv = filas.map((f) => f.map((valor) => `"${String(valor ?? '').replaceAll('"', '""')}"`).join(',')).join('\n');
     const blob = new Blob([csv], { type: 'text/csv' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -507,7 +577,7 @@ export default function ListaProductos() {
 
           {/* 3. TABLA PRINCIPAL */}
           <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs border-collapse">
+            <table className="product-list-table w-full text-left text-xs border-collapse">
               <thead>
                 <tr className="border-b border-gray-200 bg-gray-50 text-gray-600 font-bold uppercase">
                   <th className="p-3 w-8">
@@ -519,6 +589,7 @@ export default function ListaProductos() {
                   <th className="p-3">{t('companyLocation')}</th>
                   <th className="p-3 text-right">{t('unitPurchasePrice')}</th>
                   <th className="p-3 text-right">{t('salePrice')}</th>
+                  {gruposPrecioVenta.map((grupo) => <th key={grupo.id} className="min-w-40 border-l border-slate-200 p-3 text-right">{grupo.nombre}</th>)}
                   <th className="p-3 text-center">{t('currentStock')}</th>
                   <th className="p-3">{t('categories')}</th>
                   <th className="p-3">{t('brands')}</th>
@@ -529,7 +600,7 @@ export default function ListaProductos() {
               <tbody>
                 {productosPagina.length === 0 ? (
                   <tr>
-                    <td colSpan="11" className="text-center py-8 text-gray-400 font-medium">
+                    <td colSpan={12 + gruposPrecioVenta.length} className="text-center py-8 text-gray-400 font-medium">
                       {t('noMatchingProducts')}
                     </td>
                   </tr>
@@ -592,6 +663,14 @@ export default function ListaProductos() {
                       <td className="p-3 text-right font-bold text-gray-800">
                         {formatoPrecioProducto(prod, 'precio_venta', 'precio_venta_moneda')}
                       </td>
+                      {gruposPrecioVenta.map((grupo) => {
+                        const precio = (Array.isArray(prod.grupos_precio) ? prod.grupos_precio : []).find((item) => String(item.nombre || '').trim().toLocaleLowerCase('es') === grupo.nombre.trim().toLocaleLowerCase('es'));
+                        const editandoEste = String(precioGrupoEditando?.productoId) === String(prod.id) && precioGrupoEditando?.grupoNombre === grupo.nombre;
+                        return <td key={grupo.id} className="min-w-40 border-l border-slate-100 p-2 text-right">
+                          {editandoEste ? <div className="flex items-center justify-end gap-1"><input autoFocus aria-label={`Precio ${grupo.nombre} para ${prod.nombre}`} type="number" min="0" step="1" value={precioGrupoEditando.valor} disabled={guardandoPrecioGrupo} onChange={(event) => setPrecioGrupoEditando((actual) => ({ ...actual, valor: event.target.value }))} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); guardarPrecioGrupo(prod); } if (event.key === 'Escape' && !guardandoPrecioGrupo) setPrecioGrupoEditando(null); }} className="w-28 rounded border border-slate-300 px-2 py-1 text-right font-normal outline-none focus:border-orange-400"/><button type="button" aria-label={`Guardar precio ${grupo.nombre}`} disabled={guardandoPrecioGrupo} onClick={() => guardarPrecioGrupo(prod)} className="rounded bg-emerald-600 p-1.5 text-white hover:bg-emerald-700 disabled:opacity-50">{guardandoPrecioGrupo ? <LoaderCircle size={14} className="animate-spin"/> : <Check size={14}/>}</button><button type="button" aria-label="Cancelar edición" disabled={guardandoPrecioGrupo} onClick={() => setPrecioGrupoEditando(null)} className="rounded border border-slate-200 p-1.5 text-slate-500 hover:bg-slate-50"><X size={14}/></button></div>
+                            : <div className="inline-flex items-center justify-end gap-1.5"><span className="font-semibold text-gray-700">{precio?.precioVenta !== undefined && precio?.precioVenta !== null ? `${Number(precio.precioVenta).toLocaleString('es-PY')} Gs` : '—'}</span><button type="button" aria-label={`Editar precio ${grupo.nombre} de ${prod.nombre}`} title={`Editar precio ${grupo.nombre}`} disabled={guardandoPrecioGrupo} onClick={() => editarPrecioGrupo(prod, grupo)} className="rounded p-1 text-slate-400 hover:bg-orange-50 hover:text-orange-600 disabled:opacity-50"><Pencil size={13}/></button></div>}
+                        </td>;
+                      })}
                       <td className="p-3 text-center">
                         <span className={`px-2 py-0.5 rounded-sm font-bold text-[11px] ${stockVisible(prod) <= Number(prod.alerta_stock_bajo || 5) ? 'bg-red-100 text-red-700' : 'bg-gray-100 text-gray-700'}`}>
                           {stockFormateado(prod, stockVisible(prod))}
@@ -612,6 +691,8 @@ export default function ListaProductos() {
               </tbody>
             </table>
           </div>
+
+          {errorPrecioGrupo && <p role="alert" className="mt-3 rounded border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">{errorPrecioGrupo}</p>}
 
           {/* Barra de acciones masivas */}
           {seleccionados.length > 0 && (
