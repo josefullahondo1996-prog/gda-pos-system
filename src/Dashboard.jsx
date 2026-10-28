@@ -496,6 +496,7 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
       case '/pos':
       case '/punto-venta':
         setVistaActiva('pos');
+        setMenuExpandido('ventas');
         break;
       case '/compras':
         setVistaActiva('compras');
@@ -953,7 +954,9 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
 
   const estiloSubItem = (vista, ruta) => `
     w-full text-left pl-6 pr-3 py-2 text-[13px] font-medium transition-colors duration-200 flex items-center gap-2 rounded-none mx-0 border-0
-    ${(ruta ? location.pathname === ruta || (ruta === '/informes/stock' && location.pathname === '/informes-operativos') : vistaActiva === vista) ? 'text-[#ff4d00] font-semibold bg-white/5' : 'text-slate-400 hover:text-[#ff4d00] hover:bg-[#ff4d00]/10'}
+    ${(ruta ? location.pathname === ruta || (ruta === '/informes/stock' && location.pathname === '/informes-operativos') : vistaActiva === vista)
+      ? (vista === 'pos' ? 'text-white font-bold bg-[#ff4d00]/20 border-l-2 border-[#ff4d00]' : 'text-[#ff4d00] font-semibold bg-white/5')
+      : 'text-slate-400 hover:text-[#ff4d00] hover:bg-[#ff4d00]/10'}
   `;
 
   return (
@@ -1239,7 +1242,7 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
                 {menuRenderizado === 'ventas' && !sidebarColapsado && (
                   <div aria-hidden={menuExpandido !== 'ventas'} inert={menuExpandido !== 'ventas'} style={estiloSubmenu('ventas')} className="sidebar-submenu mx-1.5 flex flex-col rounded-b bg-[#1e1f35] py-1.5">
                     <Link to="/todas_ventas" onClick={() => irA('todas_ventas', '/todas_ventas')} className={estiloSubItem('todas_ventas')}>🠖 {t('allSales')}</Link>
-                    <Link to="/pos" onClick={() => irA('pos', '/pos')} className={estiloSubItem('pos')}>🠖 {t('pos')}</Link>
+                    <Link to="/pos" aria-current={vistaActiva === 'pos' ? 'page' : undefined} onClick={() => irA('pos', '/pos')} className={estiloSubItem('pos')}>🠖 {t('pos')}</Link>
                     <Link to="/cobros" onClick={() => irA('cobros', '/cobros')} className={estiloSubItem('cobros')}>🠖 {t('pendingOrders')}</Link>
                     <Link to="/presupuestos" onClick={() => irA('cotizaciones', '/presupuestos')} className={estiloSubItem('cotizaciones')}>🠖 Presupuestos / Cotizaciones</Link>
                     <Link to="/envios" onClick={() => irA('envios', '/envios')} className={estiloSubItem('envios')}>🠖 Envíos</Link>
