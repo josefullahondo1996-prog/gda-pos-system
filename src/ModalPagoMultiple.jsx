@@ -1,10 +1,10 @@
 import { useEffect, useMemo, useState } from 'react';
 
 const MONEDAS = {
-    PYG: { etiqueta: 'Gs (Guarani)', simbolo: 'Gs', decimales: 0 },
-    USD: { etiqueta: '$ USD', simbolo: 'USD', decimales: 2 },
-    EUR: { etiqueta: '€ EUR', simbolo: 'EUR', decimales: 2 },
-    BRL: { etiqueta: 'R$ BRL', simbolo: 'R$', decimales: 2 },
+    PYG: { etiqueta: 'Gs (Guarani)', simbolo: 'Gs', bandera: '🇵🇾', decimales: 0 },
+    USD: { etiqueta: '$ USD', simbolo: 'USD', bandera: '🇺🇸', decimales: 2 },
+    EUR: { etiqueta: '€ EUR', simbolo: 'EUR', bandera: '🇪🇺', decimales: 2 },
+    BRL: { etiqueta: 'R$ BRL', simbolo: 'R$', bandera: '🇧🇷', decimales: 2 },
 };
 
 const redondear = (valor, decimales = 0) => {
@@ -96,6 +96,9 @@ export default function ModalPagoMultiple({
     const pagoProyectadoGs = pagoRealizadoGs + montoBorradorGs;
     const pagoAplicadoGs = Math.min(pagoProyectadoGs, totalGs);
     const vueltoGs = Math.max(0, pagoProyectadoGs - totalGs);
+    const vueltoEnMonedaPago = tasaActiva
+        ? redondear(monedaPago === 'PYG' ? vueltoGs : vueltoGs / tasaActiva, MONEDAS[monedaPago].decimales)
+        : 0;
     const saldoGs = Math.max(0, totalGs - pagoProyectadoGs);
     const faltanteGs = Math.max(0, totalGs - pagoRealizadoGs);
     const montoPredeterminado = tasaActiva ? redondear(faltanteGs / tasaActiva, MONEDAS[monedaPago].decimales) : 0;
@@ -238,7 +241,7 @@ export default function ModalPagoMultiple({
                             <div className="flex flex-wrap gap-2">{codigosPago.map((codigo) => {
                                 const tasa = tasaParaMoneda(codigo);
                                 const habilitado = codigo === 'PYG' || tasa !== null;
-                                return <button type="button" key={codigo} disabled={!habilitado} onClick={() => cambiarMonedaPago(codigo)} className={`rounded-lg border px-3 py-2 text-sm font-bold transition ${monedaPago === codigo ? 'border-slate-900 bg-slate-900 text-white' : 'border-slate-300 bg-white text-slate-700 hover:border-orange-400'} disabled:cursor-not-allowed disabled:opacity-40`} title={!habilitado ? `Fijá la cotización de compra de ${codigo} en Mesa de Cambios` : undefined}>{MONEDAS[codigo].etiqueta}{codigo !== 'PYG' && tasa ? <span className="ml-1 text-[10px] font-medium opacity-75">(1={formatMoney(tasa, 'PYG')})</span> : null}</button>;
+                                return <button type="button" key={codigo} disabled={!habilitado} onClick={() => cambiarMonedaPago(codigo)} className={`rounded-lg border px-3 py-2 text-sm font-bold transition ${monedaPago === codigo ? 'border-slate-900 bg-slate-900 text-white' : 'border-slate-300 bg-white text-slate-700 hover:border-orange-400'} disabled:cursor-not-allowed disabled:opacity-40`} title={!habilitado ? `Fijá la cotización de compra de ${codigo} en Mesa de Cambios` : undefined}><span className="mr-1.5" aria-hidden="true">{MONEDAS[codigo].bandera}</span>{MONEDAS[codigo].etiqueta}{codigo !== 'PYG' && tasa ? <span className="ml-1 text-[10px] font-medium opacity-75">(1={formatMoney(tasa, 'PYG')})</span> : null}</button>;
                             })}</div>
                             {monedaPago !== 'PYG' && tasaActiva && <p className="mt-1.5 text-[11px] text-slate-500">Se convierte usando la tasa de compra del día: 1 {monedaPago} = {formatMoney(tasaActiva, 'PYG')}.</p>}
                         </div>
@@ -257,7 +260,7 @@ export default function ModalPagoMultiple({
                         <button type="button" onClick={agregarFila} disabled={!tasaActiva} className="w-full rounded-lg bg-orange-500 py-2.5 font-bold text-white hover:bg-orange-600 disabled:cursor-not-allowed disabled:opacity-50">+ Agregar fila de pago</button>
 
                         {vueltoGs > 0 && <section className="space-y-3 rounded-lg border border-emerald-200 bg-emerald-50/60 p-3" aria-label="Configuración del vuelto">
-                            <label className="flex cursor-pointer items-start gap-2 text-xs font-semibold text-slate-700"><input type="checkbox" checked={sinVuelto} onChange={(event) => setSinVuelto(event.target.checked)} className="mt-0.5 h-4 w-4 accent-emerald-600" /><span>Sin vuelto: el cliente deja <strong>{formatMoney(vueltoGs)}</strong> y queda en la caja</span></label>
+                            <label className="flex cursor-pointer items-start gap-2 text-xs font-semibold text-slate-700"><input type="checkbox" checked={sinVuelto} onChange={(event) => setSinVuelto(event.target.checked)} className="mt-0.5 h-4 w-4 accent-emerald-600" /><span>Sin vuelto: el cliente deja <strong>{formatMoney(vueltoEnMonedaPago, monedaPago)}</strong> ({formatMoney(vueltoGs)}) y queda en la caja</span></label>
                             {!sinVuelto && <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                                 <label className="text-xs font-bold text-slate-500">Método de pago del vuelto:<select value={metodoVuelto} onChange={(event) => setMetodoVuelto(event.target.value)} className="mt-1 h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-sm font-medium text-slate-800">{METODOS_VUELTO.map((opcion) => <option key={opcion} value={opcion}>{opcion}</option>)}</select></label>
                                 <label className="text-xs font-bold text-slate-500">Cuenta de pago del vuelto:<select value={cuentaVueltoId} onChange={(event) => setCuentaVueltoId(event.target.value)} className="mt-1 h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-sm font-medium text-slate-800"><option value="">Ninguna</option>{cuentasGuarani.map((cuenta) => <option key={cuenta.id} value={cuenta.id}>{cuenta.nombre}</option>)}</select></label>
@@ -274,7 +277,7 @@ export default function ModalPagoMultiple({
                         <div className="rounded-lg border border-slate-200 bg-white p-3"><div className="text-[11px] font-bold uppercase tracking-wide text-slate-500">Total artículos</div><div className="mt-1 text-xl font-extrabold text-slate-900">{totalArticulos}</div></div>
                         <div className="rounded-lg border border-slate-200 bg-white p-3"><div className="text-[11px] font-bold uppercase tracking-wide text-slate-500">Total a pagar</div><div className="mt-1 text-xl font-extrabold text-slate-900">{formatMoney(totalGs)}</div>{moneda !== 'PYG' && <div className="text-xs text-slate-500">{formatMoney(totalAPagar, moneda)} · {moneda}</div>}{equivalenciaUSD !== null && moneda !== 'USD' && <div className="text-xs text-slate-500">USD {formatMoney(equivalenciaUSD, 'USD').replace('USD ', '')}</div>}</div>
                         <div className="rounded-lg border border-slate-200 bg-white p-3"><div className="text-[11px] font-bold uppercase tracking-wide text-slate-500">Pago total</div><div className="mt-1 text-xl font-extrabold text-slate-900">{formatMoney(pagoProyectadoGs)}</div></div>
-                        <div className="rounded-lg border border-slate-200 bg-white p-3"><div className="text-[11px] font-bold uppercase tracking-wide text-slate-500">Vuelto</div><div className={`mt-1 text-xl font-extrabold ${vueltoGs > 0 ? 'text-emerald-600' : 'text-slate-900'}`}>{formatMoney(vueltoGs)}</div>{vueltoGs > 0 && <div className="mt-1 text-xs text-slate-500">{sinVuelto ? 'El importe queda en caja' : `Se entrega por ${metodoVuelto}`}</div>}</div>
+                        <div className="rounded-lg border border-slate-200 bg-white p-3"><div className="text-[11px] font-bold uppercase tracking-wide text-slate-500">Vuelto</div><div className={`mt-1 text-xl font-extrabold ${vueltoGs > 0 ? 'text-emerald-600' : 'text-slate-900'}`}>{formatMoney(vueltoEnMonedaPago, monedaPago)}</div>{monedaPago !== 'PYG' && <div className="text-xs text-slate-500">Equivalente: {formatMoney(vueltoGs, 'PYG')}</div>}{vueltoGs > 0 && <div className="mt-1 text-xs text-slate-500">{sinVuelto ? 'El importe queda en caja' : `Se entrega por ${metodoVuelto}`}</div>}</div>
                         <div className="rounded-lg border border-slate-200 bg-white p-3"><div className="text-[11px] font-bold uppercase tracking-wide text-slate-500">Saldo</div><div className={`mt-1 text-xl font-extrabold ${saldoGs > 0 ? 'text-rose-600' : 'text-slate-900'}`}>{formatMoney(saldoGs)}</div>{saldoGs > 0 && <div className="mt-1 text-xs text-rose-600">Queda pendiente en la venta</div>}</div>
                     </aside>
                 </div>

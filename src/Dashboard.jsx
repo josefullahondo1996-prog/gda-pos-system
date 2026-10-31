@@ -2,7 +2,7 @@ import { lazy, Suspense, useEffect, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { supabase } from './supabaseClient';
 import {
-  LayoutDashboard, Users, Contact, Package, Factory, Wrench, ChevronLeft,
+  LayoutDashboard, Users, Contact, Package, Factory, Wrench, ChevronDown,
   ArrowDownToLine, ArrowUpFromLine, BarChart3, ShoppingCart, LogOut, Settings,
   MapPin, FileText, Barcode, Printer, Percent, ClipboardList, CreditCard, ArrowRightLeft,
   Menu, X, DollarSign, BookOpen, Truck, ShoppingBag, Clock3, Building2, CircleHelp, CalendarDays, ShieldCheck, Mail, ClipboardCheck, QrCode, Bell, AlertTriangle, CalendarClock, PackageX
@@ -952,6 +952,17 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
       : 'text-slate-600 hover:text-[#ff4d00] hover:bg-[#1e1f35] hover:shadow-[0_8px_18px_rgba(15,23,42,0.16)] active:bg-[#1e1f35]'}
   `;
 
+  const indicadorDesplegable = (menuName) => (
+    <span className="ml-auto inline-flex shrink-0 items-center text-slate-500 transition-colors duration-200 group-hover:text-[#ff4d00]">
+      <ChevronDown
+        size={14}
+        strokeWidth={2}
+        aria-hidden="true"
+        className={`transform-gpu transition-transform duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] ${menuExpandido === menuName ? 'rotate-180 scale-[1.04]' : 'rotate-0 scale-100'}`}
+      />
+    </span>
+  );
+
   const estiloSubItem = (vista, ruta) => `
     w-full text-left pl-6 pr-3 py-2 text-[13px] font-medium transition-colors duration-200 flex items-center gap-2 rounded-none mx-0 border-0
     ${(ruta ? location.pathname === ruta || (ruta === '/informes/stock' && location.pathname === '/informes-operativos') : vistaActiva === vista)
@@ -1132,10 +1143,10 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
             {/* MENÚ: GESTIÓN DE USUARIOS */}
             {(tieneCategoria('usuarios') || tieneCategoria('roles')) && (
               <>
-                <button onClick={() => toggleMenu('usuarios')} className={estiloBotonDesplegable('usuarios')} title={t('userManagement')}>
+                <button onClick={() => toggleMenu('usuarios')} aria-expanded={menuExpandido === 'usuarios'} className={estiloBotonDesplegable('usuarios')} title={t('userManagement')}>
                   <div className="flex items-center gap-3"><Users size={18} strokeWidth={2} /> {!sidebarColapsado && t('userManagement')}</div>
                   {!sidebarColapsado && (
-                    <span className="ml-auto inline-flex shrink-0 items-center text-slate-500 group-hover:text-[#ff4d00]"><ChevronLeft size={14} strokeWidth={2} /></span>
+                    indicadorDesplegable('usuarios')
                   )}
                 </button>
                 {menuRenderizado === 'usuarios' && !sidebarColapsado && (
@@ -1154,10 +1165,10 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
             {/* MENÚ: CLIENTE / PROVEEDOR */}
             {tieneCategoria('clientes_proveedores') && (
               <>
-                <button onClick={() => toggleMenu('contactos')} className={estiloBotonDesplegable('contactos')} title={t('contacts')}>
+                <button onClick={() => toggleMenu('contactos')} aria-expanded={menuExpandido === 'contactos'} className={estiloBotonDesplegable('contactos')} title={t('contacts')}>
                   <div className="flex items-center gap-3"><Contact size={18} strokeWidth={2} /> {!sidebarColapsado && t('contacts')}</div>
                   {!sidebarColapsado && (
-                    <span className="ml-auto inline-flex shrink-0 items-center text-slate-500 group-hover:text-[#ff4d00]"><ChevronLeft size={14} strokeWidth={2} /></span>
+                    indicadorDesplegable('contactos')
                   )}
                 </button>
                 {menuRenderizado === 'contactos' && !sidebarColapsado && (
@@ -1177,7 +1188,7 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
                 <button onClick={() => toggleMenu('productos')} aria-expanded={menuExpandido === 'productos'} aria-controls="submenu-productos" className={estiloBotonDesplegable('productos')} title={t('products')}>
                   <div className="flex items-center gap-3"><Package size={18} strokeWidth={2} /> {!sidebarColapsado && t('products')}</div>
                   {!sidebarColapsado && (
-                    <span className="ml-auto inline-flex shrink-0 items-center text-slate-500 group-hover:text-[#ff4d00]"><ChevronLeft size={14} strokeWidth={2} /></span>
+                    indicadorDesplegable('productos')
                   )}
                 </button>
                 {menuRenderizado === 'productos' && !sidebarColapsado && (
@@ -1214,10 +1225,10 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
             {/* MENÚ: COMPRAS (RECONECTADO) */}
             {tieneCategoria('compras') && (
               <>
-                <button onClick={() => toggleMenu('compras')} className={estiloBotonDesplegable('compras')} title={t('purchases')}>
+                <button onClick={() => toggleMenu('compras')} aria-expanded={menuExpandido === 'compras'} className={estiloBotonDesplegable('compras')} title={t('purchases')}>
                   <div className="flex items-center gap-3"><ArrowDownToLine size={18} strokeWidth={2} /> {!sidebarColapsado && t('purchases')}</div>
                   {!sidebarColapsado && (
-                    <span className="ml-auto inline-flex shrink-0 items-center text-slate-500 group-hover:text-[#ff4d00]"><ChevronLeft size={14} strokeWidth={2} /></span>
+                    indicadorDesplegable('compras')
                   )}
                 </button>
                 {menuRenderizado === 'compras' && !sidebarColapsado && (
@@ -1233,10 +1244,10 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
             {/* MENÚ: VENTAS */}
             {tieneCategoria('ventas_pos') && !soloPOS && (
               <>
-                <button onClick={() => toggleMenu('ventas')} className={estiloBotonDesplegable('ventas')} title={t('sales')}>
+                <button onClick={() => toggleMenu('ventas')} aria-expanded={menuExpandido === 'ventas'} className={estiloBotonDesplegable('ventas')} title={t('sales')}>
                   <div className="flex items-center gap-3"><ArrowUpFromLine size={18} strokeWidth={2} /> {!sidebarColapsado && t('sales')}</div>
                   {!sidebarColapsado && (
-                    <span className="ml-auto inline-flex shrink-0 items-center text-slate-500 group-hover:text-[#ff4d00]"><ChevronLeft size={14} strokeWidth={2} /></span>
+                    indicadorDesplegable('ventas')
                   )}
                 </button>
                 {menuRenderizado === 'ventas' && !sidebarColapsado && (
@@ -1269,9 +1280,9 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
 
             {(esAdmin || !permisosRol || permisosRol.productos?.['Transferir stock'] === true) && (
               <>
-                <button onClick={() => toggleMenu('transferencias_stock')} className={estiloBotonDesplegable('transferencias_stock')} title="Transferencias de stock">
+                <button onClick={() => toggleMenu('transferencias_stock')} aria-expanded={menuExpandido === 'transferencias_stock'} className={estiloBotonDesplegable('transferencias_stock')} title="Transferencias de stock">
                   <div className="flex items-center gap-3"><ArrowRightLeft size={18} strokeWidth={2} /> {!sidebarColapsado && 'Transferencias de stock'}</div>
-                  {!sidebarColapsado && <span className="ml-auto inline-flex shrink-0 items-center text-slate-500 group-hover:text-[#ff4d00]"><ChevronLeft size={14} strokeWidth={2} /></span>}
+                  {!sidebarColapsado && indicadorDesplegable('transferencias_stock')}
                 </button>
                 {menuRenderizado === 'transferencias_stock' && !sidebarColapsado && <div aria-hidden={menuExpandido !== 'transferencias_stock'} inert={menuExpandido !== 'transferencias_stock'} style={estiloSubmenu('transferencias_stock')} className="sidebar-submenu mx-1.5 flex flex-col rounded-b bg-[#1e1f35] py-1.5">
                   <Link to="/transferencias-stock" onClick={() => irA('transferencias_stock', '/transferencias-stock')} className={estiloSubItem('transferencias_stock', '/transferencias-stock')}>🠖 Listar transferencias</Link>
@@ -1282,9 +1293,9 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
 
             {(esAdmin || !permisosRol || permisosRol.productos?.['Ajustar stock'] === true) && (
               <>
-                <button onClick={() => toggleMenu('control_stock')} className={estiloBotonDesplegable('control_stock')} title="Control de stock">
+                <button onClick={() => toggleMenu('control_stock')} aria-expanded={menuExpandido === 'control_stock'} className={estiloBotonDesplegable('control_stock')} title="Control de stock">
                   <div className="flex items-center gap-3"><ClipboardCheck size={18} strokeWidth={2} /> {!sidebarColapsado && 'Control de stock'}</div>
-                  {!sidebarColapsado && <span className="ml-auto inline-flex shrink-0 items-center text-slate-500 group-hover:text-[#ff4d00]"><ChevronLeft size={14} strokeWidth={2} /></span>}
+                  {!sidebarColapsado && indicadorDesplegable('control_stock')}
                 </button>
                 {menuRenderizado === 'control_stock' && !sidebarColapsado && <div aria-hidden={menuExpandido !== 'control_stock'} inert={menuExpandido !== 'control_stock'} style={estiloSubmenu('control_stock')} className="sidebar-submenu mx-1.5 flex flex-col rounded-b bg-[#1e1f35] py-1.5">
                   <Link to="/control-stock" onClick={() => irA('ajustes_stock', '/control-stock')} className={estiloSubItem('ajustes_stock', '/control-stock')}>🠖 Listar controles de stock</Link>
@@ -1296,10 +1307,10 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
             {/* MENÚ: GASTOS */}
             {tieneCategoria('gastos') && (
               <>
-                <button onClick={() => toggleMenu('gastos')} className={estiloBotonDesplegable('gastos')} title={t('expenses')}>
+                <button onClick={() => toggleMenu('gastos')} aria-expanded={menuExpandido === 'gastos'} className={estiloBotonDesplegable('gastos')} title={t('expenses')}>
                   <div className="flex items-center gap-3"><ArrowDownToLine size={18} strokeWidth={2} /> {!sidebarColapsado && t('expenses')}</div>
                   {!sidebarColapsado && (
-                    <span className="ml-auto inline-flex shrink-0 items-center text-slate-500 group-hover:text-[#ff4d00]"><ChevronLeft size={14} strokeWidth={2} /></span>
+                    indicadorDesplegable('gastos')
                   )}
                 </button>
                 {menuRenderizado === 'gastos' && !sidebarColapsado && (
@@ -1315,10 +1326,10 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
             {/* MENÚ: CAJA / BANCO */}
             {tieneCategoria('caja') && (
               <>
-                <button onClick={() => toggleMenu('caja_banco')} className={estiloBotonDesplegable('caja_banco')} title="Caja / Banco">
+                <button onClick={() => toggleMenu('caja_banco')} aria-expanded={menuExpandido === 'caja_banco'} className={estiloBotonDesplegable('caja_banco')} title="Caja / Banco">
                   <div className="flex items-center gap-3"><CreditCard size={18} strokeWidth={2} /> {!sidebarColapsado && t('cashBank')}</div>
                   {!sidebarColapsado && (
-                    <span className="ml-auto inline-flex shrink-0 items-center text-slate-500 group-hover:text-[#ff4d00]"><ChevronLeft size={14} strokeWidth={2} /></span>
+                    indicadorDesplegable('caja_banco')
                   )}
                 </button>
                 {menuRenderizado === 'caja_banco' && !sidebarColapsado && (
@@ -1333,9 +1344,9 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
             {/* Informes sigue el orden del submenú de Micdepos. */}
             {tieneCategoria('informes') && (
               <>
-                <button onClick={() => toggleMenu('informes')} className={estiloBotonDesplegable('informes')} title="Informes">
+                <button onClick={() => toggleMenu('informes')} aria-expanded={menuExpandido === 'informes'} className={estiloBotonDesplegable('informes')} title="Informes">
                   <div className="flex items-center gap-3"><BarChart3 size={18} strokeWidth={2} /> {!sidebarColapsado && t('reports')}</div>
-                  {!sidebarColapsado && <span className="ml-auto inline-flex shrink-0 items-center text-slate-500 group-hover:text-[#ff4d00]"><ChevronLeft size={14} strokeWidth={2} /></span>}
+                  {!sidebarColapsado && indicadorDesplegable('informes')}
                 </button>
                 {menuRenderizado === 'informes' && !sidebarColapsado && <div aria-hidden={menuExpandido !== 'informes'} inert={menuExpandido !== 'informes'} style={estiloSubmenu('informes')} className="sidebar-submenu mx-1.5 flex flex-col rounded-b bg-[#1e1f35] py-1.5">
                   <Link to="/ganancias_perdidas" onClick={() => irA('ganancias_perdidas', '/ganancias_perdidas')} className={estiloSubItem('', '/ganancias_perdidas')}>🠖 Ganancias y Pérdidas</Link>
@@ -1378,10 +1389,10 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
             </Link>
             {/* MENÚ: CONFIGURACIONES */}
             <>
-              <button onClick={() => toggleMenu('configuraciones')} className={estiloBotonDesplegable('configuraciones')} title="Configuraciones">
+              <button onClick={() => toggleMenu('configuraciones')} aria-expanded={menuExpandido === 'configuraciones'} className={estiloBotonDesplegable('configuraciones')} title="Configuraciones">
                 <div className="flex items-center gap-3"><Settings size={18} strokeWidth={2} /> {!sidebarColapsado && t('settings')}</div>
                 {!sidebarColapsado && (
-                  <span className="ml-auto inline-flex shrink-0 items-center text-slate-500 group-hover:text-[#ff4d00]"><ChevronLeft size={14} strokeWidth={2} /></span>
+                  indicadorDesplegable('configuraciones')
                 )}
               </button>
               {menuRenderizado === 'configuraciones' && !sidebarColapsado && (

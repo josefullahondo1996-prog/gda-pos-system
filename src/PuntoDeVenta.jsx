@@ -21,6 +21,19 @@ import { useLanguage } from './LanguageContext';
 import LogoPyPos from './LogoPyPos';
 
 const formatGs = (valor) => `Gs ${Number(valor || 0).toLocaleString('es-PY')}`;
+const BanderaMoneda = ({ codigo, className = 'h-7 w-7' }) => {
+  const clipId = React.useId();
+  return <svg viewBox="0 0 40 40" className={`${className} shrink-0 rounded-full shadow-sm`} role="img" aria-label={`Bandera de ${codigo === 'EUR' ? 'la Unión Europea' : ({ PYG: 'Paraguay', USD: 'Estados Unidos', BRL: 'Brasil' }[codigo] || codigo)}`}>
+    <defs><clipPath id={clipId}><circle cx="20" cy="20" r="18" /></clipPath></defs>
+    <g clipPath={`url(#${clipId})`}>
+      {codigo === 'PYG' && <><path fill="#d52b1e" d="M0 0h40v13.34H0z"/><path fill="#fff" d="M0 13.33h40v13.34H0z"/><path fill="#0038a8" d="M0 26.66h40V40H0z"/><circle cx="20" cy="20" r="4" fill="#d52b1e"/><circle cx="20" cy="20" r="2.5" fill="#fff"/></>}
+      {codigo === 'USD' && <><path fill="#fff" d="M0 0h40v40H0z"/>{Array.from({ length: 7 }, (_, i) => <path key={i} fill="#b22234" d={`M0 ${i * 6.16}h40v3.08H0z`}/>)}<path fill="#3c3b6e" d="M0 0h19v21H0z"/>{Array.from({ length: 15 }, (_, i) => <circle key={i} cx={3 + (i % 5) * 3.2} cy={3 + Math.floor(i / 5) * 5} r=".8" fill="#fff"/>)}</>}
+      {codigo === 'BRL' && <><circle cx="20" cy="20" r="20" fill="#009b3a"/><path fill="#ffdf00" d="m20 5 15 15-15 15L5 20z"/><circle cx="20" cy="20" r="8" fill="#002776"/><path d="M13 18q7-4 14 0" fill="none" stroke="#fff" strokeWidth="1.4"/></>}
+      {codigo === 'EUR' && <><circle cx="20" cy="20" r="20" fill="#003399"/>{Array.from({ length: 12 }, (_, i) => { const a = (i * Math.PI) / 6; return <circle key={i} cx={20 + Math.sin(a) * 10} cy={20 - Math.cos(a) * 10} r="1.25" fill="#ffcc00"/>; })}</>}
+    </g>
+    <circle cx="20" cy="20" r="18" fill="none" stroke="white" strokeOpacity=".9" strokeWidth="1.5"/>
+  </svg>;
+};
 
 const PuntoDeVenta = ({ cajaInfo, session, perfilUsuario, onVolver, onSolicitarCierre, onNuevoGasto, onAbrirGuia }) => {
   const { t } = useLanguage();
@@ -1500,7 +1513,7 @@ const PuntoDeVenta = ({ cajaInfo, session, perfilUsuario, onVolver, onSolicitarC
             const tasaCompra = Number(tasasCambioDia?.[codigo]?.compra);
             const equivalente = tasaCompra > 0 ? totalConAjustes / tasaCompra : null;
             return <div key={codigo} className="flex h-[68px] w-[142px] shrink-0 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-md" aria-label={equivalente === null ? `Cotización ${codigo} no disponible` : `Equivalente ${formatMoneda(equivalente, codigo)}; 1 ${codigo} = ${formatMoneda(tasaCompra, 'PYG')}`}>
-              <div className="flex w-[54px] flex-col items-center justify-center bg-white px-1 text-center"><span className="text-[8px] font-bold uppercase tracking-[.12em] text-slate-400">Cotiz.</span><span className="text-[8px] font-bold text-slate-500">{codigo}</span></div>
+              <div className="flex w-[60px] flex-col items-center justify-center gap-0.5 bg-white px-1 text-center"><BanderaMoneda codigo={codigo} className="h-12 w-12" /><span className="text-[8px] font-bold leading-none text-slate-500">{codigo}</span></div>
               <div className="flex min-w-0 flex-1 flex-col items-center justify-center rounded-l-xl bg-slate-900 px-2 text-white"><strong className="text-base leading-tight">{equivalente === null ? '—' : equivalente.toLocaleString('es-PY', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong><span className="mt-1 whitespace-nowrap text-[7px] text-slate-400">{tasaCompra > 0 ? `1 ${codigo} = ${tasaCompra.toLocaleString('es-PY')} Gs` : 'Sin cotización de hoy'}</span></div>
             </div>;
           })}</div>}

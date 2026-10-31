@@ -5,7 +5,7 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { createPortal } from 'react-dom';
 import { jsPDF } from 'jspdf';
-import { Check, LoaderCircle, Pencil, X } from 'lucide-react';
+import { Check, ChevronDown, Image as ImageIcon, LoaderCircle, Pencil, X } from 'lucide-react';
 import { supabase } from './supabaseClient';
 import { useEmpresaInfo } from './utils/useEmpresa';
 import { useConfiguracionEmpresa } from './utils/useConfiguracionEmpresa';
@@ -45,6 +45,7 @@ export default function ListaProductos() {
   const [guardandoPrecioGrupo, setGuardandoPrecioGrupo] = useState(false);
   const [errorPrecioGrupo, setErrorPrecioGrupo] = useState('');
   const [busqueda, setBusqueda] = useState('');
+  const [filtrosAbiertos, setFiltrosAbiertos] = useState(true);
 
   // Estados para los Filtros Superiores (igual que antes)
   const [filtroCategoria, setFiltroCategoria] = useState('Todos');
@@ -417,7 +418,22 @@ export default function ListaProductos() {
 
       {/* 1. SECCIÓN DE FILTROS AVANZADOS (clonado de CDEpos, con datos reales donde existen) */}
       <div className="bg-white p-4 rounded-lg shadow-sm border-t-2 border-[#004284] mb-4">
-        <h3 className="text-xs font-bold text-gray-500 mb-3 uppercase tracking-wider">🔻 {t('filters')}</h3>
+        <button
+          type="button"
+          aria-expanded={filtrosAbiertos}
+          aria-controls="filtros-productos-contenido"
+          onClick={() => setFiltrosAbiertos((abiertos) => !abiertos)}
+          className="mb-3 flex w-full items-center justify-between text-left text-xs font-bold uppercase tracking-wider text-gray-500 hover:text-[#004284]"
+        >
+          <span>🔻 {t('filters')}</span>
+          <ChevronDown size={16} className={`transition-transform duration-200 ${filtrosAbiertos ? 'rotate-180' : ''}`} />
+        </button>
+        <div
+          id="filtros-productos-contenido"
+          aria-hidden={!filtrosAbiertos}
+          className={`grid transition-[grid-template-rows] duration-300 ease-in-out ${filtrosAbiertos ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'}`}
+        >
+        <div className="min-h-0 overflow-hidden">
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
           <div title="Tu sistema todavía no distingue tipos de producto (individual/combo/servicio)">
             <label className="block text-xs font-bold text-gray-400 mb-1">{t('productType')}:</label>
@@ -519,6 +535,8 @@ export default function ListaProductos() {
             </div>
           )}
         </div>
+        </div>
+        </div>
       </div>
 
       {/* 2. TABS: TODOS LOS PRODUCTOS / INVENTARIO-STOCK */}
@@ -577,24 +595,24 @@ export default function ListaProductos() {
 
           {/* 3. TABLA PRINCIPAL */}
           <div className="overflow-x-auto">
-            <table className="product-list-table w-full text-left text-xs border-collapse">
+            <table className="product-list-table w-full min-w-[1380px] text-left text-xs border-collapse">
               <thead>
-                <tr className="border-b border-gray-200 bg-gray-50 text-gray-600 font-bold uppercase">
-                  <th className="p-3 w-8">
+                <tr className="h-[52px] border-b border-[#e2e7ee] bg-[#f6f7f9] text-[10px] tracking-[0.035em] text-[#66748a] font-bold uppercase">
+                  <th className="w-10 px-2 py-3 align-middle">
                     <input type="checkbox" checked={todosSeleccionadosEnPagina} onChange={toggleSeleccionarTodos} />
                   </th>
-                  <th className="p-3 w-14">{t('image')}</th>
-                  <th className="p-3 w-24">{t('action')}</th>
-                  <th className="p-3">{t('product')}</th>
-                  <th className="p-3">{t('companyLocation')}</th>
-                  <th className="p-3 text-right">{t('unitPurchasePrice')}</th>
-                  <th className="p-3 text-right">{t('salePrice')}</th>
-                  {gruposPrecioVenta.map((grupo) => <th key={grupo.id} className="min-w-40 border-l border-slate-200 p-3 text-right">{grupo.nombre}</th>)}
-                  <th className="p-3 text-center">{t('currentStock')}</th>
-                  <th className="p-3">{t('categories')}</th>
-                  <th className="p-3">{t('brands')}</th>
-                  <th className="p-3">IVA</th>
-                  <th className="p-3">SKU / Código Barra</th>
+                  <th className="w-[76px] px-2 py-3 text-center align-middle">{t('image')}</th>
+                  <th className="w-[112px] px-2 py-3 text-center align-middle">{t('action')}</th>
+                  <th className="min-w-[220px] px-3 py-3 align-middle">{t('product')}</th>
+                  <th className="min-w-[160px] px-3 py-3 align-middle">SKU / Código de barras</th>
+                  <th className="min-w-[160px] px-3 py-3 align-middle">{t('companyLocation')}</th>
+                  <th className="min-w-[140px] px-3 py-3 text-right align-middle">{t('unitPurchasePrice')}</th>
+                  <th className="min-w-[130px] px-3 py-3 text-right align-middle">{t('salePrice')}</th>
+                  {gruposPrecioVenta.map((grupo) => <th key={grupo.id} className="min-w-40 border-l border-slate-200 px-3 py-3 text-right align-middle">{grupo.nombre}</th>)}
+                  <th className="min-w-[100px] px-3 py-3 text-center align-middle">{t('currentStock')}</th>
+                  <th className="min-w-[170px] px-3 py-3 align-middle">{t('categories')}</th>
+                  <th className="min-w-[120px] px-3 py-3 align-middle">{t('brands')}</th>
+                  <th className="min-w-[76px] px-3 py-3 align-middle">IVA</th>
                 </tr>
               </thead>
               <tbody>
@@ -606,29 +624,31 @@ export default function ListaProductos() {
                   </tr>
                 ) : (
                   productosPagina.map((prod) => (
-                    <tr key={prod.id} className="border-b hover:bg-gray-50 text-gray-700 font-medium">
-                      <td className="p-3">
+                    <tr key={prod.id} className="h-[76px] border-b border-[#e8ecf1] text-[#34425a] font-medium odd:bg-white even:bg-[#fafbfc] transition-colors hover:bg-[#f1f7fc]">
+                      <td className="px-2 py-2 align-middle text-center">
                         <input type="checkbox" checked={seleccionados.includes(prod.id)} onChange={() => toggleSeleccionarUno(prod.id)} />
                       </td>
-                      <td className="p-3">
-                        {prod.imagen_url ? (
-                          <img
-                            src={prod.imagen_url}
-                            alt={prod.nombre}
-                            onClick={() => setProductoDetalle(prod)}
-                            className="w-9 h-9 rounded object-cover border border-gray-200 cursor-pointer hover:ring-2 hover:ring-orange-400 transition-all"
-                          />
-                        ) : (
-                          <button
-                            onClick={() => setProductoDetalle(prod)}
-                            className="w-9 h-9 rounded bg-gray-50 border border-gray-200 flex items-center justify-center text-gray-300 hover:border-orange-400 hover:text-orange-400 transition-colors"
-                            title="Ver detalle del producto"
-                          >
-                            🖼️
-                          </button>
-                        )}
+                      <td className="px-2 py-2 align-middle">
+                        <button
+                          type="button"
+                          onClick={() => setProductoDetalle(prod)}
+                          className="group relative mx-auto flex h-[52px] w-[52px] items-center justify-center overflow-hidden rounded-md border border-[#dfe5ec] bg-[#f5f7fa] shadow-sm transition-all hover:border-[#24b8d2] hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#24b8d2]"
+                          title={`Ver imagen de ${prod.nombre}`}
+                        >
+                          <ImageIcon size={19} strokeWidth={1.7} className="text-[#aeb8c5] transition-colors group-hover:text-[#24b8d2]" />
+                          {prod.imagen_url && (
+                            <img
+                              src={prod.imagen_url}
+                              alt={`Imagen de ${prod.nombre}`}
+                              loading="lazy"
+                              decoding="async"
+                              onError={(event) => event.currentTarget.classList.add('hidden')}
+                              className="absolute inset-0 h-full w-full bg-white object-contain p-0.5 transition-transform duration-200 group-hover:scale-[1.06]"
+                            />
+                          )}
+                        </button>
                       </td>
-                      <td className="p-3 relative">
+                      <td className="relative px-2 py-2 align-middle text-center">
                         <button
                           onClick={(e) => {
                             if (accionAbierta === prod.id) {
@@ -645,22 +665,23 @@ export default function ListaProductos() {
                             setPosicionMenu({ top, left: r.left + window.scrollX });
                             setAccionAbierta(prod.id);
                           }}
-                          className="bg-[#17a2b8] text-white px-2 py-1 rounded text-[11px] font-bold flex items-center gap-1"
+                          className="bg-[#20b8d2] hover:bg-[#159bb7] text-white px-2.5 py-1.5 rounded-[4px] text-[11px] font-bold inline-flex items-center gap-1 shadow-sm transition-colors"
                         >
                           Acciones <span className="text-[9px]">▼</span>
                         </button>
                       </td>
-                      <td className="p-3 font-bold text-gray-900">
-                        {prod.nombre}
+                      <td className="min-w-[220px] px-3 py-2 align-middle font-semibold leading-[1.35] text-[#202c3e]">
+                        <span className="line-clamp-2">{prod.nombre}</span>
                         {prod.activo === false && (
                           <span className="block w-fit mt-1 bg-gray-200 text-gray-600 text-[10px] font-bold px-1.5 py-0.5 rounded">{t('notForSale')}</span>
                         )}
                       </td>
-                      <td className="p-3 text-gray-500">{!usuarioVeTodas && nombreUbicacionUsuario ? nombreUbicacionUsuario : (nombreUbicacionStockVisible || nombreEmpresa)}</td>
-                      <td className="p-3 text-right font-semibold text-gray-600">
+                      <td className="min-w-[160px] break-all px-3 py-2 align-middle font-mono text-[11px] font-semibold text-[#53627a]">{prod.codigo || '—'}</td>
+                      <td className="min-w-[160px] px-3 py-2 align-middle text-gray-500">{!usuarioVeTodas && nombreUbicacionUsuario ? nombreUbicacionUsuario : (nombreUbicacionStockVisible || nombreEmpresa)}</td>
+                      <td className="min-w-[140px] px-3 py-2 text-right align-middle font-semibold text-gray-600">
                         {formatoPrecioProducto(prod, 'precio_compra', 'precio_compra_moneda')}
                       </td>
-                      <td className="p-3 text-right font-bold text-gray-800">
+                      <td className="min-w-[130px] px-3 py-2 text-right align-middle font-bold text-gray-800">
                         {formatoPrecioProducto(prod, 'precio_venta', 'precio_venta_moneda')}
                       </td>
                       {gruposPrecioVenta.map((grupo) => {
@@ -671,7 +692,7 @@ export default function ListaProductos() {
                             : <div className="inline-flex items-center justify-end gap-1.5"><span className="font-semibold text-gray-700">{precio?.precioVenta !== undefined && precio?.precioVenta !== null ? `${Number(precio.precioVenta).toLocaleString('es-PY')} Gs` : '—'}</span><button type="button" aria-label={`Editar precio ${grupo.nombre} de ${prod.nombre}`} title={`Editar precio ${grupo.nombre}`} disabled={guardandoPrecioGrupo} onClick={() => editarPrecioGrupo(prod, grupo)} className="rounded p-1 text-slate-400 hover:bg-orange-50 hover:text-orange-600 disabled:opacity-50"><Pencil size={13}/></button></div>}
                         </td>;
                       })}
-                      <td className="p-3 text-center">
+                      <td className="min-w-[100px] px-3 py-2 text-center align-middle">
                         <span className={`px-2 py-0.5 rounded-sm font-bold text-[11px] ${stockVisible(prod) <= Number(prod.alerta_stock_bajo || 5) ? 'bg-red-100 text-red-700' : 'bg-gray-100 text-gray-700'}`}>
                           {stockFormateado(prod, stockVisible(prod))}
                         </span>
@@ -681,10 +702,9 @@ export default function ListaProductos() {
                           </div>
                         )}
                       </td>
-                      <td className="p-3 text-gray-500">{prod.categoria || '—'}</td>
-                      <td className="p-3 text-gray-600 font-semibold">{prod.marca || '—'}</td>
-                      <td className="p-3 text-gray-500">{prod.iva || 'IVA 10%'}</td>
-                      <td className="p-3 font-mono text-gray-600 font-bold">{prod.codigo || '—'}</td>
+                      <td className="min-w-[170px] px-3 py-2 align-middle text-gray-500">{prod.categoria || '—'}</td>
+                      <td className="min-w-[120px] px-3 py-2 align-middle font-semibold text-gray-600">{prod.marca || '—'}</td>
+                      <td className="min-w-[76px] px-3 py-2 align-middle text-gray-500">{prod.iva || 'IVA 10%'}</td>
                     </tr>
                   ))
                 )}
