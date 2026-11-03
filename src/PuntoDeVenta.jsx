@@ -1458,28 +1458,33 @@ const PuntoDeVenta = ({ cajaInfo, session, perfilUsuario, onVolver, onSolicitarC
                 No hay productos disponibles en esta categoría.
               </div>
             ) : (
-              <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-4">
+              <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-3">
                 {productosFiltrados.map((prod) => (
-                  <div
+                  <button
                     key={prod.id}
                     onClick={() => agregarAlCarrito(prod)}
-                    className="bg-white rounded-xl shadow-sm border border-gray-100 cursor-pointer hover:border-indigo-500 hover:shadow-md transition-all overflow-hidden flex flex-col"
+                    type="button"
+                    aria-label={`Agregar ${prod.nombre} al carrito`}
+                    className="group relative min-w-0 overflow-hidden rounded-2xl border border-slate-200 bg-white text-left shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:border-orange-300 hover:shadow-lg focus:outline-none focus:ring-2 focus:ring-orange-400 focus:ring-offset-2"
                   >
-                    <div className="w-full h-24 bg-gray-50 flex items-center justify-center overflow-hidden">
+                    <div className="relative flex h-28 items-center justify-center overflow-hidden bg-gradient-to-br from-slate-50 via-white to-orange-50/60 p-3">
                       {prod.imagen_url ? (
-                        <img src={prod.imagen_url} alt={prod.nombre} className="w-full h-full object-cover" />
+                        <img src={prod.imagen_url} alt="" loading="lazy" className="h-full w-full object-contain transition-transform duration-200 group-hover:scale-105" />
                       ) : (
-                        <span className="text-2xl text-gray-300">📦</span>
+                        <span aria-hidden="true" className="flex h-14 w-14 items-center justify-center rounded-2xl bg-white text-3xl shadow-sm ring-1 ring-slate-100">📦</span>
                       )}
+                      <span className="absolute right-2 top-2 rounded-full bg-white/90 px-2 py-1 text-[9px] font-bold uppercase tracking-wide text-slate-500 shadow-sm">{prod.unidad || 'Unidad'}</span>
                     </div>
-                    <div className="p-3 flex flex-col justify-between flex-1">
-                      <p className="font-bold text-gray-800 text-sm leading-tight line-clamp-2">{prod.nombre}</p>
-                      <div className="mt-1">
-                        <p className="text-[11px] text-gray-400 mb-1">{prod.codigo || '—'} · Stock: {formatearStock(stockEnSucursal(prod), prod.unidad)}</p>
-                        {ajustesEmpresa.show_pricing_on_product_suggestion !== false && <p className="text-orange-600 font-black">{formatMoneda(convertirDesdeGs(precioParaCliente(prod)), monedaVenta)}</p>}
+                    <div className="flex min-h-[112px] flex-col p-3">
+                      <p className="line-clamp-2 min-h-10 text-[13px] font-bold leading-5 text-slate-800 group-hover:text-orange-700">{prod.nombre}</p>
+                      <p className="mt-1 truncate text-[10px] font-medium text-slate-400">{prod.codigo || 'Sin código'}</p>
+                      <div className="mt-auto flex items-end justify-between gap-2 pt-3">
+                        <span className="max-w-[55%] truncate rounded-full bg-slate-100 px-2 py-1 text-[9px] font-semibold text-slate-600">Stock {formatearStock(stockEnSucursal(prod), prod.unidad)}</span>
+                        {ajustesEmpresa.show_pricing_on_product_suggestion !== false && <span className="whitespace-nowrap text-sm font-black text-orange-600">{formatMoneda(convertirDesdeGs(precioParaCliente(prod)), monedaVenta)}</span>}
                       </div>
                     </div>
-                  </div>
+                    <span aria-hidden="true" className="absolute right-2 top-[6.35rem] flex h-7 w-7 translate-y-1 items-center justify-center rounded-full bg-orange-500 text-lg font-medium leading-none text-white opacity-0 shadow-md transition-all group-hover:translate-y-0 group-hover:opacity-100">+</span>
+                  </button>
                 ))}
               </div>
             )
