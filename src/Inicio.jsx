@@ -432,7 +432,7 @@ const Inicio = ({ perfilUsuario, accionInicial }) => {
           qVentas,
           qGastos,
           qCompras,
-          supabase.from('productos').select('id, nombre, sku, codigo, stock_actual, fecha_vencimiento, ubicacion').eq('empresa_id', empresaId),
+          supabase.from('productos').select('id, nombre, sku, codigo, stock_actual, alerta_stock_bajo, administra_stock, activo, fecha_vencimiento, ubicacion').eq('empresa_id', empresaId),
           supabase.from('detalle_ventas').select('venta_id, nombre_producto, cantidad, precio_unitario, subtotal').eq('empresa_id', empresaId),
           qCajas.select('id, estado, fecha_apertura, ubicacion_id, usuario'),
           supabase.from('ubicaciones_comerciales').select('id, nombre').eq('empresa_id', empresaId),
@@ -767,9 +767,14 @@ const Inicio = ({ perfilUsuario, accionInicial }) => {
     .sort((a, b) => b.monto - a.monto)
     .slice(0, 10);
 
-  const UMBRAL_STOCK_BAJO = 5;
   const stockBajo = productos
-    .filter((p) => getNumericValue(p, ['stock_actual', 'stock']) <= UMBRAL_STOCK_BAJO)
+    .filter((p) => {
+      if (p.activo === false || p.administra_stock === false || p.stock_actual === null || p.stock_actual === undefined || p.stock_actual === '') return false;
+      const stock = Number(p.stock_actual);
+      const umbral = p.alerta_stock_bajo === null || p.alerta_stock_bajo === undefined || p.alerta_stock_bajo === ''
+        ? 5 : Number(p.alerta_stock_bajo);
+      return Number.isFinite(stock) && Number.isFinite(umbral) && stock <= umbral;
+    })
     .map((p) => ({
       nombre: getTextValue(p, ['nombre'], 'Producto'),
       sku: getTextValue(p, ['sku', 'codigo'], '—'),

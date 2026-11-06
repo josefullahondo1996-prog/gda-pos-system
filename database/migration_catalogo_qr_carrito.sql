@@ -112,7 +112,9 @@ AS $$
 DECLARE
   c public.catalogos_qr%rowtype;
   v_item jsonb;
-  v_producto_id uuid;
+  -- El ID puede llegar como UUID o como entero según la versión instalada
+  -- del esquema. Se compara como texto y luego se usa el tipo nativo de p.id.
+  v_producto_key text;
   v_producto public.productos%rowtype;
   v_stock numeric;
   v_cantidad numeric;
@@ -120,7 +122,7 @@ DECLARE
   v_subtotal numeric;
   v_total numeric := 0;
   v_items jsonb := '[]'::jsonb;
-  v_ids uuid[] := '{}';
+  v_ids text[] := '{}';
   v_nombre text;
   v_telefono text;
   v_numero text;
@@ -160,22 +162,25 @@ BEGIN
   FOR v_item IN SELECT value FROM jsonb_array_elements(p_items)
   LOOP
     BEGIN
-      v_producto_id := (v_item->>'producto_id')::uuid;
+      v_producto_key := btrim(coalesce(v_item->>'producto_id', ''));
       v_cantidad := (v_item->>'cantidad')::numeric;
     EXCEPTION WHEN invalid_text_representation THEN
       RAISE EXCEPTION 'ITEM_INVALIDO';
     END;
-    IF v_producto_id IS NULL OR v_cantidad IS NULL OR v_cantidad <= 0 OR v_cantidad::text IN ('NaN', 'Infinity', '-Infinity') THEN
+    IF v_producto_key = '' OR length(v_producto_key) > 100 THEN
+      RAISE EXCEPTION 'ITEM_INVALIDO';
+    END IF;
+    IF v_cantidad IS NULL OR v_cantidad <= 0 OR v_cantidad::text IN ('NaN', 'Infinity', '-Infinity') THEN
       RAISE EXCEPTION 'CANTIDAD_INVALIDA';
     END IF;
-    IF v_producto_id = ANY(v_ids) THEN
+    IF v_producto_key = ANY(v_ids) THEN
       RAISE EXCEPTION 'PRODUCTO_REPETIDO';
     END IF;
-    v_ids := array_append(v_ids, v_producto_id);
+    v_ids := array_append(v_ids, v_producto_key);
 
     SELECT p.* INTO v_producto
     FROM public.productos p
-    WHERE p.id = v_producto_id
+    WHERE p.id::text = v_producto_key
       AND p.empresa_id = c.empresa_id
       AND coalesce(p.activo, true) = true
       AND (cardinality(c.categoria) = 0 OR p.categoria = ANY(c.categoria))
