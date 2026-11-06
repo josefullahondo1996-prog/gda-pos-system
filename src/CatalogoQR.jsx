@@ -147,8 +147,14 @@ export function CatalogoQRPublico() {
     });
     setGuardandoPedido(false);
     if (error) {
-      setErrorPedido(error.message?.includes('STOCK_INSUFICIENTE') ? 'Cambió el stock de uno o más productos. Actualizamos las existencias; ajustá el carrito y volvé a enviar.' : `No se pudo enviar el pedido: ${error.message}`);
-      if (error.message?.includes('STOCK_INSUFICIENTE')) {
+      const mensajeError = error.message || '';
+      const rpcNoDisponible = error.code === 'PGRST202' || error.code === '42883' || mensajeError.includes('crear_pedido_catalogo_qr_publico');
+      setErrorPedido(mensajeError.includes('STOCK_INSUFICIENTE')
+        ? 'Cambió el stock de uno o más productos. Actualizamos las existencias; ajustá el carrito y volvé a enviar.'
+        : rpcNoDisponible
+          ? 'El envío de pedidos todavía no está habilitado en este catálogo. Aplicá database/migration_catalogo_qr_carrito.sql en Supabase y volvé a intentar.'
+          : `No se pudo enviar el pedido: ${mensajeError}`);
+      if (mensajeError.includes('STOCK_INSUFICIENTE')) {
         const { data: catalogoActualizado } = await supabase.rpc('obtener_catalogo_qr_publico', { p_token: token });
         if (catalogoActualizado) setCatalogo(catalogoActualizado);
       }

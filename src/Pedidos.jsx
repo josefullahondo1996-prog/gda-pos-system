@@ -163,19 +163,35 @@ export default function Pedidos() {
   const [pedidoSeleccionado, setPedidoSeleccionado] = useState(null);
   const [guardandoId, setGuardandoId] = useState('');
 
-  const cargar = async () => {
+  const cargar = async ({ silencioso = false } = {}) => {
     if (!empresaId) return;
-    setCargando(true);
-    setError('');
+    if (!silencioso) {
+      setCargando(true);
+      setError('');
+    }
     const { data, error: errorCarga } = await supabase.from('pedidos').select('*, ubicaciones_comerciales(nombre)').eq('empresa_id', empresaId).order('creado_en', { ascending: false });
     if (errorCarga) setError(errorCarga.code === '42P01'
       ? 'Falta aplicar database/migration_pedidos.sql en el proyecto Supabase para habilitar este módulo.'
-      : `No se pudieron cargar los pedidos: ${errorCarga.message}`);
+      : errorCarga.code === 'PGRST200'
+        ? 'Falta aplicar database/migration_catalogo_qr_carrito.sql para mostrar sucursal y origen de los pedidos.'
+        : `No se pudieron cargar los pedidos: ${errorCarga.message}`);
     setPedidos(data || []);
-    setCargando(false);
+    if (!silencioso) setCargando(false);
   };
 
-  useEffect(() => { cargar(); }, [empresaId]);
+  useEffect(() => {
+    if (!empresaId) return undefined;
+    cargar();
+    const channel = supabase.channel(`pedidos-empresa-${empresaId}`)
+      .on('postgres_changes', {
+        event: '*',
+        schema: 'public',
+        table: 'pedidos',
+        filter: `empresa_id=eq.${empresaId}`,
+      }, () => cargar({ silencioso: true }))
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [empresaId]);
 
   const pedidosFiltrados = useMemo(() => pedidos.filter((pedido) => {
     const texto = `${pedido.numero_pedido || ''} ${pedido.cliente_nombre || ''} ${pedido.nota || ''}`.toLocaleLowerCase('es');

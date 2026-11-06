@@ -236,3 +236,18 @@ REVOKE ALL ON FUNCTION public.obtener_catalogo_qr_publico(uuid) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public.obtener_catalogo_qr_publico(uuid) TO anon, authenticated;
 REVOKE ALL ON FUNCTION public.crear_pedido_catalogo_qr_publico(uuid, text, text, jsonb, text) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public.crear_pedido_catalogo_qr_publico(uuid, text, text, jsonb, text) TO anon, authenticated;
+
+-- Permite que la pantalla Pedidos reciba solicitudes nuevas sin recargar.
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM pg_publication WHERE pubname = 'supabase_realtime')
+     AND NOT EXISTS (
+       SELECT 1 FROM pg_publication_tables
+       WHERE pubname = 'supabase_realtime'
+         AND schemaname = 'public'
+         AND tablename = 'pedidos'
+     ) THEN
+    ALTER PUBLICATION supabase_realtime ADD TABLE public.pedidos;
+  END IF;
+END;
+$$;

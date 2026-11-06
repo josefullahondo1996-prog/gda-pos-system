@@ -1002,7 +1002,7 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
             </span>
           </div>
 
-          <nav className="flex-1 overflow-y-auto py-3">
+          <nav className="scrollbar-none flex-1 overflow-y-auto py-3">
             <button
               type="button"
               onClick={() => irA('plantillas_notificacion', '/plantillas-notificacion')}
@@ -1132,7 +1132,7 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
           </div>
 
           {/* Lista de Navegación */}
-          <nav className="flex-1 overflow-y-auto overflow-x-hidden py-3 px-1 flex flex-col bg-gradient-to-b from-[#f8fafc] to-[#f3f5f8] gap-0.5">
+          <nav className="scrollbar-none flex-1 overflow-y-auto overflow-x-hidden py-3 px-1 flex flex-col bg-gradient-to-b from-[#f8fafc] to-[#f3f5f8] gap-0.5">
             {!soloPOS && tieneCategoria('ot') && (
                 <Link to="/" onClick={() => irA('inicio', '/')} className={estiloBotonSimple('inicio')} title={t('home')}>
                   <LayoutDashboard size={18} strokeWidth={2} /> {!sidebarColapsado && t('home')}
