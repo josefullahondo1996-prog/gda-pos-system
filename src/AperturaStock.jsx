@@ -12,6 +12,7 @@ const crearFilaVacia = (producto) => ({
     id: crypto.randomUUID(),
     productoId: producto?.id || null,
     nombre: producto?.nombre || '',
+    estante: producto?.ubicacion || producto?.estante || '',
     cantidad: 1,
     unidad: producto?.unidad || 'UNID',
     costoUnitarioConIva: producto?.precio_compra
@@ -51,7 +52,7 @@ const AperturaStock = ({ producto, onGuardado, onCancelar, ubicacionId: ubicacio
             for (const fila of filasValidas) {
                 const { data: prodActual, error: errorLectura } = await supabase
                     .from('productos')
-                    .select('stock_actual, iva')
+                    .select('stock_actual, iva, ubicacion')
                     .eq('id', fila.productoId)
                     .eq('empresa_id', empresaId)
                     .single();
@@ -65,6 +66,7 @@ const AperturaStock = ({ producto, onGuardado, onCancelar, ubicacionId: ubicacio
                     .update({
                         stock_actual: nuevoStock,
                         precio_compra: Number(fila.costoUnitarioConIva) || undefined,
+                        ubicacion: String(fila.estante || '').trim() || prodActual.ubicacion || null,
                     })
                     .eq('id', fila.productoId)
                     .eq('empresa_id', empresaId);
@@ -117,6 +119,7 @@ const AperturaStock = ({ producto, onGuardado, onCancelar, ubicacionId: ubicacio
                         <thead>
                             <tr className="text-gray-400 font-bold uppercase text-[10px] border-b border-gray-200 bg-[#f8fafc]">
                                 <th className="text-left py-2 pr-3">Nombre del producto</th>
+                                <th className="text-left py-2 pr-3">Pasillo / estante</th>
                                 <th className="text-left py-2 pr-3">Cantidad restante</th>
                                 <th className="text-left py-2 pr-3">Costo unitario (con IVA)</th>
                                 <th className="text-left py-2 pr-3">Exp. date</th>
@@ -131,6 +134,9 @@ const AperturaStock = ({ producto, onGuardado, onCancelar, ubicacionId: ubicacio
                                 <tr key={f.id} className="border-b border-gray-50 align-top">
                                     <td className="py-2 pr-3 font-bold text-gray-800 min-w-[150px]">
                                         {f.nombre || <span className="text-gray-300 font-normal">(sin producto)</span>}
+                                    </td>
+                                    <td className="py-2 pr-3 min-w-[150px]">
+                                        <input type="text" maxLength={120} aria-label={`Pasillo o estante de ${f.nombre || 'producto'}`} className="w-full min-w-[130px] border border-gray-300 rounded p-1.5 text-xs" placeholder="Ej.: Pasillo 2 · B3" value={f.estante || ''} onChange={(e) => actualizarFila(f.id, 'estante', e.target.value)} />
                                     </td>
                                     <td className="py-2 pr-3">
                                         <div className="flex items-center gap-1">

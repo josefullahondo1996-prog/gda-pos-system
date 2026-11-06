@@ -37,6 +37,7 @@ const AgregarProducto = ({ onGuardado, onCancelar, productoEditar, ubicacionId }
     const [sku, setSku] = useState('');
     const [tipoCodigoBarra, setTipoCodigoBarra] = useState('Code 128 (C128)');
     const [unidad, setUnidad] = useState('');
+    const [ubicacionFisica, setUbicacionFisica] = useState('');
     const [marca, setMarca] = useState('');
     const [marcasDisponibles, setMarcasDisponibles] = useState([]);
     const [unidadesDisponibles, setUnidadesDisponibles] = useState([]);
@@ -205,6 +206,7 @@ const AgregarProducto = ({ onGuardado, onCancelar, productoEditar, ubicacionId }
         setNombre(productoEditar.nombre || '');
         setSku(productoEditar.codigo || '');
         setUnidad(productoEditar.unidad || '');
+        setUbicacionFisica(productoEditar.ubicacion || '');
         setMarca(productoEditar.marca || '');
         setCategoria(productoEditar.categoria || '');
         setSubcategoria(productoEditar.subcategoria || '');
@@ -626,6 +628,7 @@ const AgregarProducto = ({ onGuardado, onCancelar, productoEditar, ubicacionId }
                 nombre: nombre.trim(),
                 codigo: sku || null,
                 unidad,
+                ubicacion: ubicacionFisica.trim() || null,
                 marca: marca || null,
                 categoria: categoria || null,
                 subcategoria: subcategoria || null,
@@ -942,7 +945,12 @@ const AgregarProducto = ({ onGuardado, onCancelar, productoEditar, ubicacionId }
                         <div className="px-5 py-4 border-b border-slate-100">
                             <h3 className="font-bold text-slate-800">📦 {t('stockAndAlerts')}</h3>
                         </div>
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 p-5 sm:p-6">
+                        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4 p-5 sm:p-6">
+                            <div>
+                                <label className="block text-xs font-semibold text-slate-600 mb-1.5">Pasillo / estante</label>
+                                <input type="text" maxLength={120} className="w-full border border-slate-300 rounded-md px-3 py-2.5 text-sm focus:border-orange-400 focus:outline-none focus:ring-2 focus:ring-orange-100" placeholder="Ej.: Pasillo 2 · Estante B3" value={ubicacionFisica} onChange={(e) => setUbicacionFisica(e.target.value)} />
+                                <p className="mt-1 text-[11px] text-slate-400">Ubicación física del producto dentro del local.</p>
+                            </div>
                             <div>
                                 <label className="block text-xs font-semibold text-slate-600 mb-1.5">{t('manageStockQuestion')}</label>
                                 <label className="flex items-center gap-2 border border-slate-300 rounded-md px-3 py-2.5 w-fit min-h-10">

@@ -377,9 +377,9 @@ export default function ListaProductos() {
 
   const exportarCSV = () => {
     const filas = [
-      ['Producto', 'Ubicación', 'Precio Compra', 'Precio Venta', ...gruposPrecioVenta.map((grupo) => `Precio ${grupo.nombre}`), 'Stock', 'Categoría', 'Marca', 'IVA', 'SKU'],
+      ['Producto', 'Ubicación', 'Estante', 'Precio Compra', 'Precio Venta', ...gruposPrecioVenta.map((grupo) => `Precio ${grupo.nombre}`), 'Stock', 'Categoría', 'Marca', 'IVA', 'SKU'],
       ...productosFiltrados.map((p) => [
-        p.nombre, nombreUbicacionStockVisible || nombreEmpresa, p.precio_compra || 0, p.precio_venta || 0,
+        p.nombre, nombreUbicacionStockVisible || nombreEmpresa, p.ubicacion || '', p.precio_compra || 0, p.precio_venta || 0,
         ...gruposPrecioVenta.map((grupo) => (p.grupos_precio || []).find((precio) => String(precio.nombre || '').trim().toLocaleLowerCase('es') === grupo.nombre.trim().toLocaleLowerCase('es'))?.precioVenta ?? ''),
         stockVisible(p), p.categoria || '', p.marca || '', p.iva || 'IVA 10%', p.codigo || '',
       ]),
@@ -672,6 +672,7 @@ export default function ListaProductos() {
                       </td>
                       <td className="min-w-[220px] px-3 py-2 align-middle font-semibold leading-[1.35] text-[#202c3e]">
                         <span className="line-clamp-2">{prod.nombre}</span>
+                        {prod.ubicacion && <span className="mt-1 block text-[10px] font-medium text-slate-500">Estante: {prod.ubicacion}</span>}
                         {prod.activo === false && (
                           <span className="block w-fit mt-1 bg-gray-200 text-gray-600 text-[10px] font-bold px-1.5 py-0.5 rounded">{t('notForSale')}</span>
                         )}

@@ -41,6 +41,7 @@ const DetalleProducto = ({ producto, onClose }) => {
                             <Campo label="SKU/Codigo de Barra" valor={producto.codigo} />
                             <Campo label="Marca" valor={producto.marca} />
                             <Campo label="Unidad" valor={producto.unidad} />
+                            <Campo label="Pasillo / estante" valor={producto.ubicacion} />
                             <Campo label="Tipo de código de barras" valor="C128" />
                         </div>
 
