@@ -1,11 +1,12 @@
 import AgregarProducto from './AgregarProducto';
 import AperturaStock from './AperturaStock';
 import DetalleProducto from './utils/DetalleProducto';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { createPortal } from 'react-dom';
 import { jsPDF } from 'jspdf';
-import { Check, ChevronDown, Image as ImageIcon, LoaderCircle, Pencil, X } from 'lucide-react';
+import autoTable from 'jspdf-autotable';
+import { Check, ChevronDown, Columns3, FileDown, FileSpreadsheet, FileText, Image as ImageIcon, LoaderCircle, Pencil, Printer, X } from 'lucide-react';
 import { supabase } from './supabaseClient';
 import { useEmpresaInfo } from './utils/useEmpresa';
 import { useConfiguracionEmpresa } from './utils/useConfiguracionEmpresa';
@@ -15,6 +16,13 @@ import { cargarMapaStockPorUbicacion } from './utils/stockUbicacion';
 import { useNotificacion } from './NotificacionContext';
 import { formatearStock } from './utils/cantidadProducto';
 import { useLanguage } from './LanguageContext';
+
+const COLUMNAS_PRODUCTOS_DEFAULT = {
+  imagen: true, acciones: true, producto: true, codigo: true, ubicacion: true,
+  precioCompra: true, precioVenta: true, stock: true, categoria: true, marca: true, iva: true,
+};
+
+const textoCeldaCSV = (valor) => `"${String(valor ?? '').replaceAll('"', '""')}"`;
 
 export default function ListaProductos() {
   const navigate = useNavigate();
@@ -46,6 +54,42 @@ export default function ListaProductos() {
   const [errorPrecioGrupo, setErrorPrecioGrupo] = useState('');
   const [busqueda, setBusqueda] = useState('');
   const [filtrosAbiertos, setFiltrosAbiertos] = useState(true);
+  const [mostrarColumnas, setMostrarColumnas] = useState(false);
+  const [columnasVisibles, setColumnasVisibles] = useState(COLUMNAS_PRODUCTOS_DEFAULT);
+  const [columnasInicializadas, setColumnasInicializadas] = useState(false);
+  const menuColumnasRef = useRef(null);
+
+  useEffect(() => {
+    setColumnasInicializadas(false);
+    if (!empresaId) {
+      setColumnasVisibles(COLUMNAS_PRODUCTOS_DEFAULT);
+      return;
+    }
+    try {
+      const guardadas = JSON.parse(localStorage.getItem(`pypos-productos-columnas-${empresaId}`) || '{}');
+      setColumnasVisibles({ ...COLUMNAS_PRODUCTOS_DEFAULT, ...(guardadas && typeof guardadas === 'object' ? guardadas : {}) });
+    } catch {
+      setColumnasVisibles(COLUMNAS_PRODUCTOS_DEFAULT);
+    }
+    setColumnasInicializadas(true);
+  }, [empresaId]);
+
+  useEffect(() => {
+    if (!empresaId || !columnasInicializadas) return;
+    try { localStorage.setItem(`pypos-productos-columnas-${empresaId}`, JSON.stringify(columnasVisibles)); } catch { /* el almacenamiento local puede estar bloqueado */ }
+  }, [empresaId, columnasVisibles, columnasInicializadas]);
+
+  useEffect(() => {
+    if (!mostrarColumnas) return undefined;
+    const cerrarFuera = (event) => { if (!menuColumnasRef.current?.contains(event.target)) setMostrarColumnas(false); };
+    const cerrarEscape = (event) => { if (event.key === 'Escape') setMostrarColumnas(false); };
+    document.addEventListener('pointerdown', cerrarFuera);
+    document.addEventListener('keydown', cerrarEscape);
+    return () => {
+      document.removeEventListener('pointerdown', cerrarFuera);
+      document.removeEventListener('keydown', cerrarEscape);
+    };
+  }, [mostrarColumnas]);
 
   // Estados para los Filtros Superiores (igual que antes)
   const [filtroCategoria, setFiltroCategoria] = useState('Todos');
@@ -375,24 +419,71 @@ export default function ListaProductos() {
     setSeleccionados([]);
   };
 
-  const exportarCSV = () => {
-    const filas = [
-      ['Producto', 'Ubicación', 'Estante', 'Precio Compra', 'Precio Venta', ...gruposPrecioVenta.map((grupo) => `Precio ${grupo.nombre}`), 'Stock', 'Categoría', 'Marca', 'IVA', 'SKU'],
-      ...productosFiltrados.map((p) => [
-        p.nombre, nombreUbicacionStockVisible || nombreEmpresa, p.ubicacion || '', p.precio_compra || 0, p.precio_venta || 0,
-        ...gruposPrecioVenta.map((grupo) => (p.grupos_precio || []).find((precio) => String(precio.nombre || '').trim().toLocaleLowerCase('es') === grupo.nombre.trim().toLocaleLowerCase('es'))?.precioVenta ?? ''),
-        stockVisible(p), p.categoria || '', p.marca || '', p.iva || 'IVA 10%', p.codigo || '',
-      ]),
-    ];
-    const csv = filas.map((f) => f.map((valor) => `"${String(valor ?? '').replaceAll('"', '""')}"`).join(',')).join('\n');
-    const blob = new Blob([csv], { type: 'text/csv' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'productos.csv';
-    a.click();
-    URL.revokeObjectURL(url);
+  const columnasInforme = [
+    { key: 'producto', label: t('product'), valor: (p) => p.nombre || '' },
+    { key: 'codigo', label: 'SKU / Código de barras', valor: (p) => p.codigo || '—' },
+    { key: 'ubicacion', label: t('companyLocation'), valor: () => !usuarioVeTodas && nombreUbicacionUsuario ? nombreUbicacionUsuario : (nombreUbicacionStockVisible || nombreEmpresa) },
+    { key: 'precioCompra', label: t('unitPurchasePrice'), valor: (p) => formatoPrecioProducto(p, 'precio_compra', 'precio_compra_moneda') },
+    { key: 'precioVenta', label: t('salePrice'), valor: (p) => formatoPrecioProducto(p, 'precio_venta', 'precio_venta_moneda') },
+    ...gruposPrecioVenta.map((grupo) => ({
+      key: `grupoPrecio:${grupo.id}`,
+      label: `Precio ${grupo.nombre}`,
+      valor: (p) => {
+        const precio = (Array.isArray(p.grupos_precio) ? p.grupos_precio : []).find((item) => String(item.nombre || '').trim().toLocaleLowerCase('es') === grupo.nombre.trim().toLocaleLowerCase('es'))?.precioVenta;
+        return precio == null ? '—' : `${Number(precio).toLocaleString('es-PY')} Gs`;
+      },
+    })),
+    { key: 'stock', label: t('currentStock'), valor: (p) => stockFormateado(p, stockVisible(p)) },
+    { key: 'categoria', label: t('categories'), valor: (p) => p.categoria || '—' },
+    { key: 'marca', label: t('brands'), valor: (p) => p.marca || '—' },
+    { key: 'iva', label: 'IVA', valor: (p) => p.iva || 'IVA 10%' },
+  ];
+  const columnasInformeVisibles = columnasInforme.filter((columna) => columnasVisibles[columna.key] !== false);
+  const filasInforme = productosFiltrados.map((producto) => columnasInformeVisibles.map((columna) => columna.valor(producto)));
+  const filasConEncabezado = [columnasInformeVisibles.map((columna) => columna.label), ...filasInforme];
+
+  const descargarBlob = (contenido, tipo, nombre) => {
+    const url = URL.createObjectURL(new Blob([contenido], { type: tipo }));
+    const enlace = document.createElement('a');
+    enlace.href = url;
+    enlace.download = nombre;
+    document.body.appendChild(enlace);
+    enlace.click();
+    enlace.remove();
+    window.setTimeout(() => URL.revokeObjectURL(url), 1000);
   };
+
+  const exportarCSV = () => {
+    const csv = filasConEncabezado.map((fila) => fila.map(textoCeldaCSV).join(',')).join('\r\n');
+    descargarBlob(`\uFEFF${csv}`, 'text/csv;charset=utf-8', 'productos.csv');
+  };
+
+  const exportarExcel = async () => {
+    const XLSX = await import('xlsx');
+    const hoja = XLSX.utils.aoa_to_sheet(filasConEncabezado);
+    hoja['!cols'] = columnasInformeVisibles.map((columna) => ({ wch: Math.min(34, Math.max(14, columna.label.length + 3)) }));
+    if (columnasInformeVisibles.length) hoja['!autofilter'] = { ref: XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: Math.max(0, filasConEncabezado.length - 1), c: columnasInformeVisibles.length - 1 } }) };
+    const libro = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(libro, hoja, 'Productos');
+    XLSX.writeFile(libro, 'productos.xlsx');
+  };
+
+  const exportarPDF = () => {
+    const documento = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+    documento.setFontSize(16);
+    documento.text('Lista de productos', 14, 16);
+    documento.setFontSize(9);
+    documento.text(`${nombreEmpresa || 'Empresa'} · ${productosFiltrados.length} productos · ${new Date().toLocaleDateString('es-PY')}`, 14, 22);
+    autoTable(documento, {
+      head: filasConEncabezado.slice(0, 1), body: filasConEncabezado.slice(1), startY: 27,
+      theme: 'grid', styles: { font: 'helvetica', fontSize: 7, cellPadding: 2, overflow: 'linebreak' },
+      headStyles: { fillColor: [0, 66, 132], textColor: 255 }, margin: { left: 10, right: 10 },
+      horizontalPageBreak: true, horizontalPageBreakRepeat: [0],
+    });
+    documento.save('productos.pdf');
+  };
+
+  const alternarColumna = (clave) => setColumnasVisibles((actuales) => ({ ...actuales, [clave]: actuales[clave] === false }));
 
   if (mostrarFormularioNuevo) {
     return (
@@ -561,19 +652,33 @@ export default function ListaProductos() {
         <div className="p-4">
           {/* Barra de Acciones Superiores */}
           <div className="flex flex-wrap justify-between items-center gap-3 mb-4">
-            <div className="flex gap-1 flex-wrap items-center">
-              {ajustesEmpresa.system_settings_explicit && ajustesEmpresa.is_enabled_export === false ? null : <button onClick={exportarCSV} className="bg-gray-100 border text-gray-600 px-2.5 py-1 rounded text-xs font-semibold hover:bg-gray-200">📄 {t('exportCsv')}</button>}
-              <button onClick={() => window.print()} className="bg-gray-100 border text-gray-600 px-2.5 py-1 rounded text-xs font-semibold hover:bg-gray-200">🖨️ {t('print')}</button>
-              <select value={porPagina} onChange={(e) => setPorPagina(Number(e.target.value))} className="border rounded p-1.5 text-xs font-semibold bg-white ml-2">
-                <option value={10}>{t('show')} 10</option>
-                <option value={25}>{t('show')} 25</option>
-                <option value={50}>{t('show')} 50</option>
-                <option value={100}>{t('show')} 100</option>
-                <option value={200}>{t('show')} 200</option>
-                <option value={500}>{t('show')} 500</option>
-                <option value={1000}>{t('show')} 1.000</option>
-                <option value={0}>Todos</option>
-              </select>
+            <div className="flex gap-1.5 flex-wrap items-center">
+              <label className="flex items-center gap-1.5 text-xs text-gray-600">{t('show')}
+                <select value={porPagina} onChange={(e) => setPorPagina(Number(e.target.value))} className="border rounded p-1.5 text-xs font-semibold bg-white">
+                  {[10, 25, 50, 100, 200, 500, 1000].map((cantidad) => <option key={cantidad} value={cantidad}>{cantidad.toLocaleString('es-PY')}</option>)}
+                  <option value={0}>Todas</option>
+                </select>
+                entradas
+              </label>
+              {!(ajustesEmpresa.system_settings_explicit && ajustesEmpresa.is_enabled_export === false) && <>
+                <button type="button" onClick={exportarCSV} className="inline-flex items-center gap-1.5 rounded border bg-gray-100 px-2.5 py-1.5 text-xs font-semibold text-gray-600 hover:bg-gray-200"><FileDown size={14}/> {t('exportCsv')}</button>
+                <button type="button" onClick={exportarExcel} className="inline-flex items-center gap-1.5 rounded border bg-gray-100 px-2.5 py-1.5 text-xs font-semibold text-gray-600 hover:bg-gray-200"><FileSpreadsheet size={14}/> Exportar a Excel</button>
+              </>}
+              <button type="button" onClick={() => window.print()} className="inline-flex items-center gap-1.5 rounded border bg-gray-100 px-2.5 py-1.5 text-xs font-semibold text-gray-600 hover:bg-gray-200"><Printer size={14}/> {t('print')}</button>
+              <div className="relative" ref={menuColumnasRef}>
+                <button type="button" onClick={() => setMostrarColumnas((abierto) => !abierto)} aria-expanded={mostrarColumnas} aria-haspopup="menu" className="inline-flex items-center gap-1.5 rounded border bg-gray-100 px-2.5 py-1.5 text-xs font-semibold text-gray-600 hover:bg-gray-200"><Columns3 size={14}/> Visibilidad de columnas <ChevronDown size={13}/></button>
+                {mostrarColumnas && <div role="menu" aria-label="Visibilidad de columnas" className="absolute left-0 top-full z-40 mt-1 max-h-[min(70vh,420px)] w-64 overflow-y-auto rounded-lg border border-gray-200 bg-white p-1.5 shadow-xl">
+                  {[
+                    ['imagen', t('image')], ['acciones', t('action')], ['producto', t('product')], ['codigo', 'SKU / Código de barras'],
+                    ['ubicacion', t('companyLocation')], ['precioCompra', t('unitPurchasePrice')], ['precioVenta', t('salePrice')],
+                    ...gruposPrecioVenta.map((grupo) => [`grupoPrecio:${grupo.id}`, `Precio ${grupo.nombre}`]),
+                    ['stock', t('currentStock')], ['categoria', t('categories')], ['marca', t('brands')], ['iva', 'IVA'],
+                  ].map(([clave, etiqueta]) => <label key={clave} role="menuitemcheckbox" aria-checked={columnasVisibles[clave] !== false} className="flex cursor-pointer items-center gap-2 rounded px-2.5 py-2 text-xs text-gray-700 hover:bg-gray-50">
+                    <input type="checkbox" checked={columnasVisibles[clave] !== false} onChange={() => alternarColumna(clave)} className="accent-[#004284]"/>{etiqueta}
+                  </label>)}
+                </div>}
+              </div>
+              {!(ajustesEmpresa.system_settings_explicit && ajustesEmpresa.is_enabled_export === false) && <button type="button" onClick={exportarPDF} className="inline-flex items-center gap-1.5 rounded border bg-gray-100 px-2.5 py-1.5 text-xs font-semibold text-gray-600 hover:bg-gray-200"><FileText size={14}/> Exportar a PDF</button>}
             </div>
 
             <div className="flex items-center gap-3">
@@ -593,6 +698,15 @@ export default function ListaProductos() {
             </div>
           </div>
 
+          <style>{`@page{size:A4 landscape;margin:12mm}@media print{body *{visibility:hidden!important}#lista-productos-print-area,#lista-productos-print-area *{visibility:visible!important}#lista-productos-print-area{display:block!important;position:absolute;left:0;top:0;width:100%;padding:4mm;background:white;color:#111;font:10px Arial,sans-serif}#lista-productos-print-area h1{font-size:18px;margin:0 0 4px}#lista-productos-print-area p{font-size:10px;margin:0 0 12px}#lista-productos-print-area table{width:100%;border-collapse:collapse}#lista-productos-print-area th,#lista-productos-print-area td{border:1px solid #b7c1ce;padding:5px;text-align:left;vertical-align:top}#lista-productos-print-area th{background:#eef2f7!important;font-weight:700;print-color-adjust:exact;-webkit-print-color-adjust:exact}#lista-productos-print-area tr{break-inside:avoid;page-break-inside:avoid}}`}</style>
+          <section id="lista-productos-print-area" className="hidden" aria-hidden="true">
+            <h1>Lista de productos</h1>
+            <p>{nombreEmpresa || 'Empresa'} · {productosFiltrados.length.toLocaleString('es-PY')} productos · {new Date().toLocaleDateString('es-PY')}</p>
+            <table><thead><tr>{columnasInformeVisibles.map((columna) => <th key={columna.key}>{columna.label}</th>)}</tr></thead>
+              <tbody>{productosFiltrados.map((producto) => <tr key={producto.id}>{columnasInformeVisibles.map((columna) => <td key={columna.key}>{columna.valor(producto)}</td>)}</tr>)}</tbody>
+            </table>
+          </section>
+
           {/* 3. TABLA PRINCIPAL */}
           <div className="overflow-x-auto">
             <table className="product-list-table w-full min-w-[1380px] text-left text-xs border-collapse">
@@ -601,24 +715,24 @@ export default function ListaProductos() {
                   <th className="w-10 px-2 py-3 align-middle">
                     <input type="checkbox" checked={todosSeleccionadosEnPagina} onChange={toggleSeleccionarTodos} />
                   </th>
-                  <th className="w-[76px] px-2 py-3 text-center align-middle">{t('image')}</th>
-                  <th className="w-[112px] px-2 py-3 text-center align-middle">{t('action')}</th>
-                  <th className="min-w-[220px] px-3 py-3 align-middle">{t('product')}</th>
-                  <th className="min-w-[160px] px-3 py-3 align-middle">SKU / Código de barras</th>
-                  <th className="min-w-[160px] px-3 py-3 align-middle">{t('companyLocation')}</th>
-                  <th className="min-w-[140px] px-3 py-3 text-right align-middle">{t('unitPurchasePrice')}</th>
-                  <th className="min-w-[130px] px-3 py-3 text-right align-middle">{t('salePrice')}</th>
-                  {gruposPrecioVenta.map((grupo) => <th key={grupo.id} className="min-w-40 border-l border-slate-200 px-3 py-3 text-right align-middle">{grupo.nombre}</th>)}
-                  <th className="min-w-[100px] px-3 py-3 text-center align-middle">{t('currentStock')}</th>
-                  <th className="min-w-[170px] px-3 py-3 align-middle">{t('categories')}</th>
-                  <th className="min-w-[120px] px-3 py-3 align-middle">{t('brands')}</th>
-                  <th className="min-w-[76px] px-3 py-3 align-middle">IVA</th>
+                  {columnasVisibles.imagen !== false && <th className="w-[76px] px-2 py-3 text-center align-middle">{t('image')}</th>}
+                  {columnasVisibles.acciones !== false && <th className="w-[112px] px-2 py-3 text-center align-middle">{t('action')}</th>}
+                  {columnasVisibles.producto !== false && <th className="min-w-[220px] px-3 py-3 align-middle">{t('product')}</th>}
+                  {columnasVisibles.codigo !== false && <th className="min-w-[160px] px-3 py-3 align-middle">SKU / Código de barras</th>}
+                  {columnasVisibles.ubicacion !== false && <th className="min-w-[160px] px-3 py-3 align-middle">{t('companyLocation')}</th>}
+                  {columnasVisibles.precioCompra !== false && <th className="min-w-[140px] px-3 py-3 text-right align-middle">{t('unitPurchasePrice')}</th>}
+                  {columnasVisibles.precioVenta !== false && <th className="min-w-[130px] px-3 py-3 text-right align-middle">{t('salePrice')}</th>}
+                  {gruposPrecioVenta.map((grupo) => columnasVisibles[`grupoPrecio:${grupo.id}`] !== false && <th key={grupo.id} className="min-w-40 border-l border-slate-200 px-3 py-3 text-right align-middle">{grupo.nombre}</th>)}
+                  {columnasVisibles.stock !== false && <th className="min-w-[100px] px-3 py-3 text-center align-middle">{t('currentStock')}</th>}
+                  {columnasVisibles.categoria !== false && <th className="min-w-[170px] px-3 py-3 align-middle">{t('categories')}</th>}
+                  {columnasVisibles.marca !== false && <th className="min-w-[120px] px-3 py-3 align-middle">{t('brands')}</th>}
+                  {columnasVisibles.iva !== false && <th className="min-w-[76px] px-3 py-3 align-middle">IVA</th>}
                 </tr>
               </thead>
               <tbody>
                 {productosPagina.length === 0 ? (
                   <tr>
-                    <td colSpan={12 + gruposPrecioVenta.length} className="text-center py-8 text-gray-400 font-medium">
+                    <td colSpan={1 + Object.keys(COLUMNAS_PRODUCTOS_DEFAULT).filter((clave) => columnasVisibles[clave] !== false).length + gruposPrecioVenta.filter((grupo) => columnasVisibles[`grupoPrecio:${grupo.id}`] !== false).length} className="text-center py-8 text-gray-400 font-medium">
                       {t('noMatchingProducts')}
                     </td>
                   </tr>
@@ -628,7 +742,7 @@ export default function ListaProductos() {
                       <td className="px-2 py-2 align-middle text-center">
                         <input type="checkbox" checked={seleccionados.includes(prod.id)} onChange={() => toggleSeleccionarUno(prod.id)} />
                       </td>
-                      <td className="px-2 py-2 align-middle">
+                      {columnasVisibles.imagen !== false && <td className="px-2 py-2 align-middle">
                         <button
                           type="button"
                           onClick={() => setProductoDetalle(prod)}
@@ -647,8 +761,8 @@ export default function ListaProductos() {
                             />
                           )}
                         </button>
-                      </td>
-                      <td className="relative px-2 py-2 align-middle text-center">
+                      </td>}
+                      {columnasVisibles.acciones !== false && <td className="relative px-2 py-2 align-middle text-center">
                         <button
                           onClick={(e) => {
                             if (accionAbierta === prod.id) {
@@ -669,31 +783,31 @@ export default function ListaProductos() {
                         >
                           Acciones <span className="text-[9px]">▼</span>
                         </button>
-                      </td>
-                      <td className="min-w-[220px] px-3 py-2 align-middle font-semibold leading-[1.35] text-[#202c3e]">
+                      </td>}
+                      {columnasVisibles.producto !== false && <td className="min-w-[220px] px-3 py-2 align-middle font-semibold leading-[1.35] text-[#202c3e]">
                         <span className="line-clamp-2">{prod.nombre}</span>
                         {prod.ubicacion && <span className="mt-1 block text-[10px] font-medium text-slate-500">Estante: {prod.ubicacion}</span>}
                         {prod.activo === false && (
                           <span className="block w-fit mt-1 bg-gray-200 text-gray-600 text-[10px] font-bold px-1.5 py-0.5 rounded">{t('notForSale')}</span>
                         )}
-                      </td>
-                      <td className="min-w-[160px] break-all px-3 py-2 align-middle font-mono text-[11px] font-semibold text-[#53627a]">{prod.codigo || '—'}</td>
-                      <td className="min-w-[160px] px-3 py-2 align-middle text-gray-500">{!usuarioVeTodas && nombreUbicacionUsuario ? nombreUbicacionUsuario : (nombreUbicacionStockVisible || nombreEmpresa)}</td>
-                      <td className="min-w-[140px] px-3 py-2 text-right align-middle font-semibold text-gray-600">
+                      </td>}
+                      {columnasVisibles.codigo !== false && <td className="min-w-[160px] break-all px-3 py-2 align-middle font-mono text-[11px] font-semibold text-[#53627a]">{prod.codigo || '—'}</td>}
+                      {columnasVisibles.ubicacion !== false && <td className="min-w-[160px] px-3 py-2 align-middle text-gray-500">{!usuarioVeTodas && nombreUbicacionUsuario ? nombreUbicacionUsuario : (nombreUbicacionStockVisible || nombreEmpresa)}</td>}
+                      {columnasVisibles.precioCompra !== false && <td className="min-w-[140px] px-3 py-2 text-right align-middle font-semibold text-gray-600">
                         {formatoPrecioProducto(prod, 'precio_compra', 'precio_compra_moneda')}
-                      </td>
-                      <td className="min-w-[130px] px-3 py-2 text-right align-middle font-bold text-gray-800">
+                      </td>}
+                      {columnasVisibles.precioVenta !== false && <td className="min-w-[130px] px-3 py-2 text-right align-middle font-bold text-gray-800">
                         {formatoPrecioProducto(prod, 'precio_venta', 'precio_venta_moneda')}
-                      </td>
+                      </td>}
                       {gruposPrecioVenta.map((grupo) => {
                         const precio = (Array.isArray(prod.grupos_precio) ? prod.grupos_precio : []).find((item) => String(item.nombre || '').trim().toLocaleLowerCase('es') === grupo.nombre.trim().toLocaleLowerCase('es'));
                         const editandoEste = String(precioGrupoEditando?.productoId) === String(prod.id) && precioGrupoEditando?.grupoNombre === grupo.nombre;
-                        return <td key={grupo.id} className="min-w-40 border-l border-slate-100 p-2 text-right">
+                        return columnasVisibles[`grupoPrecio:${grupo.id}`] !== false ? <td key={grupo.id} className="min-w-40 border-l border-slate-100 p-2 text-right">
                           {editandoEste ? <div className="flex items-center justify-end gap-1"><input autoFocus aria-label={`Precio ${grupo.nombre} para ${prod.nombre}`} type="number" min="0" step="1" value={precioGrupoEditando.valor} disabled={guardandoPrecioGrupo} onChange={(event) => setPrecioGrupoEditando((actual) => ({ ...actual, valor: event.target.value }))} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); guardarPrecioGrupo(prod); } if (event.key === 'Escape' && !guardandoPrecioGrupo) setPrecioGrupoEditando(null); }} className="w-28 rounded border border-slate-300 px-2 py-1 text-right font-normal outline-none focus:border-orange-400"/><button type="button" aria-label={`Guardar precio ${grupo.nombre}`} disabled={guardandoPrecioGrupo} onClick={() => guardarPrecioGrupo(prod)} className="rounded bg-emerald-600 p-1.5 text-white hover:bg-emerald-700 disabled:opacity-50">{guardandoPrecioGrupo ? <LoaderCircle size={14} className="animate-spin"/> : <Check size={14}/>}</button><button type="button" aria-label="Cancelar edición" disabled={guardandoPrecioGrupo} onClick={() => setPrecioGrupoEditando(null)} className="rounded border border-slate-200 p-1.5 text-slate-500 hover:bg-slate-50"><X size={14}/></button></div>
                             : <div className="inline-flex items-center justify-end gap-1.5"><span className="font-semibold text-gray-700">{precio?.precioVenta !== undefined && precio?.precioVenta !== null ? `${Number(precio.precioVenta).toLocaleString('es-PY')} Gs` : '—'}</span><button type="button" aria-label={`Editar precio ${grupo.nombre} de ${prod.nombre}`} title={`Editar precio ${grupo.nombre}`} disabled={guardandoPrecioGrupo} onClick={() => editarPrecioGrupo(prod, grupo)} className="rounded p-1 text-slate-400 hover:bg-orange-50 hover:text-orange-600 disabled:opacity-50"><Pencil size={13}/></button></div>}
-                        </td>;
+                        </td> : null;
                       })}
-                      <td className="min-w-[100px] px-3 py-2 text-center align-middle">
+                      {columnasVisibles.stock !== false && <td className="min-w-[100px] px-3 py-2 text-center align-middle">
                         <span className={`px-2 py-0.5 rounded-sm font-bold text-[11px] ${stockVisible(prod) <= Number(prod.alerta_stock_bajo || 5) ? 'bg-red-100 text-red-700' : 'bg-gray-100 text-gray-700'}`}>
                           {stockFormateado(prod, stockVisible(prod))}
                         </span>
@@ -702,10 +816,10 @@ export default function ListaProductos() {
                             En {nombreUbicacionStockVisible}: <span className="font-bold text-gray-600">{stockFormateado(prod, stockVisible(prod))}</span>
                           </div>
                         )}
-                      </td>
-                      <td className="min-w-[170px] px-3 py-2 align-middle text-gray-500">{prod.categoria || '—'}</td>
-                      <td className="min-w-[120px] px-3 py-2 align-middle font-semibold text-gray-600">{prod.marca || '—'}</td>
-                      <td className="min-w-[76px] px-3 py-2 align-middle text-gray-500">{prod.iva || 'IVA 10%'}</td>
+                      </td>}
+                      {columnasVisibles.categoria !== false && <td className="min-w-[170px] px-3 py-2 align-middle text-gray-500">{prod.categoria || '—'}</td>}
+                      {columnasVisibles.marca !== false && <td className="min-w-[120px] px-3 py-2 align-middle font-semibold text-gray-600">{prod.marca || '—'}</td>}
+                      {columnasVisibles.iva !== false && <td className="min-w-[76px] px-3 py-2 align-middle text-gray-500">{prod.iva || 'IVA 10%'}</td>}
                     </tr>
                   ))
                 )}
