@@ -318,14 +318,15 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
   useEffect(() => {
     let activo = true;
     const recuperarCajaAbierta = async () => {
-      const empresaId = perfilUsuario?.empresas?.id || perfilUsuario?.empresa_id;
+      setCargandoCaja(true);
+      const empresaId = empresaInfo?.id || perfilUsuario?.empresa_id || perfilUsuario?.empresas?.id;
       if (!empresaId) {
         if (activo) setCargandoCaja(false);
         return;
       }
 
       const nombreUsuario = [perfilUsuario?.nombre, perfilUsuario?.apellido].filter(Boolean).join(' ').trim()
-        || perfilUsuario?.nombre_usuario || perfilUsuario?.email || '';
+        || perfilUsuario?.nombre_usuario || perfilUsuario?.email || 'Usuario sin nombre';
       const usuarioId = perfilUsuario?.auth_user_id || null;
       let consulta = supabase
         .from('caja_registros')
@@ -349,7 +350,8 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
             || (usuarioVeTodas && !!caja.ubicacion_id);
           const mismoUsuario = usuarioId
             ? caja.usuario_id === usuarioId
-              || (!caja.usuario_id && (caja.usuario === nombreUsuario || caja.usuario === perfilUsuario?.nombre_usuario))
+              || caja.usuario === nombreUsuario
+              || caja.usuario === perfilUsuario?.nombre_usuario
             : caja.usuario === nombreUsuario || caja.usuario === perfilUsuario?.nombre_usuario;
           return mismaUbicacion && mismoUsuario;
         });
@@ -360,7 +362,7 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
 
     recuperarCajaAbierta();
     return () => { activo = false; };
-  }, [perfilUsuario, ubicacionUsuarioId, usuarioVeTodas]);
+  }, [perfilUsuario, empresaInfo?.id, ubicacionUsuarioId, usuarioVeTodas]);
 
   // Para el cajero exclusivo, "volver a Inicio" en realidad vuelve al POS,
   // porque no tiene permiso para ver Inicio ni ningún otro módulo.
