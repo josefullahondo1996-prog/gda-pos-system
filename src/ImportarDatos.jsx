@@ -1,9 +1,19 @@
 import { useMemo, useState } from 'react';
 import { AlertCircle, CheckCircle2, FileUp, LoaderCircle, Upload } from 'lucide-react';
+import * as XLSX from 'xlsx';
 import { supabase } from './supabaseClient';
 import { useEmpresaInfo } from './utils/useEmpresa';
 
-const normalizar = (valor) => String(valor ?? '').trim().toLocaleLowerCase('es').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[\s-]+/g, '_');
+const normalizar = (valor) => String(valor ?? '').trim().toLocaleLowerCase('es').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '');
+
+function prepararFilas(filas) {
+  if (filas.length < 2) return { encabezados: [], registros: [], error: 'El archivo debe tener encabezados y al menos una fila de datos.' };
+  const encabezados = filas[0].map(normalizar);
+  if (encabezados.some((encabezado) => !encabezado) || new Set(encabezados).size !== encabezados.length) {
+    return { encabezados: [], registros: [], error: 'Los encabezados están vacíos o repetidos.' };
+  }
+  return { encabezados, registros: filas.slice(1).map((valores, indice) => ({ numero: indice + 2, datos: Object.fromEntries(encabezados.map((clave, columna) => [clave, valores[columna] ?? ''])) })) };
+}
 
 function parsearCSV(texto) {
   const limpio = texto.replace(/^\uFEFF/, '');
@@ -27,12 +37,17 @@ function parsearCSV(texto) {
   }
   fila.push(celda.trim());
   if (fila.some((valor) => valor !== '')) filas.push(fila);
-  if (filas.length < 2) return { encabezados: [], registros: [], error: 'El CSV debe tener encabezados y al menos una fila de datos.' };
-  const encabezados = filas[0].map(normalizar);
-  if (encabezados.some((encabezado) => !encabezado) || new Set(encabezados).size !== encabezados.length) {
-    return { encabezados: [], registros: [], error: 'Los encabezados están vacíos o repetidos.' };
-  }
-  return { encabezados, registros: filas.slice(1).map((valores, indice) => ({ numero: indice + 2, datos: Object.fromEntries(encabezados.map((clave, columna) => [clave, valores[columna] ?? ''])) })) };
+  return prepararFilas(filas);
+}
+
+function parsearExcel(buffer) {
+  const libro = XLSX.read(buffer, { type: 'array', cellDates: false });
+  const primeraHoja = libro.Sheets[libro.SheetNames[0]];
+  if (!primeraHoja) return { encabezados: [], registros: [], error: 'El archivo Excel no contiene hojas para importar.' };
+  const filas = XLSX.utils.sheet_to_json(primeraHoja, { header: 1, defval: '', raw: true })
+    .filter((fila) => fila.some((celda) => String(celda ?? '').trim() !== ''))
+    .map((fila) => fila.map((celda) => celda ?? ''));
+  return prepararFilas(filas);
 }
 
 const valor = (datos, ...claves) => {
@@ -54,6 +69,22 @@ const numero = (dato) => {
   return Number(texto);
 };
 
+const fechaISO = (dato) => {
+  if (dato === '' || dato == null) return null;
+  if (typeof dato === 'number' && Number.isFinite(dato)) {
+    const fecha = XLSX.SSF.parse_date_code(dato);
+    return fecha ? `${fecha.y}-${String(fecha.m).padStart(2, '0')}-${String(fecha.d).padStart(2, '0')}` : null;
+  }
+  const texto = String(dato).trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(texto)) return texto;
+  const partes = texto.match(/^(\d{1,2})[/.\-](\d{1,2})[/.\-](\d{4})$/);
+  if (!partes) return null;
+  const [, dia, mes, anio] = partes;
+  const fecha = new Date(Number(anio), Number(mes) - 1, Number(dia));
+  return fecha.getFullYear() === Number(anio) && fecha.getMonth() === Number(mes) - 1 && fecha.getDate() === Number(dia)
+    ? `${anio}-${String(mes).padStart(2, '0')}-${String(dia).padStart(2, '0')}` : null;
+};
+
 export default function ImportarDatos({ tipo = 'productos' }) {
   const { id: empresaId } = useEmpresaInfo();
   const [tipoContacto, setTipoContacto] = useState('clientes');
@@ -69,10 +100,11 @@ export default function ImportarDatos({ tipo = 'productos' }) {
   const preparados = useMemo(() => registros.map((registro) => {
     const d = registro.datos;
     const nombre = valor(d, 'nombre', 'producto', 'cliente', 'proveedor', 'nombre_contacto', 'empresa');
-    const codigo = valor(d, 'codigo', 'sku', 'codigo_producto');
+    const codigo = valor(d, 'codigo', 'sku', 'codigo_producto', 'sku_codigo_de_barras');
+    const fechaVencimiento = valor(d, 'fecha_vencimiento', 'fecha_caducidad', 'vencimiento');
     const documento = valor(d, 'documento', 'ruc', 'documento_nro', 'cedula');
     const fila = esProducto
-      ? { empresa_id: empresaId, nombre, codigo: codigo || null, descripcion: valor(d, 'descripcion', 'detalle') || null, categoria: valor(d, 'categoria') || null, marca: valor(d, 'marca') || null, unidad: valor(d, 'unidad') || 'UNID', precio_compra: numero(valor(d, 'precio_compra', 'costo')), precio_venta: numero(valor(d, 'precio_venta', 'precio')), stock_actual: 0, administra_stock: true }
+      ? { empresa_id: empresaId, nombre, codigo: codigo || null, descripcion: valor(d, 'descripcion', 'detalle', 'subcategoria') || null, categoria: valor(d, 'categoria') || null, marca: valor(d, 'marca') || null, unidad: valor(d, 'unidad') || 'UNID', precio_compra: numero(valor(d, 'precio_compra', 'costo', 'compra', 'compra_gs')), precio_venta: numero(valor(d, 'precio_venta', 'precio', 'venta', 'venta_gs')), fecha_vencimiento: fechaISO(fechaVencimiento), stock_actual: 0, administra_stock: true }
       : tipoImportacion === 'clientes'
         ? { empresa_id: empresaId, tipo_contacto: 'Clientes', nombre, nombre_empresa: valor(d, 'nombre_empresa', 'empresa') || null, tipo_documento: valor(d, 'tipo_documento') || null, documento_nro: documento || null, celular: valor(d, 'celular', 'telefono', 'telefono_movil') || null, email: valor(d, 'email', 'correo') || null, direccion: valor(d, 'direccion') || null }
         : { empresa_id: empresaId, empresa: valor(d, 'empresa', 'nombre_empresa') || nombre, nombre_contacto: valor(d, 'nombre_contacto', 'nombre', 'proveedor') || nombre, email: valor(d, 'email', 'correo') || null, ruc: valor(d, 'ruc') || null, documento: documento || null, termino_pago: valor(d, 'termino_pago') || null };
@@ -80,6 +112,7 @@ export default function ImportarDatos({ tipo = 'productos' }) {
     if (!nombre) errores.push('Falta el nombre.');
     if (esProducto && !Number.isFinite(fila.precio_compra + fila.precio_venta)) errores.push('Los precios deben ser números válidos.');
     if (esProducto && (fila.precio_compra < 0 || fila.precio_venta < 0)) errores.push('Los precios no pueden ser negativos.');
+    if (esProducto && fechaVencimiento && !fechaISO(fechaVencimiento)) errores.push('La fecha de vencimiento debe ser AAAA-MM-DD o DD/MM/AAAA.');
     return { numero: registro.numero, fila, errores };
   }), [registros, empresaId, esProducto, tipoImportacion]);
 
@@ -87,12 +120,19 @@ export default function ImportarDatos({ tipo = 'productos' }) {
     const file = event.target.files?.[0];
     setError(''); setResultado(null); setRegistros([]); setEncabezados([]); setArchivo('');
     if (!file) return;
-    if (!/\.csv$/i.test(file.name) && !['text/csv', 'application/vnd.ms-excel'].includes(file.type)) { setError('Elegí un archivo CSV.'); return; }
-    const parsed = parsearCSV(await file.text());
+    const esExcel = /\.(xlsx?|xlsm)$/i.test(file.name);
+    const esCSV = /\.csv$/i.test(file.name) || ['text/csv', 'application/vnd.ms-excel'].includes(file.type);
+    if (!esCSV && !esExcel) { setError('Elegí un archivo CSV o Excel (.xlsx, .xls).'); return; }
+    let parsed;
+    try {
+      parsed = esExcel ? parsearExcel(await file.arrayBuffer()) : parsearCSV(await file.text());
+    } catch (err) {
+      setError(`No se pudo leer el archivo: ${err.message}`); return;
+    }
     if (parsed.error) { setError(parsed.error); return; }
     const requeridos = esProducto ? ['nombre', 'producto'] : ['nombre', 'cliente', 'proveedor', 'nombre_contacto', 'empresa'];
     if (!parsed.encabezados.some((header) => requeridos.includes(header))) {
-      setError(`No encuentro una columna de nombre. Encabezados admitidos: nombre, ${esProducto ? 'codigo, categoria, marca, unidad, precio_compra, precio_venta' : 'documento, celular, email, direccion'}.`); return;
+      setError(`No encuentro una columna de nombre. Encabezados admitidos: nombre, ${esProducto ? 'producto, codigo, categoria, marca, unidad, precio_compra, precio_venta' : 'documento, celular, email, direccion'}.`); return;
     }
     setArchivo(file.name); setEncabezados(parsed.encabezados); setRegistros(parsed.registros);
   };
@@ -140,11 +180,11 @@ export default function ImportarDatos({ tipo = 'productos' }) {
   };
 
   return <div className="mx-auto max-w-6xl space-y-5">
-    <div><p className="text-xs font-bold uppercase tracking-widest text-orange-600">Datos del negocio</p><h1 className="mt-1 text-2xl font-black text-slate-900">Importar {esProducto ? 'productos' : tipoImportacion}</h1><p className="mt-2 text-sm text-slate-500">Carga un CSV, revisa cada fila y confirma la importación. No se modifica el stock existente.</p></div>
+    <div><p className="text-xs font-bold uppercase tracking-widest text-orange-600">Datos del negocio</p><h1 className="mt-1 text-2xl font-black text-slate-900">Importar {esProducto ? 'productos' : tipoImportacion}</h1><p className="mt-2 text-sm text-slate-500">Carga un CSV o Excel, revisa cada fila y confirma la importación. Se lee la primera hoja y no se modifica el stock existente.</p></div>
     <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
       {tipo === 'contactos' && <label className="mb-4 block max-w-sm text-xs font-bold text-slate-600">Tipo de contacto<select value={tipoContacto} onChange={(event) => { setTipoContacto(event.target.value); setRegistros([]); setResultado(null); }} className="mt-1.5 w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm"><option value="clientes">Clientes</option><option value="proveedores">Proveedores</option></select></label>}
-      <label className="flex min-h-40 cursor-pointer flex-col items-center justify-center rounded-lg border-2 border-dashed border-slate-300 bg-slate-50 p-5 text-center hover:border-orange-400 hover:bg-orange-50/30"><FileUp size={27} className="text-orange-500"/><span className="mt-2 text-sm font-bold text-slate-800">Seleccionar archivo CSV</span><span className="mt-1 text-xs text-slate-500">{archivo || 'Se acepta CSV separado por coma, punto y coma o tabulador.'}</span><input type="file" accept=".csv,text/csv" className="sr-only" onChange={leerArchivo}/></label>
-      <p className="mt-3 text-xs text-slate-500">Columnas {esProducto ? 'recomendadas: nombre, codigo, descripcion, categoria, marca, unidad, precio_compra, precio_venta' : 'admitidas: nombre, empresa, documento, ruc, celular, email, direccion, termino_pago'}.</p>
+      <label className="flex min-h-40 cursor-pointer flex-col items-center justify-center rounded-lg border-2 border-dashed border-slate-300 bg-slate-50 p-5 text-center hover:border-orange-400 hover:bg-orange-50/30"><FileUp size={27} className="text-orange-500"/><span className="mt-2 text-sm font-bold text-slate-800">Seleccionar archivo CSV o Excel</span><span className="mt-1 text-xs text-slate-500">{archivo || 'CSV, Excel .xlsx/.xls. En Excel se lee la primera hoja.'}</span><input type="file" accept=".csv,.xlsx,.xls,text/csv,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" className="sr-only" onChange={leerArchivo}/></label>
+      <p className="mt-3 text-xs text-slate-500">Columnas {esProducto ? 'admitidas: nombre o producto, codigo, descripcion, categoria, marca, unidad, precio_compra o Compra (Gs.), precio_venta o Venta (Gs.)' : 'admitidas: nombre, empresa, documento, ruc, celular, email, direccion, termino_pago'}.</p>
     </section>
     {error && <div role="alert" className="flex gap-2 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700"><AlertCircle size={18} className="shrink-0"/>{error}</div>}
     {resultado && <div role="status" className="rounded-lg border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-900"><div className="flex items-center gap-2 font-bold"><CheckCircle2 size={18}/>Importación procesada</div><p className="mt-2">Guardados: {resultado.insertados} · Duplicados omitidos: {resultado.duplicados} · Filas inválidas: {resultado.invalidos} · Rechazados por la base: {resultado.fallidos.length}</p>{resultado.fallidos.length > 0 && <ul className="mt-2 max-h-32 list-inside list-disc overflow-auto text-xs">{resultado.fallidos.map((fila) => <li key={`${fila.fila}-${fila.motivo}`}>Fila {fila.fila}: {fila.motivo}</li>)}</ul>}</div>}

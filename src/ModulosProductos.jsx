@@ -9,6 +9,23 @@ import AperturaStock from './AperturaStock';
 const Campo = ({ className = '', ...props }) => <input {...props} className={`w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-blue-500 ${className}`} />;
 const Button = ({ children, className = '', ...props }) => <button {...props} className={`inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold transition disabled:opacity-50 ${className}`}>{children}</button>;
 const money = (value) => `Gs ${Number(value || 0).toLocaleString('es-PY')}`;
+const fechaExcelISO = (valor) => {
+  if (valor === '' || valor == null) return '';
+  if (valor instanceof Date && !Number.isNaN(valor.getTime())) return `${valor.getFullYear()}-${String(valor.getMonth() + 1).padStart(2, '0')}-${String(valor.getDate()).padStart(2, '0')}`;
+  if (typeof valor === 'number' && Number.isFinite(valor)) {
+    const fecha = XLSX.SSF.parse_date_code(valor);
+    return fecha ? `${fecha.y}-${String(fecha.m).padStart(2, '0')}-${String(fecha.d).padStart(2, '0')}` : '';
+  }
+  const texto = String(valor).trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(texto)) return texto;
+  const partes = texto.match(/^(\d{1,2})[/.\-](\d{1,2})[/.\-](\d{4})$/);
+  if (!partes) return '';
+  const [, dia, mes, anio] = partes;
+  const fecha = new Date(Number(anio), Number(mes) - 1, Number(dia));
+  return fecha.getFullYear() === Number(anio) && fecha.getMonth() === Number(mes) - 1 && fecha.getDate() === Number(dia)
+    ? `${anio}-${String(mes).padStart(2, '0')}-${String(dia).padStart(2, '0')}`
+    : '';
+};
 
 export function ImprimirEtiquetasProductos() {
   const { id: empresaId, nombre: nombreEmpresa } = useEmpresaInfo();
@@ -77,17 +94,19 @@ export function ImportarStockInicial() {
         if (!Number.isFinite(cantidad) || cantidad <= 0) { avisos.push(`Fila ${indice + indiceInicio + 1}: la cantidad debe ser mayor a cero.`); return; }
         const tasaIva = Number(String(producto.iva || '').match(/\d+/)?.[0] || 10);
         const costoConIva = Number.isFinite(costo) && costo >= 0 ? Math.round(costo * (1 + tasaIva / 100)) : (producto.precio_compra || '');
-        nuevas.push({ id: `${producto.id}-${indice}`, productoId: producto.id, nombre: producto.nombre, unidad: producto.unidad || 'UNID', cantidad, costoUnitarioConIva: costoConIva, expDate: '', nota: 'Importación de stock inicial' });
+        const expDate = fechaExcelISO(fila[5]);
+        if (fila[5] !== '' && fila[5] != null && !expDate) { avisos.push(`Fila ${indice + indiceInicio + 1}: fecha de vencimiento inválida.`); return; }
+        nuevas.push({ id: `${producto.id}-${indice}`, productoId: producto.id, nombre: producto.nombre, unidad: producto.unidad || 'UNID', cantidad, costoUnitarioConIva: costoConIva, expDate, nota: 'Importación de stock inicial' });
       });
       setFilas(nuevas); setErrores(avisos);
       if (!nuevas.length && !avisos.length) setErrores(['El archivo no contiene filas para importar.']);
     } catch (error) { setErrores([`No se pudo leer el archivo: ${error.message}`]); }
   };
-  const descargarPlantilla = () => { const ws = XLSX.utils.aoa_to_sheet([['SKU/Código de barras', 'Ubicación (opcional)', 'Cantidad', 'Costo unitario (sin IVA)', 'Número de lote (opcional)', 'Fecha de caducidad (opcional)'], ['CODIGO-001', '', 10, 100000, '', '']]); const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, 'Stock inicial'); XLSX.writeFile(wb, 'plantilla-stock-inicial.xlsx'); };
+  const descargarPlantilla = () => { const ws = XLSX.utils.aoa_to_sheet([['SKU/Código de barras', 'Ubicación (opcional)', 'Cantidad', 'Costo unitario (sin IVA)', 'Número de lote (opcional)', 'Fecha de caducidad (AAAA-MM-DD)'], ['CODIGO-001', '', 10, 100000, '', '2027-12-31']]); const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, 'Stock inicial'); XLSX.writeFile(wb, 'plantilla-stock-inicial.xlsx'); };
   return <div className="space-y-5 p-4 md:p-6"><header className="flex flex-wrap items-center justify-between gap-3"><div><p className="text-xs font-bold uppercase tracking-widest text-blue-600">Productos</p><h1 className="text-2xl font-bold text-slate-900">Importar stock inicial</h1><p className="mt-1 text-sm text-slate-500">Carga una planilla, revisá las coincidencias y confirmá antes de sumar existencias.</p></div><Button onClick={descargarPlantilla} className="border border-slate-300 bg-white text-slate-700"><Download size={16}/> Descargar plantilla</Button></header>
     <section className="space-y-4 rounded-xl border bg-white p-5 shadow-sm"><label className="flex max-w-xl cursor-pointer items-center gap-3 rounded-lg border-2 border-dashed border-slate-300 p-5 hover:border-blue-400"><FileSpreadsheet className="text-emerald-600"/><span><strong className="block text-sm">Seleccionar archivo CSV o Excel</strong><small className="text-slate-500">Columnas: código, ubicación, cantidad, costo sin IVA, lote y vencimiento.</small></span><input type="file" accept=".csv,.xls,.xlsx" className="sr-only" onChange={(e) => leerArchivo(e.target.files?.[0])}/></label>{archivo && <p className="text-sm text-slate-600">Archivo: <strong>{archivo}</strong></p>}
       {errores.length > 0 && <div className="max-h-32 overflow-auto rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">{errores.map((msg, i) => <p key={i}>{msg}</p>)}</div>}
-      {filas.length > 0 && !confirmado && <><div className="overflow-x-auto"><table className="w-full text-left text-sm"><thead className="bg-slate-100 text-xs uppercase text-slate-500"><tr><th className="p-3">Producto</th><th className="p-3">Cantidad</th><th className="p-3">Costo unitario</th><th className="p-3">Stock actual</th></tr></thead><tbody className="divide-y">{filas.map((f) => { const p = productos.find((x) => x.id === f.productoId); return <tr key={f.id}><td className="p-3">{f.nombre} <span className="text-xs text-slate-400">{p?.codigo}</span></td><td className="p-3">{f.cantidad} {f.unidad}</td><td className="p-3">{money(f.costoUnitarioConIva)}</td><td className="p-3">{p?.stock_actual || 0}</td></tr>; })}</tbody></table></div><div className="flex flex-wrap items-center justify-between gap-3 border-t pt-4"><p className="text-sm text-amber-800">Se sumarán {filas.length} líneas al stock actual. Revisá la planilla antes de continuar.</p><Button onClick={() => setConfirmado(true)} className="bg-orange-500 text-white hover:bg-orange-600">Continuar a revisión final</Button></div></>}
+      {filas.length > 0 && !confirmado && <><div className="overflow-x-auto"><table className="w-full text-left text-sm"><thead className="bg-slate-100 text-xs uppercase text-slate-500"><tr><th className="p-3">Producto</th><th className="p-3">Cantidad</th><th className="p-3">Costo unitario</th><th className="p-3">Vencimiento</th><th className="p-3">Stock actual</th></tr></thead><tbody className="divide-y">{filas.map((f) => { const p = productos.find((x) => x.id === f.productoId); return <tr key={f.id}><td className="p-3">{f.nombre} <span className="text-xs text-slate-400">{p?.codigo}</span></td><td className="p-3">{f.cantidad} {f.unidad}</td><td className="p-3">{money(f.costoUnitarioConIva)}</td><td className="p-3">{f.expDate ? new Date(`${f.expDate}T00:00:00`).toLocaleDateString('es-PY') : '—'}</td><td className="p-3">{p?.stock_actual || 0}</td></tr>; })}</tbody></table></div><div className="flex flex-wrap items-center justify-between gap-3 border-t pt-4"><p className="text-sm text-amber-800">Se sumarán {filas.length} líneas al stock actual. Revisá la planilla antes de continuar.</p><Button onClick={() => setConfirmado(true)} className="bg-orange-500 text-white hover:bg-orange-600">Continuar a revisión final</Button></div></>}
     </section>
     {confirmado && <section className="rounded-xl border border-blue-200 bg-white p-4 shadow-sm"><div className="mb-3 flex items-center justify-between"><h2 className="font-bold text-slate-800">Revisión final de stock inicial</h2><Button onClick={() => setConfirmado(false)} className="border text-slate-600"><X size={15}/> Volver</Button></div><p className="mb-4 text-xs text-slate-500">El botón Guardar suma las cantidades a las existencias actuales y aplica el flujo de apertura de stock del sistema.</p><AperturaStock key={archivo} filasIniciales={filas} compacto onGuardado={() => { setFilas([]); setArchivo(''); setConfirmado(false); }} onCancelar={() => setConfirmado(false)}/></section>}
     {cargando && <p className="text-sm text-slate-400">Cargando productos...</p>}

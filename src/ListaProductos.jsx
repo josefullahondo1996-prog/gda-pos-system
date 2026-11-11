@@ -19,7 +19,7 @@ import { useLanguage } from './LanguageContext';
 
 const COLUMNAS_PRODUCTOS_DEFAULT = {
   imagen: true, acciones: true, producto: true, codigo: true, ubicacion: true,
-  precioCompra: true, precioVenta: true, stock: true, categoria: true, marca: true, iva: true,
+  precioCompra: true, precioVenta: true, stock: true, vencimiento: true, categoria: true, marca: true, iva: true,
 };
 
 const textoCeldaCSV = (valor) => `"${String(valor ?? '').replaceAll('"', '""')}"`;
@@ -434,6 +434,7 @@ export default function ListaProductos() {
       },
     })),
     { key: 'stock', label: t('currentStock'), valor: (p) => stockFormateado(p, stockVisible(p)) },
+    { key: 'vencimiento', label: 'Vencimiento', valor: (p) => p.fecha_vencimiento ? new Date(`${p.fecha_vencimiento}T00:00:00`).toLocaleDateString('es-PY') : '—' },
     { key: 'categoria', label: t('categories'), valor: (p) => p.categoria || '—' },
     { key: 'marca', label: t('brands'), valor: (p) => p.marca || '—' },
     { key: 'iva', label: 'IVA', valor: (p) => p.iva || 'IVA 10%' },
@@ -672,7 +673,7 @@ export default function ListaProductos() {
                     ['imagen', t('image')], ['acciones', t('action')], ['producto', t('product')], ['codigo', 'SKU / Código de barras'],
                     ['ubicacion', t('companyLocation')], ['precioCompra', t('unitPurchasePrice')], ['precioVenta', t('salePrice')],
                     ...gruposPrecioVenta.map((grupo) => [`grupoPrecio:${grupo.id}`, `Precio ${grupo.nombre}`]),
-                    ['stock', t('currentStock')], ['categoria', t('categories')], ['marca', t('brands')], ['iva', 'IVA'],
+                    ['stock', t('currentStock')], ['vencimiento', 'Vencimiento'], ['categoria', t('categories')], ['marca', t('brands')], ['iva', 'IVA'],
                   ].map(([clave, etiqueta]) => <label key={clave} role="menuitemcheckbox" aria-checked={columnasVisibles[clave] !== false} className="flex cursor-pointer items-center gap-2 rounded px-2.5 py-2 text-xs text-gray-700 hover:bg-gray-50">
                     <input type="checkbox" checked={columnasVisibles[clave] !== false} onChange={() => alternarColumna(clave)} className="accent-[#004284]"/>{etiqueta}
                   </label>)}
@@ -724,6 +725,7 @@ export default function ListaProductos() {
                   {columnasVisibles.precioVenta !== false && <th className="min-w-[130px] px-3 py-3 text-right align-middle">{t('salePrice')}</th>}
                   {gruposPrecioVenta.map((grupo) => columnasVisibles[`grupoPrecio:${grupo.id}`] !== false && <th key={grupo.id} className="min-w-40 border-l border-slate-200 px-3 py-3 text-right align-middle">{grupo.nombre}</th>)}
                   {columnasVisibles.stock !== false && <th className="min-w-[100px] px-3 py-3 text-center align-middle">{t('currentStock')}</th>}
+                  {columnasVisibles.vencimiento !== false && <th className="min-w-[130px] px-3 py-3 text-center align-middle">Vencimiento</th>}
                   {columnasVisibles.categoria !== false && <th className="min-w-[170px] px-3 py-3 align-middle">{t('categories')}</th>}
                   {columnasVisibles.marca !== false && <th className="min-w-[120px] px-3 py-3 align-middle">{t('brands')}</th>}
                   {columnasVisibles.iva !== false && <th className="min-w-[76px] px-3 py-3 align-middle">IVA</th>}
@@ -817,6 +819,7 @@ export default function ListaProductos() {
                           </div>
                         )}
                       </td>}
+                      {columnasVisibles.vencimiento !== false && <td className="min-w-[130px] px-3 py-2 text-center align-middle text-gray-600">{prod.fecha_vencimiento ? new Date(`${prod.fecha_vencimiento}T00:00:00`).toLocaleDateString('es-PY') : '—'}</td>}
                       {columnasVisibles.categoria !== false && <td className="min-w-[170px] px-3 py-2 align-middle text-gray-500">{prod.categoria || '—'}</td>}
                       {columnasVisibles.marca !== false && <td className="min-w-[120px] px-3 py-2 align-middle font-semibold text-gray-600">{prod.marca || '—'}</td>}
                       {columnasVisibles.iva !== false && <td className="min-w-[76px] px-3 py-2 align-middle text-gray-500">{prod.iva || 'IVA 10%'}</td>}

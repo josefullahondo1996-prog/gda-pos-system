@@ -97,6 +97,7 @@ CREATE TABLE productos (
     precio_compra numeric(12,2),
     precio_venta numeric(12,2),
     stock_actual numeric NOT NULL DEFAULT 0,
+    fecha_vencimiento date,
     categoria text,
     marca_id uuid REFERENCES marcas(id),
     unidad_id uuid REFERENCES unidades(id),

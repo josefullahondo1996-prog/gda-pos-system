@@ -18,7 +18,7 @@ const crearFilaVacia = (producto) => ({
     costoUnitarioConIva: producto?.precio_compra
         ? Number(producto.precio_compra)
         : '',
-    expDate: '',
+    expDate: producto?.fecha_vencimiento || '',
     nota: '',
 });
 
@@ -67,6 +67,7 @@ const AperturaStock = ({ producto, onGuardado, onCancelar, ubicacionId: ubicacio
                         stock_actual: nuevoStock,
                         precio_compra: Number(fila.costoUnitarioConIva) || undefined,
                         ubicacion: String(fila.estante || '').trim() || prodActual.ubicacion || null,
+                        ...(fila.expDate ? { fecha_vencimiento: fila.expDate } : {}),
                     })
                     .eq('id', fila.productoId)
                     .eq('empresa_id', empresaId);

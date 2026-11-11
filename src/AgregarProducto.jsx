@@ -52,6 +52,7 @@ const AgregarProducto = ({ onGuardado, onCancelar, productoEditar, ubicacionId }
     const [cantidadAlerta, setCantidadAlerta] = useState('');
     const [expiraCantidad, setExpiraCantidad] = useState('');
     const [expiraUnidad, setExpiraUnidad] = useState('Meses');
+    const [fechaVencimientoInicial, setFechaVencimientoInicial] = useState('');
 
     const [imagenesProducto, setImagenesProducto] = useState([]);
     const imagenPreview = imagenesProducto[0] || null;
@@ -216,6 +217,7 @@ const AgregarProducto = ({ onGuardado, onCancelar, productoEditar, ubicacionId }
         setCantidadAlerta(productoEditar.alerta_stock_bajo ?? '');
         setExpiraCantidad(productoEditar.expira_cantidad ?? '');
         setExpiraUnidad(productoEditar.expira_unidad || 'Meses');
+        setFechaVencimientoInicial(productoEditar.fecha_vencimiento || '');
         const adicionales = productoEditar.datos_adicionales && typeof productoEditar.datos_adicionales === 'object' ? productoEditar.datos_adicionales : {};
         setDatosAdicionales(adicionales);
         setTipoCodigoBarra(adicionales.tipo_codigo_barras || 'Code 128 (C128)');
@@ -591,8 +593,8 @@ const AgregarProducto = ({ onGuardado, onCancelar, productoEditar, ubicacionId }
     };
 
     const guardarProducto = async (opcion) => {
-        if (metadataProductoDisponible === null) return alert('Espera a que se verifique la configuración de campos del producto.');
         const usaMetadataExtendida = imagenesProducto.length > 1 || Boolean(datosAdicionales.folleto_url || datosAdicionales.administra_serie || datosAdicionales.no_vender || datosAdicionales.servicio_ejecutar || Object.keys(datosAdicionales).some((key) => key.startsWith('campo_personalizado_') && String(datosAdicionales[key] || '').trim()));
+        if (usaMetadataExtendida && metadataProductoDisponible === null) return alert('Espera a que se verifique la configuración de campos del producto.');
         if (usaMetadataExtendida && !metadataProductoDisponible) return alert('Para guardar las imágenes adicionales, el folleto y los campos personalizados, primero aplicá database/migration_productos_datos_adicionales.sql en Supabase. No se guardó el producto.');
         if (!tasaPrecioLista || !Number.isFinite(tasaPygPorMoneda) || tasaPygPorMoneda <= 0) return alert('Espera a que se cargue una tasa válida para los precios.');
         if (monedaPrecio !== 'PYG' && !monedaPrecioPersistible) return alert('Para guardar productos con precios en otra moneda, primero aplica database/migration_ventas_multimoneda.sql en Supabase.');
@@ -638,6 +640,7 @@ const AgregarProducto = ({ onGuardado, onCancelar, productoEditar, ubicacionId }
                 alerta_stock_bajo: cantidadAlerta ? Number(cantidadAlerta) : 5,
                 expira_cantidad: expiraCantidad ? Number(expiraCantidad) : null,
                 expira_unidad: expiraUnidad,
+                fecha_vencimiento: fechaVencimientoInicial || null,
                 imagen_url: imagenPreview || null,
                 peso: peso === '' ? null : Number(peso),
                 ...(metadataProductoDisponible ? { datos_adicionales: {
@@ -961,6 +964,11 @@ const AgregarProducto = ({ onGuardado, onCancelar, productoEditar, ubicacionId }
                             <div>
                                 <label className="block text-xs font-semibold text-slate-600 mb-1.5">{t('alertQuantity')}</label>
                                 <input type="number" className="w-full border border-slate-300 rounded-md px-3 py-2.5 text-sm focus:border-orange-400 focus:outline-none focus:ring-2 focus:ring-orange-100" placeholder={t('alertQuantity')} value={cantidadAlerta} onChange={(e) => setCantidadAlerta(e.target.value)} />
+                            </div>
+                            <div>
+                                <label className="block text-xs font-semibold text-slate-600 mb-1.5">Vencimiento del stock actual</label>
+                                <input type="date" className="w-full border border-slate-300 rounded-md px-3 py-2.5 text-sm focus:border-orange-400 focus:outline-none focus:ring-2 focus:ring-orange-100" value={fechaVencimientoInicial} onChange={(e) => setFechaVencimientoInicial(e.target.value)} />
+                                <p className="mt-1 text-[11px] text-slate-400">Fecha del lote de stock que estás registrando.</p>
                             </div>
                             {ajustesEmpresa.enable_product_expiry !== false && <div>
                                 <label className="block text-xs font-semibold text-slate-600 mb-1.5">{t('expiresIn')}</label>
