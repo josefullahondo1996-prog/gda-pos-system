@@ -11,14 +11,13 @@
   --ui-surface: #ffffff;
 }
 
-/* Estilo para que parezca app nativa */
+/* Permite copiar texto en toda la aplicación. */
 * {
   -webkit-tap-highlight-color: transparent;
-  user-select: none; /* No deja seleccionar texto, parece más app */
-}
-
-input, textarea {
-  user-select: text; /* Estos sí dejan */
+  user-select: text;
+  -webkit-user-select: text;
+  -moz-user-select: text;
+  -ms-user-select: text;
 }
 
 .product-list-table th,

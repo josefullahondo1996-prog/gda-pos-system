@@ -200,7 +200,7 @@ const FiltroFecha = ({ value, onChange }) => {
             const enRango = selInicio && selFin && fecha > selInicio && fecha < selFin;
             const esHoy = t === inicioDia(new Date()).getTime();
 
-            let cls = 'text-[11px] h-7 w-full flex items-center justify-center rounded cursor-pointer transition-colors select-none ';
+            let cls = 'text-[11px] h-7 w-full flex items-center justify-center rounded cursor-pointer transition-colors ';
             if (fueraDeMes) {
               cls += 'text-gray-300 ';
             } else if (esInicio || esFin) {
