@@ -5,7 +5,7 @@ import {
   LayoutDashboard, Users, Contact, Package, Factory, Wrench, ChevronDown,
   ArrowDownToLine, ArrowUpFromLine, BarChart3, ShoppingCart, LogOut, Settings,
   MapPin, FileText, Barcode, Printer, Percent, ClipboardList, CreditCard, ArrowRightLeft,
-  Menu, X, DollarSign, BookOpen, Truck, ShoppingBag, Clock3, Building2, CircleHelp, CalendarDays, ShieldCheck, Mail, ClipboardCheck, QrCode, Bell, AlertTriangle, CalendarClock, PackageX
+  Menu, X, DollarSign, BookOpen, Truck, ShoppingBag, Clock3, Building2, CircleHelp, CalendarDays, ShieldCheck, Mail, ClipboardCheck, QrCode, Bell, AlertTriangle, CalendarClock, PackageX, UtensilsCrossed
 } from 'lucide-react';
 import { LanguageSelector, useLanguage } from './LanguageContext';
 import LogoPyPos from './LogoPyPos';
@@ -63,6 +63,7 @@ const VendedoresComisiones = lazy(() => import('./VendedoresComisiones'));
 const PanelDesarrollador = lazy(() => import('./PanelDesarrollador'));
 const VentasPorPersonal = lazy(() => import('./VentasPorPersonal'));
 const Pedidos = lazy(() => import('./Pedidos'));
+const Restaurante = lazy(() => import('./Restaurante'));
 const InformesOperativos = lazy(() => import('./InformesOperativos'));
 const InformesMicdepos = lazy(() => import('./InformesMicdepos'));
 const TransferenciasStock = lazy(() => import('./TransferenciasStock'));
@@ -107,6 +108,7 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
   };
 
   const puedeVerVista = (vista) => {
+    if (vista === 'restaurante' && ajustesEmpresa.enable_table_qr_orders !== true) return false;
     if (ajustesEmpresa.module_settings_explicit) {
       const moduloPorVista = {
         compras: 'module_1', agregar_compra: 'module_1', devoluciones_compra: 'module_1',
@@ -132,6 +134,7 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
       caja_registradora: 'informes', ganancias_perdidas: 'informes',
       ventas_por_producto: 'informes', compras_por_producto: 'informes', cobro_de_ventas: 'informes', vendedores_comisiones: 'informes', ventas_por_personal: 'informes', usuarios: 'usuarios', roles: 'roles',
       pedidos: 'ventas_pos',
+      restaurante: 'ventas_pos',
       descuentos_ventas: 'ventas_pos',
       cotizaciones: 'ventas_pos',
       importar_ventas: 'ventas_pos',
@@ -227,6 +230,7 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
     cobros: t('pendingOrders'),
     catalogo: t('products'),
     catalogo_qr: 'Catálogo QR',
+    restaurante: 'Restaurante',
     stock_history: 'Historial de existencias',
     transferencias_stock: 'Transferencias de stock',
     ajustes_stock: 'Control de stock',
@@ -415,6 +419,12 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
 
     if (esDesarrollador && (path === '/' || path === '')) {
       setVistaActiva('admin_desarrollador');
+      return;
+    }
+
+    if (path === '/restaurante' || path.startsWith('/restaurante/')) {
+      setVistaActiva('restaurante');
+      setMenuExpandido('restaurante');
       return;
     }
 
@@ -896,6 +906,9 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
       case 'pedidos':
         return <Pedidos />;
 
+      case 'restaurante':
+        return <Restaurante key={location.pathname} section={location.pathname.split('/')[2] || 'mapa'} />;
+
       case 'informes_operativos':
         return <InformesOperativos key={location.pathname} initialReport={location.pathname.startsWith('/informes/') ? location.pathname.split('/')[2] : 'stock'} hideNavigation />;
 
@@ -1062,6 +1075,7 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
             </div>
             {[
               ['Vender', '/pos', ShoppingCart],
+              ...(ajustesEmpresa.enable_table_qr_orders ? [['Restaurante', '/restaurante/mapa', UtensilsCrossed]] : []),
               ['Productos', '/catalogo', Package],
               ['Histórico de ventas', '/todas_ventas', FileText],
               ['Presupuestos', '/presupuestos', ClipboardList],
@@ -1084,7 +1098,7 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
               <button
                 key={ruta}
                 type="button"
-                onClick={() => irA(etiqueta === 'Vender' ? 'pos' : etiqueta === 'Productos' ? 'catalogo' : etiqueta === 'Clientes' ? 'clientes' : etiqueta === 'Caja' ? 'caja_registradora' : etiqueta === 'Caja / Banco' ? 'cajas' : etiqueta === 'Gastos' ? 'gastos' : etiqueta === 'Compras' ? 'compras' : etiqueta === 'Reportes' ? 'ganancias_perdidas' : etiqueta === 'Informe de cajas' ? 'informe_caja_pago' : etiqueta === 'Devoluciones' ? 'devoluciones_compra' : etiqueta === 'Pedidos pendientes' ? 'cobros' : etiqueta === 'Histórico de ventas' ? 'todas_ventas' : etiqueta === 'Presupuestos' ? 'cotizaciones' : etiqueta === 'Flujo de fondos' ? 'flujo_fondos' : etiqueta === 'Mis entregas' ? 'envios' : 'inicio', ruta)}
+                onClick={() => irA(etiqueta === 'Restaurante' ? 'restaurante' : etiqueta === 'Vender' ? 'pos' : etiqueta === 'Productos' ? 'catalogo' : etiqueta === 'Clientes' ? 'clientes' : etiqueta === 'Caja' ? 'caja_registradora' : etiqueta === 'Caja / Banco' ? 'cajas' : etiqueta === 'Gastos' ? 'gastos' : etiqueta === 'Compras' ? 'compras' : etiqueta === 'Reportes' ? 'ganancias_perdidas' : etiqueta === 'Informe de cajas' ? 'informe_caja_pago' : etiqueta === 'Devoluciones' ? 'devoluciones_compra' : etiqueta === 'Pedidos pendientes' ? 'cobros' : etiqueta === 'Histórico de ventas' ? 'todas_ventas' : etiqueta === 'Presupuestos' ? 'cotizaciones' : etiqueta === 'Flujo de fondos' ? 'flujo_fondos' : etiqueta === 'Mis entregas' ? 'envios' : 'inicio', ruta)}
                 className="w-full min-h-[74px] px-8 flex items-center gap-6 text-left text-[21px] tracking-wide text-[#202020] hover:bg-[#fff5f0] active:bg-[#ffe9df]"
               >
                 <Icono size={32} strokeWidth={2.1} className="shrink-0 text-[#161616]" />
@@ -1384,6 +1398,21 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
               <Link to="/pedidos" onClick={() => irA('pedidos', '/pedidos')} className={estiloBotonSimple('pedidos')} title="Pedidos">
                 <ClipboardList size={18} strokeWidth={2} /> {!sidebarColapsado && 'Pedidos'}
               </Link>
+            )}
+
+            {ajustesEmpresa.enable_table_qr_orders === true && !soloPOS && (
+              <>
+                <button onClick={() => toggleMenu('restaurante')} aria-expanded={menuExpandido === 'restaurante'} className={estiloBotonDesplegable('restaurante')} title="Restaurante">
+                  <div className="flex items-center gap-3"><UtensilsCrossed size={18} strokeWidth={2} /> {!sidebarColapsado && 'Restaurante'}</div>
+                  {!sidebarColapsado && indicadorDesplegable('restaurante')}
+                </button>
+                {menuRenderizado === 'restaurante' && !sidebarColapsado && <div aria-hidden={menuExpandido !== 'restaurante'} inert={menuExpandido !== 'restaurante'} style={estiloSubmenu('restaurante')} className="sidebar-submenu mx-1.5 flex flex-col rounded-b bg-[#1e1f35] py-1.5">
+                  <Link to="/restaurante/mapa" onClick={() => irA('restaurante', '/restaurante/mapa')} className={estiloSubItem('restaurante', '/restaurante/mapa')}>🠖 Mapa de mesas</Link>
+                  <Link to="/restaurante/pedidos" onClick={() => irA('restaurante', '/restaurante/pedidos')} className={estiloSubItem('restaurante', '/restaurante/pedidos')}>🠖 Pedidos en cocina</Link>
+                  <Link to="/restaurante/cocina-pro" onClick={() => irA('restaurante', '/restaurante/cocina-pro')} className={estiloSubItem('restaurante', '/restaurante/cocina-pro')}>🠖 Cocina Pro</Link>
+                  <Link to="/restaurante/configuracion" onClick={() => irA('restaurante', '/restaurante/configuracion')} className={estiloSubItem('restaurante', '/restaurante/configuracion')}>🠖 Configuración</Link>
+                </div>}
+              </>
             )}
 
             <Link to="/plantillas-notificacion" onClick={() => irA('plantillas_notificacion', '/plantillas-notificacion')} className={estiloBotonSimple('plantillas_notificacion')} title="Plantillas de notificación">
