@@ -1412,6 +1412,7 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
                   <Link to="/restaurante/mapa" onClick={() => irA('restaurante', '/restaurante/mapa')} className={estiloSubItem('restaurante', '/restaurante/mapa')}>🠖 Mapa de mesas</Link>
                   <Link to="/restaurante/pedidos" onClick={() => irA('restaurante', '/restaurante/pedidos')} className={estiloSubItem('restaurante', '/restaurante/pedidos')}>🠖 Pedidos en cocina</Link>
                   <Link to="/restaurante/cocina-pro" onClick={() => irA('restaurante', '/restaurante/cocina-pro')} className={estiloSubItem('restaurante', '/restaurante/cocina-pro')}>🠖 Cocina Pro</Link>
+                  <Link to="/restaurante/historial" onClick={() => irA('restaurante', '/restaurante/historial')} className={estiloSubItem('restaurante', '/restaurante/historial')}>🠖 Historial</Link>
                   <Link to="/restaurante/configuracion" onClick={() => irA('restaurante', '/restaurante/configuracion')} className={estiloSubItem('restaurante', '/restaurante/configuracion')}>🠖 Configuración</Link>
                 </div>}
               </>
