@@ -35,7 +35,7 @@ const BanderaMoneda = ({ codigo, className = 'h-7 w-7' }) => {
   </svg>;
 };
 
-const PuntoDeVenta = ({ cajaInfo, session, perfilUsuario, onVolver, onSolicitarCierre, onNuevoGasto, onAbrirGuia }) => {
+const PuntoDeVenta = ({ cajaInfo, session, perfilUsuario, pedidoRestauranteInicial = null, onPedidoRestauranteImportado, onVolver, onSolicitarCierre, onNuevoGasto, onAbrirGuia }) => {
   const { t } = useLanguage();
   const { id: empresaId, nombre: nombreEmpresa, direccion: direccionEmpresa, telefono: telefonoEmpresa, ruc: rucEmpresa, logo_url: logoEmpresa } = useEmpresaInfo();
   const { ajustes: ajustesEmpresa, cargando: cargandoAjustesEmpresa } = useConfiguracionEmpresa(empresaId);
@@ -119,6 +119,10 @@ const PuntoDeVenta = ({ cajaInfo, session, perfilUsuario, onVolver, onSolicitarC
   const [productos, setProductos] = useState([]);
   const [marcasEmpresa, setMarcasEmpresa] = useState([]);
   const [carrito, setCarrito] = useState([]);
+  const [pedidoRestaurante, setPedidoRestaurante] = useState(null);
+  const pedidoRestauranteCargadoRef = useRef(null);
+  const onPedidoRestauranteImportadoRef = useRef(onPedidoRestauranteImportado);
+  onPedidoRestauranteImportadoRef.current = onPedidoRestauranteImportado;
   const [productoImagenAmpliada, setProductoImagenAmpliada] = useState(null);
   const [productoAgregadoId, setProductoAgregadoId] = useState(null);
   const [cicloResaltadoCarrito, setCicloResaltadoCarrito] = useState(0);
@@ -438,6 +442,10 @@ const PuntoDeVenta = ({ cajaInfo, session, perfilUsuario, onVolver, onSolicitarC
 
   useEffect(() => {
     if (cargando || cotizacionCargada) return;
+    if (pedidoRestauranteInicial?.id) {
+      setCotizacionCargada(true);
+      return;
+    }
     const pendiente = sessionStorage.getItem('pypos_cotizacion_pendiente');
     if (!pendiente) {
       setCotizacionCargada(true);
@@ -474,7 +482,60 @@ const PuntoDeVenta = ({ cajaInfo, session, perfilUsuario, onVolver, onSolicitarC
       notificar.error('No se pudo leer la cotización pendiente.');
     }
     setCotizacionCargada(true);
-  }, [cargando, cotizacionCargada, productos]);
+  }, [cargando, cotizacionCargada, productos, pedidoRestauranteInicial?.id]);
+
+  useEffect(() => {
+    const pedidoId = pedidoRestauranteInicial?.id;
+    if (!pedidoId || cargando || !empresaId || pedidoRestauranteCargadoRef.current === pedidoId) return;
+    pedidoRestauranteCargadoRef.current = pedidoId;
+    let vigente = true;
+    const importarPedido = async () => {
+      try {
+        if (carrito.length || sessionStorage.getItem('pypos_cotizacion_pendiente')) {
+          throw new Error('El POS ya tiene productos o una cotización pendiente. Cierra o completa ese carrito antes de abrir el pedido QR.');
+        }
+        const { data: pedido, error } = await supabase.from('pedidos')
+          .select('id,empresa_id,numero_pedido,estado,items,total,nota,mesa_id,mesa_nombre,cliente_nombre,origen,ubicacion_id')
+          .eq('id', pedidoId).eq('empresa_id', empresaId).maybeSingle();
+        if (error) throw error;
+        if (!pedido || pedido.origen !== 'catalogo_qr_mesa' || pedido.estado !== 'completado') {
+          throw new Error('El pedido ya no está listo para cobrar o no pertenece a esta empresa.');
+        }
+        const { data: cobro, error: errorCobro } = await supabase.from('pedidos_qr_ventas')
+          .select('pedido_id').eq('pedido_id', pedido.id).maybeSingle();
+        if (errorCobro) throw errorCobro;
+        if (cobro) throw new Error('Este pedido ya fue cobrado. Actualiza Restaurante para ver el estado.');
+        const lineas = Array.isArray(pedido.items) ? pedido.items : [];
+        const filas = lineas.map((linea) => {
+          const producto = productos.find((item) => String(item.id) === String(linea.producto_id));
+          const cantidad = Number(linea.cantidad);
+          const precio = Number(linea.precio_unitario);
+          if (!producto || producto.activo === false || producto.tipo_producto === 'Variable' || !Number.isFinite(cantidad) || cantidad <= 0 || !Number.isFinite(precio) || precio < 0) return null;
+          return { ...producto, precio_lista_base: precio, precio_venta: precio, precio, cotizacion_precio_fijo: true, cantidad };
+        });
+        if (!lineas.length || filas.some((fila) => !fila)) {
+          throw new Error('No se pudo cargar el pedido completo: algún producto ya no está disponible en el POS. No se agregó ningún artículo.');
+        }
+        if (!vigente) return;
+        setCarrito(filas);
+        setCliente(pedido.mesa_nombre || pedido.cliente_nombre || 'Cliente Ocasional');
+        setNotaVenta([`Pedido QR ${pedido.numero_pedido} · ${pedido.mesa_nombre || 'Mesa'}`, pedido.nota].filter(Boolean).join(' | '));
+        setPedidoRestaurante(pedido);
+        notificar.info(`Pedido de ${pedido.mesa_nombre || 'mesa'} listo en el carrito. Revisa los artículos y cobra con el método habitual.`);
+        onPedidoRestauranteImportadoRef.current?.();
+      } catch (error) {
+        if (vigente) {
+          notificar.error(error.message || 'No se pudo abrir el pedido QR en el POS.');
+          onPedidoRestauranteImportadoRef.current?.();
+        }
+      }
+    };
+    importarPedido();
+    return () => {
+      vigente = false;
+      if (pedidoRestauranteCargadoRef.current === pedidoId) pedidoRestauranteCargadoRef.current = null;
+    };
+  }, [pedidoRestauranteInicial?.id, cargando, empresaId, productos, carrito.length, notificar]);
 
   useEffect(() => {
     const actualizarStock = () => {
@@ -675,6 +736,7 @@ const PuntoDeVenta = ({ cajaInfo, session, perfilUsuario, onVolver, onSolicitarC
 
   const vaciarCarrito = () => {
     setCarrito([]);
+    setPedidoRestaurante(null);
     setMontoPagado('');
     setDescuento('');
     setCargoEmbalaje('');
@@ -698,6 +760,7 @@ const PuntoDeVenta = ({ cajaInfo, session, perfilUsuario, onVolver, onSolicitarC
     return Number.isFinite(resultado) ? resultado : null;
   }, [calculadoraA, calculadoraB, operacionCalculadora]);
   const descuentoPromocional = useMemo(() => {
+    if (pedidoRestaurante) return 0;
     if (ajustesEmpresa.disable_discount) return 0;
     const ahora = Date.now();
     const normalizar = (valor) => String(valor || '').trim().toLocaleLowerCase('es');
@@ -722,12 +785,12 @@ const PuntoDeVenta = ({ cajaInfo, session, perfilUsuario, onVolver, onSolicitarC
         : Math.min(bruto, Math.max(0, Number(regla.valor) || 0) * Number(item.cantidad || 0));
       return total + descuentoLinea;
     }, 0);
-  }, [carrito, reglasDescuento, ubicacionActivaId, ajustesEmpresa.disable_discount]);
+  }, [carrito, reglasDescuento, ubicacionActivaId, ajustesEmpresa.disable_discount, pedidoRestaurante]);
   const descuentoPredeterminado = Math.max(0, Math.min(100, Number(ajustesEmpresa.default_sales_discount) || 0)) * subtotal / 100;
-  const descuentoManual = ajustesEmpresa.disable_discount ? 0
+  const descuentoManual = pedidoRestaurante || ajustesEmpresa.disable_discount ? 0
     : String(descuento).trim() === '' ? descuentoPredeterminado : Math.max(0, Number(descuento) || 0);
   const descuentoAplicado = Math.min(descuentoManual + descuentoPromocional, subtotal);
-  const cargoEmbalajeAplicado = Math.max(0, Number(cargoEmbalaje) || 0);
+  const cargoEmbalajeAplicado = pedidoRestaurante ? 0 : Math.max(0, Number(cargoEmbalaje) || 0);
   const totalConAjustes = Math.max(0, subtotal - descuentoAplicado + cargoEmbalajeAplicado);
   const formatMoneda = (valor, moneda = monedaVenta) => {
     const numero = Number(valor || 0);
@@ -770,6 +833,10 @@ const PuntoDeVenta = ({ cajaInfo, session, perfilUsuario, onVolver, onSolicitarC
 
   const procesarVenta = async (tipoOperacion = 'venta', datosPagoMultiple = null, metodoForzado = null, notaForzada = null) => {
     if (carrito.length === 0) return alert('El carrito está vacío');
+    if (pedidoRestaurante && !['venta', 'credito'].includes(tipoOperacion)) {
+      alert('El pedido QR se debe registrar como venta o crédito. No se puede guardar como presupuesto ni como pedido pendiente.');
+      return null;
+    }
     if (monedaVenta !== 'PYG' && !monedaVentaPersistible) {
       alert('Para vender y guardar en otra moneda, primero aplica database/migration_ventas_multimoneda.sql en Supabase. La operación fue cancelada y no se descontó stock.');
       return null;
@@ -898,12 +965,33 @@ const PuntoDeVenta = ({ cajaInfo, session, perfilUsuario, onVolver, onSolicitarC
         subtotal_moneda: convertirDesdeGs((item.precio_venta || item.precio || 0) * item.cantidad),
       }));
 
-      const { data: ventaId, error } = await supabase.rpc('registrar_venta', {
-        p_venta: nuevaVenta,
-        p_items: itemsParaRpc,
-        p_ubicacion_id: ubicacionActivaId || null,
-      });
-      if (error) throw error;
+      const { data: ventaId, error } = pedidoRestaurante
+        ? await supabase.rpc('registrar_venta_pedido_qr', {
+          p_pedido_id: pedidoRestaurante.id,
+          p_venta: nuevaVenta,
+          p_items: itemsParaRpc,
+          p_ubicacion_id: ubicacionActivaId || null,
+        })
+        : await supabase.rpc('registrar_venta', {
+          p_venta: nuevaVenta,
+          p_items: itemsParaRpc,
+          p_ubicacion_id: ubicacionActivaId || null,
+        });
+      if (error) {
+        if (String(error.message || '').includes('PEDIDO_QR_YA_FACTURADO')) {
+          throw new Error('Este pedido ya fue cobrado. No se registró otra venta. Actualiza Restaurante.');
+        }
+        if (String(error.message || '').includes('PEDIDO_QR_ITEMS_MODIFICADOS') || String(error.message || '').includes('PEDIDO_QR_TOTAL_MODIFICADO')) {
+          throw new Error('El cobro debe respetar los productos, cantidades y total originales del pedido QR; tampoco se aplican descuentos ni cargos adicionales. Cancela el pedido del carrito y vuelve a abrirlo desde Restaurante.');
+        }
+        if (String(error.message || '').includes('PEDIDO_QR_SUCURSAL_NO_COINCIDE')) {
+          throw new Error('Abre la caja de la sucursal a la que pertenece este pedido QR antes de cobrarlo.');
+        }
+        if (pedidoRestaurante && String(error.message || '').includes('registrar_venta_pedido_qr')) {
+          throw new Error('Falta aplicar database/migration_cobro_pedidos_qr.sql en Supabase. No se registró la venta.');
+        }
+        throw error;
+      }
 
       const cotizacionPendiente = sessionStorage.getItem('pypos_cotizacion_pendiente');
       if (cotizacionPendiente) {
@@ -1154,6 +1242,8 @@ const PuntoDeVenta = ({ cajaInfo, session, perfilUsuario, onVolver, onSolicitarC
 
   return (
     <div className="flex flex-col h-screen bg-gray-100 font-sans overflow-hidden">
+
+      {pedidoRestaurante && <div className="mx-3 mt-2 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-900"><span><b>Pedido QR de {pedidoRestaurante.mesa_nombre || 'mesa'} · {pedidoRestaurante.numero_pedido}</b> está cargado con sus precios originales. Revisa el carrito y selecciona cómo cobrar.</span><button type="button" onClick={vaciarCarrito} className="rounded-md border border-emerald-300 bg-white px-2.5 py-1 text-xs font-bold text-emerald-800">Cancelar pedido</button></div>}
 
       <div data-guia-tour="operacion" className="bg-white border-b border-gray-200 px-4 py-2 flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-3">

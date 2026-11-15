@@ -764,6 +764,8 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
             cajaInfo={cajaActual}
             session={session}
             perfilUsuario={perfilUsuario}
+            pedidoRestauranteInicial={location.state?.pedidoRestaurante || null}
+            onPedidoRestauranteImportado={() => navigate(location.pathname, { replace: true, state: null })}
             onVolver={irAInicio}
             onAbrirGuia={() => setGuiaVisible(true)}
             onSolicitarCierre={(reporte) => {
