@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { ChefHat, ClipboardList, Clock3, ExternalLink, LayoutGrid, LoaderCircle, RefreshCw, Save, Settings2, UtensilsCrossed } from 'lucide-react';
+import { ChefHat, ClipboardList, Clock3, Download, ExternalLink, LayoutGrid, LoaderCircle, RefreshCw, Save, Settings2, UtensilsCrossed, X } from 'lucide-react';
+import { QRCodeSVG } from 'qrcode.react';
+import { renderToStaticMarkup } from 'react-dom/server';
 import { supabase } from './supabaseClient';
 import { useEmpresaInfo } from './utils/useEmpresa';
 import { useConfiguracionEmpresa, notificarConfiguracionEmpresaActualizada } from './utils/useConfiguracionEmpresa';
@@ -39,6 +41,7 @@ export default function Restaurante({ section = 'mapa' }) {
   const [pedidos, setPedidos] = useState([]);
   const [catalogos, setCatalogos] = useState([]);
   const [catalogoSeleccionado, setCatalogoSeleccionado] = useState('');
+  const [mesaQr, setMesaQr] = useState(null);
   const [minutosPreparacion, setMinutosPreparacion] = useState('20');
   const [cargando, setCargando] = useState(true);
   const [guardandoId, setGuardandoId] = useState('');
@@ -105,6 +108,21 @@ export default function Restaurante({ section = 'mapa' }) {
     notificarConfiguracionEmpresaActualizada(empresaId); notificar.exito('Configuración de restaurante guardada.');
   };
 
+  const copiarEnlaceMesa = async () => {
+    try { await navigator.clipboard.writeText(URL_MESA(mesaQr.public_token)); notificar.exito('Enlace de la mesa copiado.'); }
+    catch { notificar.error('No se pudo copiar el enlace desde este navegador.'); }
+  };
+
+  const descargarCodigoMesa = () => {
+    const svg = renderToStaticMarkup(<QRCodeSVG value={URL_MESA(mesaQr.public_token)} size={900} level="H" includeMargin />);
+    const url = URL.createObjectURL(new Blob([svg], { type: 'image/svg+xml;charset=utf-8' }));
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `qr-${String(mesaQr.nombre).toLowerCase().replace(/[^a-z0-9]+/g, '-')}.svg`;
+    link.click();
+    window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+  };
+
   const activeTab = SECCIONES.find((item) => item.id === section) || SECCIONES[0];
   return <div className="mx-auto w-full max-w-7xl space-y-5 p-4 md:p-6">
     <header className="rounded-2xl bg-gradient-to-r from-slate-950 via-slate-900 to-orange-950 p-5 text-white shadow-lg md:p-7"><div className="flex items-center gap-3"><span className="grid h-11 w-11 place-items-center rounded-xl bg-white/10"><UtensilsCrossed size={22}/></span><div><p className="text-xs font-bold uppercase tracking-[.18em] text-orange-300">Operación gastronómica</p><h1 className="text-2xl font-black">Restaurante · {activeTab.label}</h1></div></div><p className="mt-3 max-w-3xl text-sm text-slate-300">Administrá mesas, recibí pedidos QR y coordiná la preparación desde una pantalla compartida.</p></header>
@@ -122,7 +140,7 @@ export default function Restaurante({ section = 'mapa' }) {
     ) : section === 'mapa' ? (
       <>
         <div className="flex flex-wrap items-center justify-between gap-3"><div><h2 className="text-lg font-black text-slate-900">Estado de las mesas</h2><p className="text-sm text-slate-500">Ocupada significa que tiene pedidos pendientes o en preparación.</p></div><button onClick={cargar} className="inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-bold"><RefreshCw size={15}/>Actualizar</button></div>
-        {cargando ? <div className="rounded-xl bg-white p-12 text-center text-slate-500"><LoaderCircle className="mx-auto animate-spin"/></div> : mesas.length ? <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">{mesas.map((mesa) => { const pedido = porMesa.get(mesa.id); return <article key={mesa.id} className={`rounded-2xl border p-4 shadow-sm ${!mesa.activo ? 'border-slate-200 bg-slate-100 opacity-60' : pedido ? 'border-orange-200 bg-orange-50' : 'border-emerald-200 bg-white'}`}><div className="flex items-start justify-between gap-2"><div><p className="text-xs font-bold uppercase tracking-wide text-slate-500">{mesa.activo ? pedido ? 'Ocupada' : 'Disponible' : 'Desactivada'}</p><h3 className="mt-1 text-xl font-black">{mesa.nombre}</h3></div><span className={`rounded-full px-2.5 py-1 text-xs font-bold ${pedido ? 'bg-orange-100 text-orange-800' : 'bg-emerald-100 text-emerald-800'}`}>{pedido ? `${pedido.items?.length || 0} productos` : 'Libre'}</span></div>{pedido && <><p className="mt-3 text-sm text-slate-600">Pedido {pedido.numero_pedido} · {FECHA(pedido.creado_en)}</p><p className="mt-1 text-xs font-bold uppercase text-orange-700">{pedido.estado === 'pendiente' ? 'Pendiente' : 'En preparación'}</p></>}<div className="mt-4 flex gap-2"><a href={URL_MESA(mesa.public_token)} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700"><ExternalLink size={14}/>Abrir QR</a>{pedido && <button onClick={() => avanzarPedido(pedido, pedido.estado === 'pendiente' ? 'en_preparacion' : 'completado')} className="rounded-lg bg-slate-900 px-3 py-2 text-xs font-bold text-white">{pedido.estado === 'pendiente' ? 'Preparar' : 'Liberar mesa'}</button>}</div></article>; })}</div> : !error && <div className="rounded-xl border border-dashed border-slate-300 bg-white p-10 text-center"><LayoutGrid className="mx-auto text-slate-300" size={34}/><p className="mt-3 font-bold">Aún no hay mesas configuradas</p><p className="mt-1 text-sm text-slate-500">Creá el catálogo QR y agregá mesas para generar sus códigos.</p><Link to="/catalogo-qr" className="mt-4 inline-flex rounded-lg bg-orange-500 px-4 py-2 text-sm font-bold text-white">Configurar mesas QR</Link></div>}
+        {cargando ? <div className="rounded-xl bg-white p-12 text-center text-slate-500"><LoaderCircle className="mx-auto animate-spin"/></div> : mesas.length ? <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">{mesas.map((mesa) => { const pedido = porMesa.get(mesa.id); return <article key={mesa.id} className={`rounded-2xl border p-4 shadow-sm ${!mesa.activo ? 'border-slate-200 bg-slate-100 opacity-60' : pedido ? 'border-orange-200 bg-orange-50' : 'border-emerald-200 bg-white'}`}><div className="flex items-start justify-between gap-2"><div><p className="text-xs font-bold uppercase tracking-wide text-slate-500">{mesa.activo ? pedido ? 'Ocupada' : 'Disponible' : 'Desactivada'}</p><h3 className="mt-1 text-xl font-black">{mesa.nombre}</h3></div><span className={`rounded-full px-2.5 py-1 text-xs font-bold ${pedido ? 'bg-orange-100 text-orange-800' : 'bg-emerald-100 text-emerald-800'}`}>{pedido ? `${pedido.items?.length || 0} productos` : 'Libre'}</span></div>{pedido && <><p className="mt-3 text-sm text-slate-600">Pedido {pedido.numero_pedido} · {FECHA(pedido.creado_en)}</p><p className="mt-1 text-xs font-bold uppercase text-orange-700">{pedido.estado === 'pendiente' ? 'Pendiente' : 'En preparación'}</p></>}<div className="mt-4 flex flex-wrap gap-2"><button type="button" onClick={() => setMesaQr(mesa)} className="inline-flex items-center gap-1 rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700"><UtensilsCrossed size={14}/>Ver código QR</button>{pedido && <button onClick={() => avanzarPedido(pedido, pedido.estado === 'pendiente' ? 'en_preparacion' : 'completado')} className="rounded-lg bg-slate-900 px-3 py-2 text-xs font-bold text-white">{pedido.estado === 'pendiente' ? 'Preparar' : 'Liberar mesa'}</button>}</div></article>; })}</div> : !error && <div className="rounded-xl border border-dashed border-slate-300 bg-white p-10 text-center"><LayoutGrid className="mx-auto text-slate-300" size={34}/><p className="mt-3 font-bold">Aún no hay mesas configuradas</p><p className="mt-1 text-sm text-slate-500">Creá el catálogo QR y agregá mesas para generar sus códigos.</p><Link to="/catalogo-qr" className="mt-4 inline-flex rounded-lg bg-orange-500 px-4 py-2 text-sm font-bold text-white">Configurar mesas QR</Link></div>}
       </>
     ) : section === 'pedidos' ? (
       <>
@@ -138,5 +156,6 @@ export default function Restaurante({ section = 'mapa' }) {
         </div>}
       </>
     )}
+    {mesaQr && <div className="fixed inset-0 z-[100] grid place-items-center bg-slate-950/60 p-4" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setMesaQr(null); }}><section role="dialog" aria-modal="true" aria-labelledby="mesa-qr-titulo" className="w-full max-w-md rounded-2xl bg-white p-5 text-center shadow-2xl"><header className="flex items-center justify-between text-left"><div><p className="text-xs font-bold uppercase tracking-widest text-orange-600">Código para escanear</p><h2 id="mesa-qr-titulo" className="mt-1 text-xl font-black text-slate-900">{mesaQr.nombre}</h2></div><button type="button" aria-label="Cerrar código QR" onClick={() => setMesaQr(null)} className="rounded-lg p-2 text-slate-500 hover:bg-slate-100"><X size={20}/></button></header><div className="my-5 inline-block rounded-2xl border border-slate-200 bg-white p-4"><QRCodeSVG value={URL_MESA(mesaQr.public_token)} size={260} level="H" includeMargin /></div><p className="mb-4 break-all rounded-lg bg-slate-50 p-3 text-xs text-slate-600">{URL_MESA(mesaQr.public_token)}</p><div className="grid grid-cols-2 gap-2"><button type="button" onClick={copiarEnlaceMesa} className="rounded-lg border border-slate-300 px-3 py-2.5 text-sm font-bold text-slate-700">Copiar enlace</button><button type="button" onClick={descargarCodigoMesa} className="inline-flex items-center justify-center gap-2 rounded-lg bg-slate-900 px-3 py-2.5 text-sm font-bold text-white"><Download size={16}/>Descargar QR</button><a href={URL_MESA(mesaQr.public_token)} target="_blank" rel="noreferrer" className="col-span-2 inline-flex items-center justify-center gap-2 rounded-lg bg-orange-500 px-3 py-2.5 text-sm font-bold text-white"><ExternalLink size={16}/>Abrir menú de esta mesa</a></div></section></div>}
   </div>;
 }
