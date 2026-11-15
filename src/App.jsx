@@ -8,6 +8,7 @@ import { useLanguage } from './LanguageContext';
 import { useLocation } from 'react-router-dom';
 import GdaLandingPage from './GdaLandingPage';
 const CatalogoQRPublico = lazy(() => import('./CatalogoQR').then((m) => ({ default: m.CatalogoQRPublico })));
+const EstadoPedidoQRPublico = lazy(() => import('./CatalogoQR').then((m) => ({ default: m.EstadoPedidoQRPublico })));
 
 function App() {
   const { t } = useLanguage();
@@ -130,6 +131,7 @@ function App() {
     return () => subscription.unsubscribe();
   }, []);
 
+  if (location.pathname.startsWith('/pedido/seguimiento/')) return <Suspense fallback={<div className="grid min-h-screen place-items-center text-slate-500">Cargando seguimiento...</div>}><EstadoPedidoQRPublico /></Suspense>;
   if (location.pathname.startsWith('/catalogo-qr/')) return <Suspense fallback={<div className="grid min-h-screen place-items-center text-slate-500">Cargando catálogo...</div>}><CatalogoQRPublico /></Suspense>;
 
   if (cargando) {

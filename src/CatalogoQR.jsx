@@ -5,7 +5,7 @@ import { useConfiguracionEmpresa } from './utils/useConfiguracionEmpresa';
 import { useNotificacion } from './NotificacionContext';
 import { QRCodeSVG } from 'qrcode.react';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { ExternalLink, Copy, Download, Plus, Search, QrCode, Pencil, Pause, Play, Trash2, X, Save, Menu, ChevronLeft, ChevronRight, CheckCircle2, LoaderCircle, Minus, ShoppingCart, ClipboardList } from 'lucide-react';
+import { ExternalLink, Copy, Download, Plus, Search, QrCode, Pencil, Pause, Play, Trash2, X, Save, Menu, ChevronLeft, ChevronRight, CheckCircle2, LoaderCircle, Minus, ShoppingCart, ClipboardList, Clock3, ChefHat, CircleX, RefreshCw } from 'lucide-react';
 
 const nuevoFormulario = () => ({ nombre: '', estado: 'Activo', expira_el: '', descripcion: '', mensaje_bienvenida: '', categoria: [], marca: [], ubicacion_id: '', precio_min: '', precio_max: '', whatsapp: '', color: '#f59e0b', qr_color: '#111827', qr_titulo: '', qr_subtitulo: '' });
 const urlPublica = (token) => `${window.location.origin}/catalogo-qr/${token}`;
@@ -138,8 +138,21 @@ export function CatalogoQRPublico() {
   const [catalogo, setCatalogo] = useState(null); const [cargando, setCargando] = useState(true); const [busqueda, setBusqueda] = useState('');
   const [categoriaActiva, setCategoriaActiva] = useState('Todas'); const [menuCategoriasAbierto, setMenuCategoriasAbierto] = useState(false);
   const [carrito, setCarrito] = useState({}); const [carritoAbierto, setCarritoAbierto] = useState(false); const [nombreCliente, setNombreCliente] = useState(''); const [telefonoCliente, setTelefonoCliente] = useState(''); const [notaPedido, setNotaPedido] = useState(''); const [errorPedido, setErrorPedido] = useState(''); const [guardandoPedido, setGuardandoPedido] = useState(false); const [pedidoConfirmado, setPedidoConfirmado] = useState(null);
+  const [estadoSeguimiento, setEstadoSeguimiento] = useState(null);
   const sliderCategoriasRef = useRef(null); const productosRef = useRef(null);
   useEffect(() => { let vivo = true; (async () => { const { data: mesa } = await supabase.rpc('obtener_mesa_qr_publica', { p_token: token }); if (!vivo) return; if (mesa) { setCatalogo(mesa); setCargando(false); return; } const { data } = await supabase.rpc('obtener_catalogo_qr_publico', { p_token: token }); if (vivo) { setCatalogo(data); setCargando(false); } })(); return () => { vivo = false; }; }, [token]);
+  useEffect(() => {
+    const seguimientoToken = pedidoConfirmado?.seguimiento_token;
+    if (!seguimientoToken) return undefined;
+    let vivo = true;
+    const consultar = async () => {
+      const { data } = await supabase.rpc('obtener_estado_pedido_qr_publico', { p_token: seguimientoToken });
+      if (vivo && data) setEstadoSeguimiento(data);
+    };
+    consultar();
+    const intervalo = window.setInterval(consultar, 10000);
+    return () => { vivo = false; window.clearInterval(intervalo); };
+  }, [pedidoConfirmado?.seguimiento_token]);
   const productos = catalogo?.productos || [];
   const cantidadEnCarrito = Object.values(carrito).reduce((total, cantidad) => total + Number(cantidad || 0), 0);
   const itemsCarrito = Object.entries(carrito).map(([id, cantidad]) => ({ producto: productos.find((item) => String(item.id) === id), cantidad: Number(cantidad) })).filter((item) => item.producto && item.cantidad > 0);
@@ -185,7 +198,7 @@ export function CatalogoQRPublico() {
       }
       return;
     }
-    setPedidoConfirmado(data); setCarrito({});
+    setPedidoConfirmado(data); setEstadoSeguimiento(null); setCarrito({});
   };
   const seleccionarCategoria = (categoria) => {
     setCategoriaActiva(categoria);
@@ -245,7 +258,7 @@ export function CatalogoQRPublico() {
     {cantidadEnCarrito > 0 && <button type="button" onClick={abrirCarrito} className="fixed bottom-4 left-4 right-4 z-40 mx-auto flex max-w-xl items-center justify-between rounded-2xl bg-slate-950 px-5 py-4 text-left text-white shadow-xl"><span className="flex items-center gap-3"><span className="grid h-10 w-10 place-items-center rounded-xl bg-white/10"><ShoppingCart size={19}/></span><span><strong className="block text-sm">Ver carrito · {formatoCantidad(cantidadEnCarrito)} unidades</strong><span className="text-xs text-slate-300">Revisar y enviar pedido</span></span></span><strong>{moneda(totalCarrito)}</strong></button>}
     {carritoAbierto && <div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-950/60 p-3 backdrop-blur-sm" onMouseDown={(event) => { if (event.target === event.currentTarget && !guardandoPedido) setCarritoAbierto(false); }}><form onSubmit={enviarPedido} className="flex max-h-[92dvh] w-full max-w-xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
       <header className="flex items-start justify-between border-b border-slate-200 px-5 py-4"><div><p className="text-xs font-bold uppercase tracking-widest text-orange-600">Compra</p><h2 className="mt-1 text-xl font-black text-slate-900">{pedidoConfirmado ? 'Pedido recibido' : 'Tu carrito'}</h2></div><button type="button" onClick={() => setCarritoAbierto(false)} aria-label="Cerrar carrito" className="rounded-lg p-2 text-slate-400 hover:bg-slate-100"><X size={20}/></button></header>
-      {pedidoConfirmado ? <div className="overflow-y-auto p-6 text-center"><CheckCircle2 className="mx-auto text-emerald-600" size={48}/><h3 className="mt-3 text-lg font-black text-slate-900">Pedido {pedidoConfirmado.numero_pedido} enviado</h3><p className="mt-2 text-sm text-slate-600">Total: <strong>{moneda(pedidoConfirmado.total)}</strong></p><p className="mt-3 rounded-xl bg-amber-50 p-3 text-sm text-amber-900">El negocio revisará el pedido y confirmará disponibilidad y forma de pago. Este pedido no es un cobro y no reserva ni descuenta stock todavía.</p><button type="button" onClick={() => setCarritoAbierto(false)} className="mt-5 w-full rounded-lg bg-slate-900 px-4 py-3 text-sm font-bold text-white">Volver al catálogo</button></div> : <>
+      {pedidoConfirmado ? <div className="overflow-y-auto p-6 text-center"><CheckCircle2 className="mx-auto text-emerald-600" size={48}/><h3 className="mt-3 text-lg font-black text-slate-900">Pedido {pedidoConfirmado.numero_pedido} enviado</h3><p className="mt-2 text-sm text-slate-600">Total de esta comanda: <strong>{moneda(pedidoConfirmado.total)}</strong></p><p className="mt-3 rounded-xl bg-amber-50 p-3 text-sm text-amber-900">{catalogo.mesa ? `Tu comanda se agregó a la cuenta de ${catalogo.mesa.nombre}. El personal confirmará cuándo está lista y el pago se realiza en el negocio.` : 'El negocio revisará el pedido y confirmará disponibilidad y forma de pago.'} Este envío no es un cobro y todavía no descuenta stock.</p>{catalogo.mesa && pedidoConfirmado.seguimiento_token ? <div className="mt-4 rounded-xl border border-blue-200 bg-blue-50 p-4 text-left"><p className="text-xs font-bold uppercase tracking-wide text-blue-700">Estado actual</p><p className="mt-1 font-black text-blue-950">{estadoSeguimiento?.estado === 'en_preparacion' ? 'En preparación' : estadoSeguimiento?.estado === 'completado' ? 'Listo · avisá al personal' : estadoSeguimiento?.estado === 'cancelado' ? 'Pedido cancelado · consultá al personal' : 'Recibido · esperando cocina'}</p><p className="mt-1 text-xs text-blue-800">Se actualiza automáticamente cada 10 segundos.</p><a href={`${window.location.origin}/pedido/seguimiento/${pedidoConfirmado.seguimiento_token}`} className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-lg bg-blue-700 px-4 py-3 text-sm font-bold text-white">Ver seguimiento del pedido</a></div> : catalogo.mesa ? <p className="mt-4 rounded-lg bg-slate-100 p-3 text-xs text-slate-600">Para activar el seguimiento, ejecutá la migración <b>database/migration_restaurante_estado_pedido_cliente.sql</b> en Supabase.</p> : null}<button type="button" onClick={() => setCarritoAbierto(false)} className="mt-5 w-full rounded-lg bg-slate-900 px-4 py-3 text-sm font-bold text-white">Volver al catálogo</button></div> : <>
         <div className="flex-1 space-y-4 overflow-y-auto p-5">
           {errorPedido && <div role="alert" className="rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm text-rose-800">{errorPedido}</div>}
           {itemsCarrito.length > 0 ? <div className="divide-y divide-slate-100 rounded-xl border border-slate-200">{itemsCarrito.map(({ producto, cantidad }) => <div key={producto.id} className="flex items-center gap-3 p-3"><div className="min-w-0 flex-1"><p className="truncate text-sm font-bold text-slate-800">{producto.nombre}</p><p className="text-xs text-slate-500">{moneda(producto.precio)} · stock {formatoCantidad(stockDisponible(producto))}</p></div><div className="flex items-center gap-2"><button type="button" aria-label={`Quitar una unidad de ${producto.nombre}`} onClick={() => actualizarCarrito(producto, -1)} className="grid h-8 w-8 place-items-center rounded border"><Minus size={14}/></button><span className="min-w-7 text-center text-sm font-bold">{formatoCantidad(cantidad)}</span><button type="button" aria-label={`Agregar una unidad de ${producto.nombre}`} disabled={cantidad >= stockDisponible(producto)} onClick={() => actualizarCarrito(producto, 1)} className="grid h-8 w-8 place-items-center rounded bg-slate-900 text-white disabled:opacity-40"><Plus size={14}/></button><button type="button" aria-label={`Quitar ${producto.nombre} del carrito`} onClick={() => setCarrito((actual) => { const siguiente = { ...actual }; delete siguiente[producto.id]; return siguiente; })} className="grid h-8 w-8 place-items-center rounded text-rose-600 hover:bg-rose-50"><Trash2 size={15}/></button></div></div>)}</div> : <div className="rounded-xl border border-dashed p-6 text-center text-sm text-slate-500">Tu carrito está vacío. Volvé al catálogo para elegir productos.</div>}
@@ -258,4 +271,40 @@ export function CatalogoQRPublico() {
         <footer className="flex justify-end gap-2 border-t border-slate-200 bg-slate-50 px-5 py-4"><button type="button" disabled={guardandoPedido} onClick={() => setCarritoAbierto(false)} className="rounded-lg border border-slate-300 bg-white px-4 py-2.5 text-sm font-bold text-slate-600">Seguir mirando</button><button type="submit" disabled={guardandoPedido || itemsCarrito.length === 0} className="inline-flex items-center gap-2 rounded-lg bg-orange-500 px-5 py-2.5 text-sm font-bold text-white hover:bg-orange-600 disabled:cursor-not-allowed disabled:opacity-60">{guardandoPedido ? <><LoaderCircle size={16} className="animate-spin"/>Enviando…</> : <><ShoppingCart size={16}/>Enviar pedido</>}</button></footer>
       </>}</form></div>}
   </main>;
+}
+
+export function EstadoPedidoQRPublico() {
+  const token = window.location.pathname.split('/').filter(Boolean).at(-1);
+  const [pedido, setPedido] = useState(null);
+  const [cargando, setCargando] = useState(true);
+  const [actualizando, setActualizando] = useState(false);
+  const [error, setError] = useState('');
+  const [actualizadoEn, setActualizadoEn] = useState(null);
+  const [refreshKey, setRefreshKey] = useState(0);
+
+  useEffect(() => {
+    let vivo = true;
+    const consultar = async () => {
+      const { data, error: errorConsulta } = await supabase.rpc('obtener_estado_pedido_qr_publico', { p_token: token });
+      if (!vivo) return;
+      setPedido(data || null);
+      setError(errorConsulta ? 'No se pudo consultar el estado. Volvé a intentar en unos segundos.' : data ? '' : 'No encontramos este pedido. Revisá que el enlace esté completo.');
+      setActualizadoEn(data ? new Date() : null);
+      setCargando(false);
+      setActualizando(false);
+    };
+    consultar();
+    const intervalo = window.setInterval(consultar, 10000);
+    return () => { vivo = false; window.clearInterval(intervalo); };
+  }, [token, refreshKey]);
+
+  const estados = [
+    { id: 'pendiente', titulo: 'Pedido recibido', detalle: 'El negocio recibió tu comanda.', icono: ClipboardList },
+    { id: 'en_preparacion', titulo: 'En preparación', detalle: 'Cocina está preparando tu pedido.', icono: ChefHat },
+    { id: 'completado', titulo: 'Listo', detalle: 'Tu pedido está listo. Avisá al personal; el pago se realiza en el local.', icono: CheckCircle2 },
+  ];
+  const indice = estados.findIndex((item) => item.id === pedido?.estado);
+  const IconoEstado = pedido?.estado === 'cancelado' ? CircleX : indice >= 0 ? estados[indice].icono : Clock3;
+
+  return <main className="grid min-h-screen place-items-center bg-slate-50 p-4"><section className="w-full max-w-lg overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xl"><header className="bg-slate-950 px-6 py-5 text-white"><p className="text-xs font-bold uppercase tracking-[.18em] text-orange-300">Seguimiento QR</p><h1 className="mt-1 text-2xl font-black">Estado de tu pedido</h1></header><div className="space-y-5 p-6">{cargando ? <div className="py-10 text-center text-slate-500"><LoaderCircle className="mx-auto animate-spin"/><p className="mt-3">Buscando tu pedido…</p></div> : error ? <div role="alert" className="rounded-xl bg-amber-50 p-4 text-sm text-amber-900">{error}<p className="mt-1 text-xs">Si la enviaste hace poco, pedí ayuda al personal del local.</p></div> : <><div className={`rounded-xl p-4 ${pedido.estado==='cancelado'?'bg-rose-50 text-rose-900':'bg-blue-50 text-blue-950'}`}><div className="flex items-center gap-3"><IconoEstado size={27}/><div><p className="text-xs font-bold uppercase tracking-wide">Comanda {pedido.numero_pedido}</p><h2 className="text-xl font-black">{pedido.mesa ? `Mesa ${pedido.mesa}` : 'Pedido QR'}</h2></div></div></div>{pedido.estado==='cancelado' ? <div className="rounded-xl border border-rose-200 bg-rose-50 p-4"><h3 className="font-black text-rose-900">Pedido cancelado</h3><p className="mt-1 text-sm text-rose-800">El local canceló esta comanda. Consultá al personal si necesitás más información.</p></div> : <div className="space-y-0">{estados.map((etapa,index)=>{const EtapaIcono=etapa.icono;const activa=index<=indice;return <div key={etapa.id} className="relative flex gap-3 pb-5 last:pb-0"><div className="flex flex-col items-center"><span className={`grid h-9 w-9 place-items-center rounded-full ${activa?'bg-emerald-600 text-white':'bg-slate-100 text-slate-400'}`}>{index<indice?<CheckCircle2 size={18}/>:<EtapaIcono size={18}/>}</span>{index<estados.length-1&&<span className={`mt-1 w-0.5 flex-1 ${index<indice?'bg-emerald-500':'bg-slate-200'}`}/>}</div><div className="pt-1"><p className={`font-bold ${activa?'text-slate-900':'text-slate-400'}`}>{etapa.titulo}</p><p className={`text-sm ${activa?'text-slate-600':'text-slate-400'}`}>{etapa.detalle}</p></div></div>;})}</div>}</>}{error&&<button type="button" onClick={()=>{setActualizando(true);setRefreshKey((key)=>key+1);}} disabled={actualizando} className="inline-flex w-full items-center justify-center gap-2 rounded-lg border border-slate-300 px-4 py-2.5 text-sm font-bold text-slate-700"><RefreshCw size={15} className={actualizando?'animate-spin':''}/>Reintentar</button>}<p className="border-t border-slate-100 pt-4 text-center text-xs text-slate-500">{actualizadoEn?`Actualizado ${actualizadoEn.toLocaleTimeString('es-PY',{hour:'2-digit',minute:'2-digit'})} · se renueva automáticamente cada 10 segundos`:'Este enlace muestra únicamente el estado de tu comanda.'}</p></div></section></main>;
 }

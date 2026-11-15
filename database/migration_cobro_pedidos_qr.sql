@@ -51,8 +51,13 @@ BEGIN
   IF auth.uid() IS NULL THEN
     RAISE EXCEPTION 'Se requiere una sesión autenticada';
   END IF;
-  IF p_pedido_id IS NULL OR p_venta IS NULL OR p_items IS NULL
-     OR jsonb_typeof(p_items) <> 'array' OR jsonb_array_length(p_items) = 0 THEN
+  IF p_pedido_id IS NULL OR p_venta IS NULL OR p_items IS NULL THEN
+    RAISE EXCEPTION 'PEDIDO_QR_DATOS_INVALIDOS';
+  END IF;
+  IF jsonb_typeof(p_items) IS DISTINCT FROM 'array' THEN
+    RAISE EXCEPTION 'PEDIDO_QR_DATOS_INVALIDOS';
+  END IF;
+  IF jsonb_array_length(p_items) = 0 THEN
     RAISE EXCEPTION 'PEDIDO_QR_DATOS_INVALIDOS';
   END IF;
 
@@ -75,7 +80,7 @@ BEGIN
   IF coalesce(p_venta->>'estado_pago', '') NOT IN ('Pagado', 'Credito', 'Pago Parcial') THEN
     RAISE EXCEPTION 'PEDIDO_QR_TIPO_OPERACION_INVALIDO';
   END IF;
-  IF p_ubicacion_id IS DISTINCT FROM v_ubicacion_pedido THEN
+  IF v_ubicacion_pedido IS NOT NULL AND p_ubicacion_id IS DISTINCT FROM v_ubicacion_pedido THEN
     RAISE EXCEPTION 'PEDIDO_QR_SUCURSAL_NO_COINCIDE';
   END IF;
   IF coalesce((p_venta->>'descuento')::numeric, 0) <> 0
