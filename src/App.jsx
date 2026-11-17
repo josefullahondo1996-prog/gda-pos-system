@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef, lazy, Suspense } from 'react';
 import { supabase } from './supabaseClient';
 import Login from './Login';
 import CrearNegocio from './CrearNegocio';
+import ActualizarContrasena from './ActualizarContrasena';
 import Dashboard from './Dashboard';
 import ChatBotFlotante from './ChatBotFlotante';
 import { useLanguage } from './LanguageContext';
@@ -104,6 +105,14 @@ function App() {
       async (_event, session) => {
         const nuevoUsuarioId = session?.user?.id || null;
 
+        if (_event === 'PASSWORD_RECOVERY') {
+          usuarioActualId.current = nuevoUsuarioId;
+          setSession(session);
+          setPerfilUsuario(null);
+          setCargando(false);
+          return;
+        }
+
         // Si el usuario logueado es el mismo que ya teníamos cargado, no hacemos
         // nada: esto cubre el caso de "SIGNED_IN"/"TOKEN_REFRESHED" repetidos
         // que Supabase dispara solo al volver a la pestaña del navegador.
@@ -142,6 +151,10 @@ function App() {
       </div>
     );
   }
+
+  const estaRecuperandoContrasena = location.pathname === '/login'
+    && new URLSearchParams(location.search).get('recovery') === '1';
+  if (estaRecuperandoContrasena) return <ActualizarContrasena session={session} />;
 
   if (!session) {
     if (location.pathname !== '/login' && location.pathname !== '/crear-negocio') {

@@ -10,6 +10,12 @@ const Login = ({ setSession, onCrearNegocio, errorExterno }) => {
   const [rememberMe, setRememberMe] = useState(false);
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [mostrarRecuperacion, setMostrarRecuperacion] = useState(false);
+  const [avisoRecuperacion, setAvisoRecuperacion] = useState(() => (
+    new URLSearchParams(window.location.search).get('contrasena_actualizada') === '1'
+      ? 'La contraseña se actualizó. Ya podés iniciar sesión.'
+      : ''
+  ));
 
   const mensajeError = error || errorExterno;
 
@@ -36,6 +42,27 @@ const Login = ({ setSession, onCrearNegocio, errorExterno }) => {
     }
   };
 
+  const solicitarRecuperacion = async (e) => {
+    e.preventDefault();
+    setLoading(true);
+    setError(null);
+    setAvisoRecuperacion('');
+    try {
+      const { error: errorRecuperacion } = await supabase.auth.resetPasswordForEmail(email.trim(), {
+        redirectTo: `${window.location.origin}/login?recovery=1`,
+      });
+      if (errorRecuperacion) {
+        setError(`No se pudo enviar el correo de recuperación: ${errorRecuperacion.message}`);
+      } else {
+        setAvisoRecuperacion('Si existe una cuenta con ese correo, recibirás un enlace para crear una contraseña nueva. Revisá también la carpeta de spam.');
+      }
+    } catch (errorEnvio) {
+      setError(`No se pudo enviar el correo de recuperación: ${errorEnvio.message}`);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <div className="login-page min-h-screen flex flex-col justify-center items-center p-4">
       <div className="login-language w-full max-w-md flex justify-end mb-3"><LanguageSelector /></div>
@@ -45,7 +72,7 @@ const Login = ({ setSession, onCrearNegocio, errorExterno }) => {
           <LogoPyPos size={52} />
         </div>
 
-        <h2 className="text-2xl font-bold text-gray-800 mb-1">{t('login')}</h2>
+        <h2 className="text-2xl font-bold text-gray-800 mb-1">{mostrarRecuperacion ? 'Recuperar contraseña' : t('login')}</h2>
         <p className="text-sm text-gray-400 mb-6">PYpos</p>
 
         {/* Muestra errores de inicio de sesión si los hay */}
@@ -63,7 +90,21 @@ const Login = ({ setSession, onCrearNegocio, errorExterno }) => {
           </div>
         )}
 
-        <form onSubmit={handleSubmit} className="space-y-4 text-left">
+        {avisoRecuperacion && <div role="status" className="mb-4 rounded-lg bg-emerald-50 p-3 text-left text-sm text-emerald-800">{avisoRecuperacion}</div>}
+
+        {mostrarRecuperacion ? (
+          <form onSubmit={solicitarRecuperacion} className="space-y-4 text-left">
+            <p className="text-sm text-gray-600">Ingresá el correo de tu cuenta y te enviaremos un enlace para elegir una contraseña nueva.</p>
+            <div className="relative">
+              <span className="absolute inset-y-0 left-0 flex items-center pl-3 text-gray-400">✉</span>
+              <input type="email" placeholder={t('email')} required autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} className="w-full rounded-xl border border-gray-200 bg-gray-50 py-3 pl-10 pr-4 text-sm transition-all focus:bg-white focus:outline-none focus:ring-2 focus:ring-orange-500" />
+            </div>
+            <button type="submit" disabled={loading} className="mt-4 w-full rounded-xl bg-orange-500 py-3 text-sm font-bold uppercase tracking-wider text-white shadow-md transition-colors hover:bg-orange-600 disabled:cursor-not-allowed disabled:bg-gray-400">
+              {loading ? 'Enviando…' : 'Enviar enlace'}
+            </button>
+            <button type="button" onClick={() => { setMostrarRecuperacion(false); setError(null); setAvisoRecuperacion(''); }} className="w-full py-2 text-sm font-medium text-orange-600 hover:underline">Volver a iniciar sesión</button>
+          </form>
+        ) : <form onSubmit={handleSubmit} className="space-y-4 text-left">
           <div className="relative">
             <span className="absolute inset-y-0 left-0 flex items-center pl-3 text-gray-400">
               <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -106,9 +147,9 @@ const Login = ({ setSession, onCrearNegocio, errorExterno }) => {
               />
               {t('remember')}
             </label>
-            <a href="#recuperar" className="text-orange-500 hover:underline font-medium">
+            <button type="button" onClick={() => { setMostrarRecuperacion(true); setError(null); setAvisoRecuperacion(''); }} className="text-orange-500 hover:underline font-medium">
               {t('forgotPassword')}
-            </a>
+            </button>
           </div>
 
           <button
@@ -120,7 +161,7 @@ const Login = ({ setSession, onCrearNegocio, errorExterno }) => {
           >
             {loading ? t('validating') : t('loginButton')}
           </button>
-        </form>
+        </form>}
 
         {onCrearNegocio && (
           <button onClick={onCrearNegocio} className="text-xs text-orange-500 hover:underline mt-6 font-medium">
