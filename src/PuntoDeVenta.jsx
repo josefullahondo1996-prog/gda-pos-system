@@ -115,6 +115,20 @@ const PuntoDeVenta = ({ cajaInfo, session, perfilUsuario, pedidoRestauranteInici
   const [reglasDescuento, setReglasDescuento] = useState([]);
   const [personalServicio, setPersonalServicio] = useState('');
   const [usuariosServicio, setUsuariosServicio] = useState([]);
+  const nombreUsuarioActualVenta = [perfilUsuario?.nombre, perfilUsuario?.apellido].filter(Boolean).join(' ').trim()
+    || perfilUsuario?.nombre_usuario
+    || perfilUsuario?.email
+    || session?.user?.email
+    || '';
+  const usuariosServicioConUsuarioActual = useMemo(() => {
+    if (!nombreUsuarioActualVenta) return usuariosServicio;
+    const yaEstaEnLaLista = usuariosServicio.some((usuario) => {
+      const nombre = [usuario.nombre, usuario.apellido].filter(Boolean).join(' ').trim();
+      return nombre.localeCompare(nombreUsuarioActualVenta, undefined, { sensitivity: 'accent' }) === 0;
+    });
+    if (yaEstaEnLaLista) return usuariosServicio;
+    return [{ id: perfilUsuario?.id || session?.user?.id || 'usuario-actual', nombre: nombreUsuarioActualVenta, apellido: '' }, ...usuariosServicio];
+  }, [usuariosServicio, nombreUsuarioActualVenta, perfilUsuario?.id, session?.user?.id]);
   // === ESTADOS PRINCIPALES ===
   const [productos, setProductos] = useState([]);
   const [marcasEmpresa, setMarcasEmpresa] = useState([]);
@@ -351,6 +365,11 @@ const PuntoDeVenta = ({ cajaInfo, session, perfilUsuario, pedidoRestauranteInici
     };
     cargarUsuariosServicio();
   }, [empresaId]);
+
+  useEffect(() => {
+    if (!nombreUsuarioActualVenta) return;
+    setPersonalServicio((actual) => actual || nombreUsuarioActualVenta);
+  }, [nombreUsuarioActualVenta]);
 
   // Cuentas de caja reales (las mismas que administrás en "Caja / Banco"),
   // para el selector "Cuenta de pago" del modal de Pago Múltiple.
@@ -757,7 +776,7 @@ const PuntoDeVenta = ({ cajaInfo, session, perfilUsuario, pedidoRestauranteInici
     setNotaVenta('');
     setFechaVencimientoPresupuesto('');
     setNotaRemision('');
-    setPersonalServicio('');
+    setPersonalServicio(nombreUsuarioActualVenta || '');
   };
 
   const subtotal = carrito.reduce((acc, item) => acc + (item.precio_venta || item.precio || 0) * item.cantidad, 0);
@@ -919,7 +938,7 @@ const PuntoDeVenta = ({ cajaInfo, session, perfilUsuario, pedidoRestauranteInici
     const nuevaVenta = {
       empresa_id: empresaId,
       usuario_nombre: [perfilUsuario?.nombre, perfilUsuario?.apellido].filter(Boolean).join(' ').trim() || perfilUsuario?.nombre_usuario || null,
-      personal_servicio: personalServicio || null,
+      personal_servicio: personalServicio || nombreUsuarioActualVenta || null,
       cliente,
       grupo_precio: nombreGrupoPrecioActivo || null,
       total: totalConAjustes,
@@ -1391,9 +1410,9 @@ const PuntoDeVenta = ({ cajaInfo, session, perfilUsuario, pedidoRestauranteInici
             <div className="mx-3 mb-3 rounded-lg border border-gray-200 bg-gray-50 p-2 grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-2 text-[11px]">
               <div className="min-w-0">
                 <label className="font-bold text-gray-500 block mb-1 truncate">{t('serviceSeller')}</label>
-                <select value={personalServicio} onChange={(e) => setPersonalServicio(e.target.value)} className="w-full h-8 border border-gray-300 rounded px-2 bg-white truncate">
+                <select value={personalServicio || nombreUsuarioActualVenta} onChange={(e) => setPersonalServicio(e.target.value)} className="w-full h-8 border border-gray-300 rounded px-2 bg-white truncate">
                   <option value="">{t('selectServiceSeller')}</option>
-                  {usuariosServicio.map((usuario) => {
+                  {usuariosServicioConUsuarioActual.map((usuario) => {
                     const nombre = [usuario.nombre, usuario.apellido].filter(Boolean).join(' ').trim();
                     return <option key={usuario.id} value={nombre}>{nombre}</option>;
                   })}

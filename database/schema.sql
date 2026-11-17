@@ -196,6 +196,7 @@ CREATE TABLE ventas (
     nota_venta text,
     fecha timestamptz,
     caja_id uuid,
+    usuario_id uuid REFERENCES usuarios(id) ON DELETE SET NULL,
     usuario_nombre text,
     personal_servicio text,
     creado_en timestamptz NOT NULL DEFAULT now()
@@ -334,6 +335,7 @@ CREATE INDEX IF NOT EXISTS idx_tareas_empresa_fecha ON tareas(empresa_id, fecha)
 CREATE INDEX IF NOT EXISTS idx_tareas_usuario ON tareas(usuario_id);
 CREATE INDEX ON pagos_compras(compra_id);
 CREATE INDEX ON ventas(empresa_id);
+CREATE INDEX IF NOT EXISTS idx_ventas_empresa_usuario_fecha ON ventas(empresa_id, usuario_id, fecha DESC);
 CREATE INDEX ON detalle_ventas(empresa_id);
 CREATE INDEX ON caja_registros(empresa_id);
 CREATE INDEX ON gastos(empresa_id);
