@@ -6,6 +6,7 @@ import { useEmpresaInfo } from './utils/useEmpresa';
 import { useConfiguracionEmpresa } from './utils/useConfiguracionEmpresa';
 import { useLanguage } from './LanguageContext';
 import { precioConIva, precioSinIva, precioVentaConIva as calcularPrecioVentaConIva, margenDesdeVentaConIva } from './utils/preciosIva';
+import PizzaEditor, { nuevaPizzaConfig } from './PizzaEditor';
 
 const GARANTIAS = ['Sin garantía', '30 días', '3 meses', '6 meses', '1 año'];
 const redondearMoneda = (valor, moneda) => moneda === 'PYG' ? Math.round(Number(valor) || 0) : Math.round((Number(valor) || 0) * 100) / 100;
@@ -26,6 +27,8 @@ const AgregarProducto = ({ onGuardado, onCancelar, productoEditar, ubicacionId }
     const { t } = useLanguage();
     const { id: empresaId, nombre: nombreEmpresa } = useEmpresaInfo();
     const { ajustes: ajustesEmpresa, cargando: cargandoAjustesEmpresa } = useConfiguracionEmpresa(empresaId);
+    const esRestaurante = ajustesEmpresa.business_type === 'Restaurante';
+    const esGastronomia = ajustesEmpresa.business_type === 'Pizzería' || esRestaurante;
     const monedaPrecio = ['PYG', 'USD', 'EUR', 'BRL'].includes(ajustesEmpresa.currency) ? ajustesEmpresa.currency : 'PYG';
     const [tasaPygPorMoneda, setTasaPygPorMoneda] = useState(1);
     const [tasaPrecioLista, setTasaPrecioLista] = useState(false);
@@ -57,6 +60,7 @@ const AgregarProducto = ({ onGuardado, onCancelar, productoEditar, ubicacionId }
     const [imagenesProducto, setImagenesProducto] = useState([]);
     const imagenPreview = imagenesProducto[0] || null;
     const [datosAdicionales, setDatosAdicionales] = useState({});
+    const [pizzaConfig, setPizzaConfig] = useState(nuevaPizzaConfig);
     const [peso, setPeso] = useState('');
     const [mostrarCamposAdicionales, setMostrarCamposAdicionales] = useState(false);
     const [mostrarModulosIntegraciones, setMostrarModulosIntegraciones] = useState(false);
@@ -262,6 +266,21 @@ const AgregarProducto = ({ onGuardado, onCancelar, productoEditar, ubicacionId }
         }));
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [productoEditar, tasaPrecioLista, tasaPygPorMoneda, monedaPrecio]);
+
+    useEffect(() => {
+        let vigente = true;
+        if (!productoEditar?.id || !empresaId) {
+            setPizzaConfig(nuevaPizzaConfig());
+            return () => { vigente = false; };
+        }
+        const cargarPizza = async () => {
+            const { data, error } = await supabase.rpc('obtener_pizza_producto', { p_producto_id: Number(productoEditar.id) });
+            if (!vigente) return;
+            if (!error && data) setPizzaConfig({ ...nuevaPizzaConfig(), ...data });
+        };
+        cargarPizza();
+        return () => { vigente = false; };
+    }, [productoEditar?.id, empresaId]);
 
     useEffect(() => {
         if (!productoEditar || productoEditar.tipo_producto !== 'Variable' || !empresaId || !tasaPrecioLista) return;
@@ -583,7 +602,7 @@ const AgregarProducto = ({ onGuardado, onCancelar, productoEditar, ubicacionId }
     const limpiarFormulario = () => {
         setNombre(''); setSku(''); setUnidad(''); setMarca(''); setCategoria(''); setSubcategoria(''); setGarantia('');
         setDescripcion(''); setAdministraStock(true); setCantidadAlerta(''); setExpiraCantidad('');
-        setImagenesProducto([]); setDatosAdicionales({}); setPeso(''); setUrlImagen(''); setPrecioCompraSinIva(''); setPrecioCompraConIva(''); setPrecioVentaConIva(''); setMargenPct(25);
+        setImagenesProducto([]); setDatosAdicionales({}); setPizzaConfig(nuevaPizzaConfig()); setPeso(''); setUrlImagen(''); setPrecioCompraSinIva(''); setPrecioCompraConIva(''); setPrecioVentaConIva(''); setMargenPct(25);
         setComboProductos([]);
         setVariacionesSeleccionadas([]); setValoresVariacionSeleccionados({}); setVariantesEditadas({}); setVariantesExistentes([]);
         setTipoProducto('Individual');
@@ -593,13 +612,20 @@ const AgregarProducto = ({ onGuardado, onCancelar, productoEditar, ubicacionId }
     };
 
     const guardarProducto = async (opcion) => {
-        const usaMetadataExtendida = imagenesProducto.length > 1 || Boolean(datosAdicionales.folleto_url || datosAdicionales.administra_serie || datosAdicionales.no_vender || datosAdicionales.servicio_ejecutar || Object.keys(datosAdicionales).some((key) => key.startsWith('campo_personalizado_') && String(datosAdicionales[key] || '').trim()));
+        const usaMetadataExtendida = imagenesProducto.length > 1 || Boolean(datosAdicionales.gastronomia_configurada || datosAdicionales.es_pizza || datosAdicionales.pizza_condimentos?.length || datosAdicionales.folleto_url || datosAdicionales.administra_serie || datosAdicionales.no_vender || datosAdicionales.servicio_ejecutar || Object.keys(datosAdicionales).some((key) => key.startsWith('campo_personalizado_') && String(datosAdicionales[key] || '').trim()));
+        const guardarPizzaConfig = Boolean(datosAdicionales.es_pizza || productoEditar?.datos_adicionales?.es_pizza);
+        if (guardarPizzaConfig && tipoProducto === 'Variable') return alert('Para una pizza, usa producto Individual: los tamaños y precios se configuran en sus presentaciones.');
         if (usaMetadataExtendida && metadataProductoDisponible === null) return alert('Espera a que se verifique la configuración de campos del producto.');
-        if (usaMetadataExtendida && !metadataProductoDisponible) return alert('Para guardar las imágenes adicionales, el folleto y los campos personalizados, primero aplicá database/migration_productos_datos_adicionales.sql en Supabase. No se guardó el producto.');
+        if (usaMetadataExtendida && !metadataProductoDisponible) return alert('Para guardar la información de pizza y otros campos adicionales, primero aplicá database/migration_productos_datos_adicionales.sql en Supabase. No se guardó el producto.');
         if (!tasaPrecioLista || !Number.isFinite(tasaPygPorMoneda) || tasaPygPorMoneda <= 0) return alert('Espera a que se cargue una tasa válida para los precios.');
         if (monedaPrecio !== 'PYG' && !monedaPrecioPersistible) return alert('Para guardar productos con precios en otra moneda, primero aplica database/migration_ventas_multimoneda.sql en Supabase.');
         if (!nombre.trim()) return alert('El nombre del producto es obligatorio.');
         if (!unidad) return alert('Seleccioná la unidad.');
+        if (guardarPizzaConfig && datosAdicionales.es_pizza && pizzaConfig.activo) {
+            if (!pizzaConfig.presentaciones?.length || pizzaConfig.presentaciones.some((p) => !String(p.nombre || '').trim() || Number(p.precio_venta) < 0 || !p.ingredientes?.length)) return alert('Completá cada tamaño con nombre, precio e ingredientes de receta antes de guardar la pizza.');
+            if (pizzaConfig.presentaciones.some((p) => p.ingredientes.some((i) => !i.producto_id || !i.unidad || !(Number(i.cantidad) > 0)))) return alert('Revisá los ingredientes de las recetas: producto, unidad y cantidad son obligatorios.');
+            if (pizzaConfig.grupos?.some((g) => !String(g.nombre || '').trim() || g.opciones.some((o) => !String(o.nombre || '').trim() || o.ingredientes.some((i) => !i.producto_id || !i.unidad || !(Number(i.cantidad) > 0))))) return alert('Completá los nombres y las recetas de los adicionales antes de guardar.');
+        }
         if (productoEditar?.tipo_producto === 'Variable' && tipoProducto !== 'Variable' && variantesExistentes.length) {
             return alert('No se puede cambiar el tipo mientras este producto tenga variantes asociadas. Conservá el tipo Variable para proteger sus códigos y stock.');
         }
@@ -626,9 +652,13 @@ const AgregarProducto = ({ onGuardado, onCancelar, productoEditar, ubicacionId }
 
         setGuardando(true);
         try {
+            const codigoAutomaticoPizza = guardarPizzaConfig && !String(sku || '').trim()
+                ? `PIZ-${slugVariacion(nombre).slice(0, 32)}-${crypto.randomUUID().slice(0, 8).toUpperCase()}`
+                : String(sku || '').trim();
+            if (guardarPizzaConfig && !String(sku || '').trim()) setSku(codigoAutomaticoPizza);
             const datosProducto = {
                 nombre: nombre.trim(),
-                codigo: sku || null,
+                codigo: codigoAutomaticoPizza || null,
                 unidad,
                 ubicacion: ubicacionFisica.trim() || null,
                 marca: marca || null,
@@ -747,6 +777,25 @@ const AgregarProducto = ({ onGuardado, onCancelar, productoEditar, ubicacionId }
                     const { error: errorVariante } = await supabase.from('productos').update(fila.datos)
                         .eq('id', fila.id).eq('producto_padre_id', productoGuardado.id).eq('empresa_id', empresaId);
                     if (errorVariante) throw errorVariante;
+                }
+            }
+
+            if (guardarPizzaConfig && productoGuardado?.id) {
+                const configuracion = {
+                    ...pizzaConfig,
+                    activo: Boolean(datosAdicionales.es_pizza) && Boolean(pizzaConfig.activo),
+                    fotos: imagenesProducto.map((url, orden) => ({ url, orden, principal: orden === 0 })),
+                };
+                const { error: errorPizza } = await supabase.rpc('guardar_pizza', { p_producto_id: Number(productoGuardado.id), p_config: configuracion });
+                if (errorPizza) {
+                    if (!productoEditar) await supabase.from('productos').delete().eq('id', productoGuardado.id).eq('empresa_id', empresaId);
+                    else {
+                        const restaurar = Object.fromEntries(Object.keys(datosProducto).filter((campo) => Object.prototype.hasOwnProperty.call(productoEditar, campo)).map((campo) => [campo, productoEditar[campo]]));
+                        const { error: errorRestauracion } = await supabase.from('productos').update(restaurar).eq('id', productoEditar.id).eq('empresa_id', empresaId);
+                        if (errorRestauracion) console.error('No se pudieron revertir los datos del producto después del error de pizza:', errorRestauracion.message);
+                    }
+                    if (errorPizza.code === 'PGRST202' || errorPizza.code === '42883') throw new Error('Falta aplicar database/migration_pizzas_profesional.sql en Supabase. No se guardó la configuración de pizza.');
+                    throw errorPizza;
                 }
             }
 
@@ -906,6 +955,17 @@ const AgregarProducto = ({ onGuardado, onCancelar, productoEditar, ubicacionId }
                         </div>
                     </div>
 
+                    {esGastronomia && <section className="overflow-hidden rounded-xl border border-orange-200 bg-orange-50/40 shadow-sm">
+                        <div className="border-b border-orange-100 px-5 py-4"><h3 className="font-bold text-slate-800">🍽️ Configuración gastronómica</h3><p className="mt-1 text-xs text-slate-600">Opciones del producto para cocina y pedidos.</p></div>
+                        <div className="grid gap-4 p-5 sm:grid-cols-2">
+                            <label className="flex items-center gap-2 rounded-lg border border-orange-100 bg-white p-3 text-sm"><input type="checkbox" checked={datosAdicionales.gastronomia_enviar_cocina ?? (ajustesEmpresa.pizza_send_to_kitchen !== false)} onChange={(event) => setDatosAdicionales((actuales) => ({ ...actuales, gastronomia_configurada: true, gastronomia_enviar_cocina: event.target.checked }))} /> Enviar este producto a cocina</label>
+                            <label className="flex items-center gap-2 rounded-lg border border-orange-100 bg-white p-3 text-sm"><input type="checkbox" checked={datosAdicionales.gastronomia_permitir_notas ?? true} onChange={(event) => setDatosAdicionales((actuales) => ({ ...actuales, gastronomia_configurada: true, gastronomia_permitir_notas: event.target.checked }))} /> Permitir instrucciones especiales</label>
+                            <div className="sm:col-span-2"><p className="mb-2 text-xs font-semibold text-slate-600">Canales para este producto</p><div className="flex flex-wrap gap-2">{[['local','Consumo en el local','pizza_service_dine_in'],['retiro','Retiro','pizza_service_pickup'],['delivery','Delivery','pizza_service_delivery']].map(([id,label])=>{const canales=datosAdicionales.gastronomia_canales || [['local','pizza_service_dine_in'],['retiro','pizza_service_pickup'],['delivery','pizza_service_delivery']].filter(([,key])=>ajustesEmpresa[key]!==false).map(([canal])=>canal);return <label key={id} className="flex items-center gap-2 rounded-full border border-orange-200 bg-white px-3 py-1.5 text-sm"><input type="checkbox" checked={canales.includes(id)} onChange={(event)=>setDatosAdicionales((actuales)=>({ ...actuales, gastronomia_configurada: true, gastronomia_canales: event.target.checked?[...new Set([...canales,id])]:canales.filter((canal)=>canal!==id)}))}/>{label}</label>;})}</div></div>
+                            <label className="flex items-center gap-2 rounded-lg border border-orange-100 bg-white p-3 text-sm font-semibold"><input type="checkbox" checked={Boolean(datosAdicionales.es_pizza)} onChange={(event) => setDatosAdicionales((actuales) => ({ ...actuales, gastronomia_configurada: true, es_pizza: event.target.checked }))} /> Registrar este producto como pizza</label>
+                            {datosAdicionales.es_pizza && <div className="sm:col-span-2 rounded-xl border border-orange-100 bg-white"><PizzaEditor value={pizzaConfig} onChange={setPizzaConfig} productos={catalogoProductos} unidades={unidadesDisponibles} onAplicarEjemplo={(ejemplo) => { setNombre(ejemplo.nombre); setDescripcion(ejemplo.descripcion); setCategoria('Pizzas'); setPrecioVentaConIva(String(Math.round(ejemplo.precios[0] / (tasaPygPorMoneda || 1)))); setPizzaConfig(ejemplo.config); }}/></div>}
+                            {metadataProductoDisponible === false && datosAdicionales.es_pizza && <p className="sm:col-span-2 text-xs font-medium text-amber-800">Aplicá database/migration_productos_datos_adicionales.sql para guardar fotos y datos adicionales del producto.</p>}
+                        </div>
+                    </section>}
                     {/* Datos y tipo (colapsable) */}
                     <div className="bg-white rounded-xl shadow-[0_2px_10px_rgba(15,23,42,0.06)] border border-slate-200 overflow-hidden">
                         <button

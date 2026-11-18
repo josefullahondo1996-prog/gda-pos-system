@@ -1,12 +1,13 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { ChefHat, ClipboardList, Clock3, Download, ExternalLink, LayoutGrid, LoaderCircle, RefreshCw, Save, Settings2, UtensilsCrossed, X, CircleDollarSign, Pencil, Trash2, Search, CheckCircle2, Timer, Users, History as HistoryIcon, ArrowRightLeft } from 'lucide-react';
+import { ChefHat, ClipboardList, Clock3, Download, ExternalLink, LayoutGrid, LoaderCircle, RefreshCw, Save, Settings2, UtensilsCrossed, X, CircleDollarSign, Pencil, Trash2, Search, CheckCircle2, Timer, Users, History as HistoryIcon, ArrowRightLeft, Truck } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { supabase } from './supabaseClient';
 import { useEmpresaInfo } from './utils/useEmpresa';
 import { useConfiguracionEmpresa, notificarConfiguracionEmpresaActualizada } from './utils/useConfiguracionEmpresa';
 import { useNotificacion } from './NotificacionContext';
+import DeliveryRestaurante from './DeliveryRestaurante';
 
 const URL_MESA = (token) => `${window.location.origin}/catalogo-qr/${token}`;
 const FECHA = (value) => new Date(value).toLocaleTimeString('es-PY', { hour: '2-digit', minute: '2-digit' });
@@ -14,6 +15,7 @@ const importe = (value) => `Gs ${Math.round(Number(value || 0)).toLocaleString('
 const SECCIONES = [
   { id: 'mapa', label: 'Mapa de mesas', path: '/restaurante/mapa', icon: LayoutGrid },
   { id: 'pedidos', label: 'Pedidos en cocina', path: '/restaurante/pedidos', icon: ClipboardList },
+  { id: 'delivery', label: 'Delivery', path: '/restaurante/delivery', icon: Truck },
   { id: 'cocina-pro', label: 'Cocina Pro', path: '/restaurante/cocina-pro', icon: ChefHat },
   { id: 'historial', label: 'Historial', path: '/restaurante/historial', icon: HistoryIcon },
   { id: 'configuracion', label: 'Configuración', path: '/restaurante/configuracion', icon: Settings2 },
@@ -305,10 +307,10 @@ export default function Restaurante({ section = 'mapa' }) {
   const activeTab = SECCIONES.find((item) => item.id === section) || SECCIONES[0];
   return <div className="mx-auto w-full max-w-7xl space-y-5 p-4 md:p-6">
     <header className="rounded-2xl bg-gradient-to-r from-slate-950 via-slate-900 to-orange-950 p-5 text-white shadow-lg md:p-7"><div className="flex items-center gap-3"><span className="grid h-11 w-11 place-items-center rounded-xl bg-white/10"><UtensilsCrossed size={22}/></span><div><p className="text-xs font-bold uppercase tracking-[.18em] text-orange-300">Operación gastronómica</p><h1 className="text-2xl font-black">Restaurante · {activeTab.label}</h1></div></div><p className="mt-3 max-w-3xl text-sm text-slate-300">Administrá mesas, recibí pedidos QR y coordiná la preparación desde una pantalla compartida.</p></header>
-    <nav className="grid grid-cols-2 gap-2 rounded-xl border border-slate-200 bg-white p-2 shadow-sm md:grid-cols-5">{SECCIONES.map(({ id, label, path, icon: Icon }) => <Link key={id} to={path} className={`flex items-center justify-center gap-2 rounded-lg px-3 py-3 text-sm font-bold transition ${section === id ? 'bg-orange-500 text-white shadow-sm' : 'text-slate-600 hover:bg-orange-50 hover:text-orange-700'}`}><Icon size={17}/>{label}</Link>)}</nav>
+    <nav className="grid grid-cols-2 gap-2 rounded-xl border border-slate-200 bg-white p-2 shadow-sm md:grid-cols-3 xl:grid-cols-6">{SECCIONES.map(({ id, label, path, icon: Icon }) => <Link key={id} to={path} className={`flex items-center justify-center gap-2 rounded-lg px-3 py-3 text-sm font-bold transition ${section === id ? 'bg-orange-500 text-white shadow-sm' : 'text-slate-600 hover:bg-orange-50 hover:text-orange-700'}`}><Icon size={17}/>{label}</Link>)}</nav>
     {error && <div role="alert" className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">{error}</div>}
 
-    {section === 'historial' ? (
+    {section === 'delivery' ? <DeliveryRestaurante /> : section === 'historial' ? (
       <section className="space-y-4">
         <div className="flex flex-wrap items-center justify-between gap-3"><div><h2 className="text-lg font-black text-slate-900">Historial de mesas y comandas</h2><p className="text-sm text-slate-500">Cambios, cancelaciones y cuentas trasladadas dentro de tu empresa.</p></div><button type="button" onClick={cargarHistorial} disabled={cargandoHistorial} className="inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-bold"><RefreshCw size={15} className={cargandoHistorial?'animate-spin':''}/>Actualizar historial</button></div>
         {errorHistorial && <div role="alert" className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">{errorHistorial}</div>}

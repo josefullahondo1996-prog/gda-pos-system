@@ -19,6 +19,7 @@ import { useNotificacion } from './NotificacionContext';
 import { cantidadInicial, pasoCantidad, cantidadValida, cantidadVisible, cantidadInterna, pasoVisible, etiquetaCantidad, formatearStock } from './utils/cantidadProducto';
 import { useLanguage } from './LanguageContext';
 import LogoPyPos from './LogoPyPos';
+import PizzaCustomizer from './PizzaCustomizer';
 
 const formatGs = (valor) => `Gs ${Number(valor || 0).toLocaleString('es-PY')}`;
 const BanderaMoneda = ({ codigo, className = 'h-7 w-7' }) => {
@@ -131,6 +132,7 @@ const PuntoDeVenta = ({ cajaInfo, session, perfilUsuario, pedidoRestauranteInici
   }, [usuariosServicio, nombreUsuarioActualVenta, perfilUsuario?.id, session?.user?.id]);
   // === ESTADOS PRINCIPALES ===
   const [productos, setProductos] = useState([]);
+  const [pizzaParaConfigurar, setPizzaParaConfigurar] = useState(null);
   const [marcasEmpresa, setMarcasEmpresa] = useState([]);
   const [carrito, setCarrito] = useState([]);
   const [pedidoRestaurante, setPedidoRestaurante] = useState(null);
@@ -423,7 +425,18 @@ const PuntoDeVenta = ({ cajaInfo, session, perfilUsuario, pedidoRestauranteInici
       const { data, error } = await supabase.from('productos').select('*').eq('empresa_id', empresaId).order('nombre', { ascending: true });
 
       if (error && error.code !== '42P01') throw error;
-      if (data) setProductos(data);
+      if (data) {
+        const { data: pizzasRegistradas, error: errorPizzas } = await supabase.from('pizzas').select('producto_id').eq('empresa_id', empresaId);
+        if (errorPizzas) { setProductos(data.map((producto) => ({ ...producto, pizza: null }))); return; }
+        const idsPizza = new Set((pizzasRegistradas || []).map((pizza) => String(pizza.producto_id)));
+        const pizzas = await Promise.all(data.map(async (producto) => {
+          if (!idsPizza.has(String(producto.id))) return { ...producto, pizza: null };
+          const { data: config, error: errorConfig } = await supabase.rpc('obtener_pizza_producto', { p_producto_id: producto.id });
+          if (errorConfig || !config?.id || !config.activo) return { ...producto, pizza: null };
+          return { ...producto, pizza: config };
+        }));
+        setProductos(pizzas);
+      }
     } catch (error) {
       console.error('Error al cargar productos:', error.message);
     } finally {
@@ -537,7 +550,7 @@ const PuntoDeVenta = ({ cajaInfo, session, perfilUsuario, pedidoRestauranteInici
           const subtotalOriginal = Number(linea.subtotal ?? precioOriginal * cantidad);
           const precio = Number.isFinite(subtotalOriginal) && cantidad > 0 ? subtotalOriginal / cantidad : precioOriginal;
           if (!producto || producto.activo === false || producto.tipo_producto === 'Variable' || !Number.isFinite(cantidad) || cantidad <= 0 || !Number.isFinite(precio) || precio < 0 || !Number.isFinite(subtotalOriginal) || subtotalOriginal < 0) return null;
-          return { ...producto, pos_line_key: `qr-${linea._pedido_id}-${linea._linea}`, qr_subtotal_fijo: subtotalOriginal, precio_lista_base: precio, precio_venta: precio, precio, cotizacion_precio_fijo: true, cantidad };
+          return { ...producto, nombre: linea.nombre || producto.nombre, pos_line_key: `qr-${linea._pedido_id}-${linea._linea}`, qr_subtotal_fijo: subtotalOriginal, precio_lista_base: precio, precio_venta: precio, precio, cotizacion_precio_fijo: true, configuracion_pizza: linea.configuracion_pizza || {}, cantidad };
         });
         if (!lineas.length || filas.some((fila) => !fila)) {
           throw new Error('No se pudo cargar el pedido completo: algún producto ya no está disponible en el POS. No se agregó ningún artículo.');
@@ -632,7 +645,7 @@ const PuntoDeVenta = ({ cajaInfo, session, perfilUsuario, pedidoRestauranteInici
   useEffect(() => {
     if (carrito.length === 0) return;
     setCarrito((actual) => actual.map((item) => {
-      if (item.cotizacion_precio_fijo) return item;
+      if (item.cotizacion_precio_fijo || item.configuracion_pizza?.presentacion_id) return item;
       const precioBase = Number(item.precio_lista_base ?? item.precio_venta ?? item.precio) || 0;
       const precioGrupo = precioDelGrupo(item);
       const precioAplicado = precioGrupo ?? precioBase;
@@ -651,6 +664,7 @@ const PuntoDeVenta = ({ cajaInfo, session, perfilUsuario, pedidoRestauranteInici
   const agregarAlCarrito = (producto) => {
     if (pedidoRestaurante) return notificar.info('Para conservar el total de la cuenta QR, no agregues otros artículos desde este carrito.');
     if (producto?.tipo_producto === 'Variable' || producto?.activo === false) return;
+    if (producto?.pizza?.id) { setPizzaParaConfigurar(producto); return; }
     const itemExistente = carrito.find((item) => item.id === producto.id);
     const incremento = pasoCantidad(producto.unidad);
     const cantidadActual = itemExistente ? Number(itemExistente.cantidad) : 0;
@@ -682,9 +696,31 @@ const PuntoDeVenta = ({ cajaInfo, session, perfilUsuario, pedidoRestauranteInici
     setCicloResaltadoCarrito((ciclo) => ciclo + 1);
   };
 
+  const agregarPizzaPersonalizada = (seleccion) => {
+    const producto = pizzaParaConfigurar;
+    if (!producto) return;
+    const precioBase = Number(seleccion.precio) || 0;
+    const grupoKey = `pizza-${producto.id}-${Date.now()}`;
+    const linea = {
+      ...producto,
+      id: producto.id,
+      pos_line_key: grupoKey,
+      nombre: seleccion.nombre,
+      precio_lista_base: precioBase,
+      precio_venta: precioBase,
+      precio: precioBase,
+      cantidad: 1,
+      configuracion_pizza: seleccion.configuracion_pizza,
+    };
+    setCarrito((actual) => [linea, ...actual]);
+    setProductoAgregadoId(producto.id);
+    setCicloResaltadoCarrito((ciclo) => ciclo + 1);
+    setPizzaParaConfigurar(null);
+  };
+
   const eliminarDelCarrito = (id) => {
     if (pedidoRestaurante) return;
-    const carritoRestante = carrito.filter((item) => item.id !== id);
+    const carritoRestante = carrito.filter((item) => (item.pos_line_key || item.id) !== id);
     setCarrito(carritoRestante);
     if (productoAgregadoId === id) setProductoAgregadoId(null);
   };
@@ -693,15 +729,16 @@ const PuntoDeVenta = ({ cajaInfo, session, perfilUsuario, pedidoRestauranteInici
     if (pedidoRestaurante) return;
     nuevaCantidad = Number(nuevaCantidad);
     if (!cantidadValida(nuevaCantidad)) return;
-    const productoOriginal = productos.find((p) => p.id === id);
-    const stockDisponible = productoOriginal ? stockEnSucursal(productoOriginal) : undefined;
+    const itemObjetivo = carrito.find((item) => (item.pos_line_key || item.id) === id);
+    const productoOriginal = productos.find((p) => p.id === itemObjetivo?.id);
+    const stockDisponible = productoOriginal?.pizza ? undefined : productoOriginal ? stockEnSucursal(productoOriginal) : undefined;
     if (stockDisponible !== null && stockDisponible !== undefined && nuevaCantidad > stockDisponible) {
       alert(`Solo quedan ${stockDisponible} unidades de este producto en stock.`);
       if (stockDisponible <= 0) return;
       nuevaCantidad = stockDisponible;
     }
     setCarrito(carrito.map((item) =>
-      item.id === id ? { ...item, cantidad: nuevaCantidad } : item
+      (item.pos_line_key || item.id) === id ? { ...item, cantidad: nuevaCantidad } : item
     ));
   };
 
@@ -752,7 +789,7 @@ const PuntoDeVenta = ({ cajaInfo, session, perfilUsuario, pedidoRestauranteInici
     const precio = Number(nuevoPrecio);
     if (Number.isNaN(precio) || precio < 0) return;
     setCarrito(carrito.map((item) =>
-      item.id === id ? { ...item, precio_venta: precio, precio: precio } : item
+      (item.pos_line_key || item.id) === id ? { ...item, precio_venta: precio, precio: precio } : item
     ));
   };
 
@@ -761,7 +798,7 @@ const PuntoDeVenta = ({ cajaInfo, session, perfilUsuario, pedidoRestauranteInici
     const subtotal = Number(nuevoSubtotal);
     if (Number.isNaN(subtotal) || subtotal < 0) return;
     setCarrito(carrito.map((item) => {
-      if (item.id !== id) return item;
+      if ((item.pos_line_key || item.id) !== id) return item;
       const precioUnitario = item.cantidad > 0 ? subtotal / item.cantidad : subtotal;
       return { ...item, precio_venta: precioUnitario, precio: precioUnitario };
     }));
@@ -993,6 +1030,7 @@ const PuntoDeVenta = ({ cajaInfo, session, perfilUsuario, pedidoRestauranteInici
         nombre_producto: item.nombre,
         cantidad: item.cantidad,
         precio_unitario: item.precio_venta || item.precio || 0,
+        configuracion_pizza: item.configuracion_pizza || {},
         precio_unitario_moneda: convertirDesdeGs(item.precio_venta || item.precio || 0),
         subtotal: Number.isFinite(Number(item.qr_subtotal_fijo)) ? Number(item.qr_subtotal_fijo) : (item.precio_venta || item.precio || 0) * item.cantidad,
         subtotal_moneda: convertirDesdeGs(Number.isFinite(Number(item.qr_subtotal_fijo)) ? Number(item.qr_subtotal_fijo) : (item.precio_venta || item.precio || 0) * item.cantidad),
@@ -1439,6 +1477,7 @@ const PuntoDeVenta = ({ cajaInfo, session, perfilUsuario, pedidoRestauranteInici
                   </tr>
                 ) : (
                   carrito.map((item, indexLinea) => {
+                    const lineaKey = item.pos_line_key || item.id;
                     const precioGs = item.precio_venta || item.precio || 0;
                     const precio = monedaVenta === 'PYG' ? precioGs : convertirDesdeGs(precioGs);
                     const subtotalItem = monedaVenta === 'PYG' ? precioGs * item.cantidad : convertirDesdeGs(precioGs * item.cantidad);
@@ -1469,18 +1508,18 @@ const PuntoDeVenta = ({ cajaInfo, session, perfilUsuario, pedidoRestauranteInici
                           </td>
                           <td className="py-3 px-1 text-center whitespace-nowrap">
                             <div className="flex items-center justify-center gap-2">
-                              <button type="button" disabled={Boolean(pedidoRestaurante)} aria-label={`Restar cantidad de ${item.nombre}`} onClick={() => cambiarCantidad(item.id, item.cantidad - pasoCantidad(item.unidad))} className="h-7 w-7 rounded-md border border-slate-200 bg-white text-slate-600 font-bold hover:bg-slate-50 disabled:opacity-50">&#8722;</button>
+                              <button type="button" disabled={Boolean(pedidoRestaurante)} aria-label={`Restar cantidad de ${item.nombre}`} onClick={() => cambiarCantidad(lineaKey, item.cantidad - pasoCantidad(item.unidad))} className="h-7 w-7 rounded-md border border-slate-200 bg-white text-slate-600 font-bold hover:bg-slate-50 disabled:opacity-50">&#8722;</button>
                               <input
                                 type="number"
                                 min={pasoVisible(item.unidad)}
                                 step={pasoVisible(item.unidad)}
                                 value={cantidadVisible(item.cantidad, item.unidad)}
-                                onChange={(e) => cambiarCantidad(item.id, cantidadInterna(e.target.value, item.unidad))}
+                                onChange={(e) => cambiarCantidad(lineaKey, cantidadInterna(e.target.value, item.unidad))}
                                 readOnly={Boolean(pedidoRestaurante)}
                                 className="w-12 border-b border-slate-300 bg-transparent px-1 py-1 text-center font-semibold focus:outline-none focus:border-sky-500"
                                 aria-label={`Cantidad de ${item.nombre} en ${etiquetaCantidad(item.unidad)}`}
                               />
-                              <button type="button" disabled={Boolean(pedidoRestaurante)} aria-label={`Sumar cantidad de ${item.nombre}`} onClick={() => cambiarCantidad(item.id, item.cantidad + pasoCantidad(item.unidad))} className="h-7 w-7 rounded-md border border-slate-200 bg-white text-emerald-600 font-bold hover:bg-emerald-50 disabled:opacity-50">+</button>
+                              <button type="button" disabled={Boolean(pedidoRestaurante)} aria-label={`Sumar cantidad de ${item.nombre}`} onClick={() => cambiarCantidad(lineaKey, item.cantidad + pasoCantidad(item.unidad))} className="h-7 w-7 rounded-md border border-slate-200 bg-white text-emerald-600 font-bold hover:bg-emerald-50 disabled:opacity-50">+</button>
                               <select value={item.unidad || 'UNID'} aria-label={`Unidad de ${item.nombre}`} title="Unidad base definida para este producto" disabled className="h-9 max-w-[76px] rounded-md border border-slate-200 bg-white px-2 text-xs font-semibold disabled:cursor-not-allowed disabled:opacity-100">
                                 <option value={item.unidad || 'UNID'}>{String(item.unidad || 'UNID').toLocaleUpperCase('es')}</option>
                               </select>
@@ -1490,8 +1529,8 @@ const PuntoDeVenta = ({ cajaInfo, session, perfilUsuario, pedidoRestauranteInici
                             <input
                               type="number"
                               value={precio}
-                              onChange={(e) => cambiarPrecioUnitario(item.id, convertirAGs(Number(e.target.value) || 0))}
-                              readOnly={Boolean(pedidoRestaurante)}
+                              onChange={(e) => cambiarPrecioUnitario(lineaKey, convertirAGs(Number(e.target.value) || 0))}
+                              readOnly={Boolean(pedidoRestaurante || item.configuracion_pizza)}
                               className="w-24 rounded-md border border-slate-200 px-2 py-2 text-right font-semibold text-slate-800 focus:outline-none focus:ring-1 focus:ring-sky-400"
                             />
                           </td>
@@ -1499,13 +1538,13 @@ const PuntoDeVenta = ({ cajaInfo, session, perfilUsuario, pedidoRestauranteInici
                             <input
                               type="number"
                               value={subtotalItem}
-                              onChange={(e) => cambiarSubtotalManual(item.id, convertirAGs(Number(e.target.value) || 0))}
-                              readOnly={Boolean(pedidoRestaurante)}
+                              onChange={(e) => cambiarSubtotalManual(lineaKey, convertirAGs(Number(e.target.value) || 0))}
+                              readOnly={Boolean(pedidoRestaurante || item.configuracion_pizza)}
                               className="w-24 rounded-md border border-slate-200 px-2 py-2 text-right font-bold text-slate-800 focus:outline-none focus:ring-1 focus:ring-sky-400"
                             />
                           </td>
                           <td className="py-3 pl-2 text-center whitespace-nowrap">
-                            <button type="button" disabled={Boolean(pedidoRestaurante)} aria-label={`Quitar ${item.nombre} del carrito`} onClick={() => eliminarDelCarrito(item.id)} className="text-red-400 hover:text-red-600 font-bold disabled:opacity-50">✕</button>
+                            <button type="button" disabled={Boolean(pedidoRestaurante)} aria-label={`Quitar ${item.nombre} del carrito`} onClick={() => eliminarDelCarrito(lineaKey)} className="text-red-400 hover:text-red-600 font-bold disabled:opacity-50">✕</button>
                           </td>
                         </tr>
 
@@ -1790,6 +1829,7 @@ const PuntoDeVenta = ({ cajaInfo, session, perfilUsuario, pedidoRestauranteInici
           </section>
         </div>
       )}
+      {pizzaParaConfigurar?.pizza && <PizzaCustomizer pizza={{ ...pizzaParaConfigurar.pizza, nombre: pizzaParaConfigurar.nombre }} onClose={() => setPizzaParaConfigurar(null)} onConfirm={agregarPizzaPersonalizada} />}
     </div>
   );
 };
