@@ -36,7 +36,7 @@ const BanderaMoneda = ({ codigo, className = 'h-7 w-7' }) => {
   </svg>;
 };
 
-const PuntoDeVenta = ({ cajaInfo, session, perfilUsuario, pedidoRestauranteInicial = null, onPedidoRestauranteImportado, onVolver, onSolicitarCierre, onNuevoGasto, onAbrirGuia }) => {
+const PuntoDeVenta = ({ cajaInfo, session, perfilUsuario, pedidoRestauranteInicial = null, pedidoDeliveryInicial = null, onPedidoRestauranteImportado, onVolver, onSolicitarCierre, onNuevoGasto, onAbrirGuia }) => {
   const { t } = useLanguage();
   const { id: empresaId, nombre: nombreEmpresa, direccion: direccionEmpresa, telefono: telefonoEmpresa, ruc: rucEmpresa, logo_url: logoEmpresa } = useEmpresaInfo();
   const { ajustes: ajustesEmpresa, cargando: cargandoAjustesEmpresa } = useConfiguracionEmpresa(empresaId);
@@ -136,7 +136,10 @@ const PuntoDeVenta = ({ cajaInfo, session, perfilUsuario, pedidoRestauranteInici
   const [marcasEmpresa, setMarcasEmpresa] = useState([]);
   const [carrito, setCarrito] = useState([]);
   const [pedidoRestaurante, setPedidoRestaurante] = useState(null);
+  const [pedidoDelivery, setPedidoDelivery] = useState(null);
+  const pedidoVinculado = Boolean(pedidoRestaurante || pedidoDelivery);
   const pedidoRestauranteCargadoRef = useRef(null);
+  const pedidoDeliveryCargadoRef = useRef(null);
   const onPedidoRestauranteImportadoRef = useRef(onPedidoRestauranteImportado);
   const notificarRef = useRef(notificar);
   onPedidoRestauranteImportadoRef.current = onPedidoRestauranteImportado;
@@ -476,7 +479,7 @@ const PuntoDeVenta = ({ cajaInfo, session, perfilUsuario, pedidoRestauranteInici
 
   useEffect(() => {
     if (cargando || cotizacionCargada) return;
-    if (pedidoRestauranteInicial?.id || pedidoRestauranteInicial?.ids?.length) {
+    if (pedidoRestauranteInicial?.id || pedidoRestauranteInicial?.ids?.length || pedidoDeliveryInicial?.id) {
       setCotizacionCargada(true);
       return;
     }
@@ -516,7 +519,7 @@ const PuntoDeVenta = ({ cajaInfo, session, perfilUsuario, pedidoRestauranteInici
       notificar.error('No se pudo leer la cotización pendiente.');
     }
     setCotizacionCargada(true);
-  }, [cargando, cotizacionCargada, productos, pedidoRestauranteInicial?.id, pedidoRestauranteInicial?.ids]);
+  }, [cargando, cotizacionCargada, productos, pedidoRestauranteInicial?.id, pedidoRestauranteInicial?.ids, pedidoDeliveryInicial?.id]);
 
   useEffect(() => {
     const pedidoIds = [...new Set(Array.isArray(pedidoRestauranteInicial?.ids)
@@ -576,6 +579,62 @@ const PuntoDeVenta = ({ cajaInfo, session, perfilUsuario, pedidoRestauranteInici
       if (pedidoRestauranteCargadoRef.current === clavePedidos) pedidoRestauranteCargadoRef.current = null;
     };
   }, [pedidoRestauranteInicial?.id, pedidoRestauranteInicial?.ids, cargando, empresaId, productos]);
+
+  useEffect(() => {
+    const pedidoId = pedidoDeliveryInicial?.id ? String(pedidoDeliveryInicial.id) : '';
+    if (!pedidoId || cargando || !empresaId || pedidoDeliveryCargadoRef.current === pedidoId) return;
+    pedidoDeliveryCargadoRef.current = pedidoId;
+    let vigente = true;
+    const importarDelivery = async () => {
+      try {
+        if (carrito.length || sessionStorage.getItem('pypos_cotizacion_pendiente')) {
+          throw new Error('El POS ya tiene productos o una cotización pendiente. Cierra o completa ese carrito antes de facturar el pedido delivery.');
+        }
+        const { data: pedido, error } = await supabase.from('pedidos').select('id,empresa_id,numero_pedido,estado,items,total,nota,cliente_nombre,origen,ubicacion_id,delivery_tipo,delivery_estado,delivery_costo,delivery_efectivo_recibido,delivery_vuelto,delivery_facturada_en').eq('id', pedidoId).eq('empresa_id', empresaId).maybeSingle();
+        if (error) throw error;
+        if (!pedido || pedido.delivery_tipo !== 'delivery' || pedido.delivery_estado !== 'entregado' || pedido.estado !== 'completado') {
+          throw new Error('El pedido delivery debe estar entregado y listo antes de facturarlo.');
+        }
+        if (pedido.delivery_facturada_en) throw new Error('Este pedido ya fue facturado. Actualiza la bandeja de Delivery.');
+        if (pedido.delivery_efectivo_recibido == null) throw new Error('Este pedido no tiene registrado el efectivo que recibió el repartidor.');
+        const { data: cobros, error: errorCobro } = await supabase.from('pedidos_qr_ventas').select('pedido_id').eq('pedido_id', pedidoId);
+        if (errorCobro) throw errorCobro;
+        if (cobros?.length) throw new Error('Este pedido ya tiene una venta asociada. Actualiza la bandeja de Delivery.');
+        const lineas = Array.isArray(pedido.items) ? pedido.items : [];
+        const filas = lineas.map((linea, index) => {
+          const producto = productos.find((item) => String(item.id) === String(linea.producto_id));
+          const cantidad = Number(linea.cantidad);
+          const precioOriginal = Number(linea.precio_unitario);
+          const subtotalOriginal = Number(linea.subtotal ?? precioOriginal * cantidad);
+          const precio = Number.isFinite(subtotalOriginal) && cantidad > 0 ? subtotalOriginal / cantidad : precioOriginal;
+          if (!producto || producto.activo === false || producto.tipo_producto === 'Variable' || !Number.isFinite(cantidad) || cantidad <= 0 || !Number.isFinite(precio) || precio < 0 || !Number.isFinite(subtotalOriginal) || subtotalOriginal < 0) return null;
+          return { ...producto, nombre: linea.nombre || producto.nombre, pos_line_key: `delivery-${pedido.id}-${index}`, qr_subtotal_fijo: subtotalOriginal, precio_lista_base: precio, precio_venta: precio, precio, cotizacion_precio_fijo: true, cantidad, configuracion_pizza: linea.configuracion_pizza || {} };
+        });
+        if (!lineas.length || filas.some((fila) => !fila)) throw new Error('No se pudo cargar el pedido completo porque uno o más productos ya no están disponibles en el POS.');
+        if (!vigente) return;
+        setCarrito(filas);
+        setCliente(pedido.cliente_nombre || 'Cliente Ocasional');
+        setMetodoPago('Efectivo');
+        setMontoPagado(String(convertirDesdeGs(Number(pedido.delivery_efectivo_recibido))));
+        setDescuento('');
+        setCargoEmbalaje(String(Number(pedido.delivery_costo) || 0));
+        setNotaVenta(`Delivery ${pedido.numero_pedido} · envío Gs ${Math.round(Number(pedido.delivery_costo) || 0).toLocaleString('es-PY')} · efectivo recibido Gs ${Math.round(Number(pedido.delivery_efectivo_recibido)).toLocaleString('es-PY')} · vuelto entregado Gs ${Math.round(Number(pedido.delivery_vuelto) || 0).toLocaleString('es-PY')}${pedido.nota ? ` · ${pedido.nota}` : ''}`);
+        setPedidoDelivery({ id: pedido.id, numero_pedido: pedido.numero_pedido, total: Number(pedido.total), delivery_costo: Number(pedido.delivery_costo) || 0, efectivo_recibido: Number(pedido.delivery_efectivo_recibido), vuelto: Number(pedido.delivery_vuelto) || 0 });
+        notificarRef.current.info(`Pedido ${pedido.numero_pedido} listo para facturar. El total incluye el envío y ya tiene precargado el efectivo recibido.`);
+        onPedidoRestauranteImportadoRef.current?.();
+      } catch (error) {
+        if (vigente) {
+          notificarRef.current.error(error.message || 'No se pudo cargar el pedido delivery en el POS.');
+          onPedidoRestauranteImportadoRef.current?.();
+        }
+      }
+    };
+    importarDelivery();
+    return () => {
+      vigente = false;
+      if (pedidoDeliveryCargadoRef.current === pedidoId) pedidoDeliveryCargadoRef.current = null;
+    };
+  }, [pedidoDeliveryInicial?.id, cargando, empresaId, productos]);
 
   useEffect(() => {
     const actualizarStock = () => {
@@ -662,7 +721,7 @@ const PuntoDeVenta = ({ cajaInfo, session, perfilUsuario, pedidoRestauranteInici
   }, [nombreGrupoPrecioActivo]);
 
   const agregarAlCarrito = (producto) => {
-    if (pedidoRestaurante) return notificar.info('Para conservar el total de la cuenta QR, no agregues otros artículos desde este carrito.');
+    if (pedidoVinculado) return notificar.info('Este pedido importado mantiene sus artículos y precios originales; no agregues otros productos desde este carrito.');
     if (producto?.tipo_producto === 'Variable' || producto?.activo === false) return;
     if (producto?.pizza?.id) { setPizzaParaConfigurar(producto); return; }
     const itemExistente = carrito.find((item) => item.id === producto.id);
@@ -719,14 +778,14 @@ const PuntoDeVenta = ({ cajaInfo, session, perfilUsuario, pedidoRestauranteInici
   };
 
   const eliminarDelCarrito = (id) => {
-    if (pedidoRestaurante) return;
+    if (pedidoVinculado) return;
     const carritoRestante = carrito.filter((item) => (item.pos_line_key || item.id) !== id);
     setCarrito(carritoRestante);
     if (productoAgregadoId === id) setProductoAgregadoId(null);
   };
 
   const cambiarCantidad = (id, nuevaCantidad) => {
-    if (pedidoRestaurante) return;
+    if (pedidoVinculado) return;
     nuevaCantidad = Number(nuevaCantidad);
     if (!cantidadValida(nuevaCantidad)) return;
     const itemObjetivo = carrito.find((item) => (item.pos_line_key || item.id) === id);
@@ -765,7 +824,7 @@ const PuntoDeVenta = ({ cajaInfo, session, perfilUsuario, pedidoRestauranteInici
     } finally { setLeyendoBalanza(false); }
   };
   const agregarPesoAlCarrito = () => {
-    if (pedidoRestaurante) return notificar.info('Esta cuenta QR está cerrada para cambios de artículos.');
+    if (pedidoVinculado) return notificar.info('Este pedido está cerrado para cambios de artículos.');
     if (!productoPesado || !lecturaBalanza) return;
     const unidad = String(productoPesado.unidad || '').trim().toLowerCase();
     const cantidad = unidad === 'g' || unidad === 'gr' || unidad.startsWith('gram') ? lecturaBalanza.kilograms * 1000 : lecturaBalanza.kilograms;
@@ -785,7 +844,7 @@ const PuntoDeVenta = ({ cajaInfo, session, perfilUsuario, pedidoRestauranteInici
   };
 
   const cambiarPrecioUnitario = (id, nuevoPrecio) => {
-    if (pedidoRestaurante) return;
+    if (pedidoVinculado) return;
     const precio = Number(nuevoPrecio);
     if (Number.isNaN(precio) || precio < 0) return;
     setCarrito(carrito.map((item) =>
@@ -794,7 +853,7 @@ const PuntoDeVenta = ({ cajaInfo, session, perfilUsuario, pedidoRestauranteInici
   };
 
   const cambiarSubtotalManual = (id, nuevoSubtotal) => {
-    if (pedidoRestaurante) return;
+    if (pedidoVinculado) return;
     const subtotal = Number(nuevoSubtotal);
     if (Number.isNaN(subtotal) || subtotal < 0) return;
     setCarrito(carrito.map((item) => {
@@ -807,6 +866,7 @@ const PuntoDeVenta = ({ cajaInfo, session, perfilUsuario, pedidoRestauranteInici
   const vaciarCarrito = () => {
     setCarrito([]);
     setPedidoRestaurante(null);
+    setPedidoDelivery(null);
     setMontoPagado('');
     setDescuento('');
     setCargoEmbalaje('');
@@ -830,7 +890,7 @@ const PuntoDeVenta = ({ cajaInfo, session, perfilUsuario, pedidoRestauranteInici
     return Number.isFinite(resultado) ? resultado : null;
   }, [calculadoraA, calculadoraB, operacionCalculadora]);
   const descuentoPromocional = useMemo(() => {
-    if (pedidoRestaurante) return 0;
+    if (pedidoVinculado) return 0;
     if (ajustesEmpresa.disable_discount) return 0;
     const ahora = Date.now();
     const normalizar = (valor) => String(valor || '').trim().toLocaleLowerCase('es');
@@ -855,12 +915,12 @@ const PuntoDeVenta = ({ cajaInfo, session, perfilUsuario, pedidoRestauranteInici
         : Math.min(bruto, Math.max(0, Number(regla.valor) || 0) * Number(item.cantidad || 0));
       return total + descuentoLinea;
     }, 0);
-  }, [carrito, reglasDescuento, ubicacionActivaId, ajustesEmpresa.disable_discount, pedidoRestaurante]);
+  }, [carrito, reglasDescuento, ubicacionActivaId, ajustesEmpresa.disable_discount, pedidoVinculado]);
   const descuentoPredeterminado = Math.max(0, Math.min(100, Number(ajustesEmpresa.default_sales_discount) || 0)) * subtotal / 100;
-  const descuentoManual = pedidoRestaurante || ajustesEmpresa.disable_discount ? 0
+  const descuentoManual = pedidoVinculado || ajustesEmpresa.disable_discount ? 0
     : String(descuento).trim() === '' ? descuentoPredeterminado : Math.max(0, Number(descuento) || 0);
   const descuentoAplicado = Math.min(descuentoManual + descuentoPromocional, subtotal);
-  const cargoEmbalajeAplicado = pedidoRestaurante ? 0 : Math.max(0, Number(cargoEmbalaje) || 0);
+  const cargoEmbalajeAplicado = pedidoDelivery ? Number(pedidoDelivery.delivery_costo) || 0 : pedidoRestaurante ? 0 : Math.max(0, Number(cargoEmbalaje) || 0);
   const totalConAjustes = Math.max(0, subtotal - descuentoAplicado + cargoEmbalajeAplicado);
   const formatMoneda = (valor, moneda = monedaVenta) => {
     const numero = Number(valor || 0);
@@ -893,7 +953,7 @@ const PuntoDeVenta = ({ cajaInfo, session, perfilUsuario, pedidoRestauranteInici
   const monedasCotizacion = ajustesEmpresa.enable_multicurrency
     ? monedasDisponibles.filter((codigo) => codigo !== 'PYG')
     : [];
-  const montoPagadoEnGs = convertirAGs(Number(montoPagado) || 0);
+  const montoPagadoEnGs = pedidoDelivery ? Number(pedidoDelivery.efectivo_recibido) || 0 : convertirAGs(Number(montoPagado) || 0);
   const vuelto = montoPagadoEnGs > totalConAjustes ? montoPagadoEnGs - totalConAjustes : 0;
   const saldoPendiente = montoPagadoEnGs < totalConAjustes && Number(montoPagado) > 0
     ? totalConAjustes - montoPagadoEnGs
@@ -903,6 +963,10 @@ const PuntoDeVenta = ({ cajaInfo, session, perfilUsuario, pedidoRestauranteInici
 
   const procesarVenta = async (tipoOperacion = 'venta', datosPagoMultiple = null, metodoForzado = null, notaForzada = null) => {
     if (carrito.length === 0) return alert('El carrito está vacío');
+    if (pedidoDelivery && tipoOperacion !== 'venta') {
+      alert('El pedido delivery ya fue cobrado por el repartidor y solo puede facturarse como una venta en efectivo.');
+      return null;
+    }
     if (pedidoRestaurante && !['venta', 'credito'].includes(tipoOperacion)) {
       alert('El pedido QR se debe registrar como venta o crédito. No se puede guardar como presupuesto ni como pedido pendiente.');
       return null;
@@ -923,9 +987,11 @@ const PuntoDeVenta = ({ cajaInfo, session, perfilUsuario, pedidoRestauranteInici
     // Si viene del modal de Pago Múltiple, usamos esos valores; si no,
     // seguimos leyendo los mismos estados de siempre (montoPagado, metodoPago,
     // notaVenta) para no cambiar en nada el comportamiento de los botones existentes.
-    let montoPagadoFinal = datosPagoMultiple
-      ? Number(datosPagoMultiple.montoPagadoGs ?? convertirAGs(datosPagoMultiple.montoPagado))
-      : convertirAGs(Number(montoPagado) || 0);
+    let montoPagadoFinal = pedidoDelivery
+      ? Number(pedidoDelivery.total)
+      : datosPagoMultiple
+        ? Number(datosPagoMultiple.montoPagadoGs ?? convertirAGs(datosPagoMultiple.montoPagado))
+        : convertirAGs(Number(montoPagado) || 0);
     
     // Si el usuario hace clic en "COBRAR" (tipoOperacion 'venta') sin escribir un monto, 
     // asumimos que pagó el total exacto.
@@ -935,7 +1001,11 @@ const PuntoDeVenta = ({ cajaInfo, session, perfilUsuario, pedidoRestauranteInici
       montoPagadoFinal = 0;
     }
 
-    const metodoPagoFinal = datosPagoMultiple ? datosPagoMultiple.metodoPago : (metodoForzado || metodoPago);
+    const metodoPagoFinal = pedidoDelivery ? 'Efectivo' : datosPagoMultiple ? datosPagoMultiple.metodoPago : (metodoForzado || metodoPago);
+    if (pedidoDelivery && (datosPagoMultiple || Number(pedidoDelivery.efectivo_recibido) < totalConAjustes || Math.abs(montoPagadoFinal - totalConAjustes) > 0.01)) {
+      alert('El efectivo registrado por el repartidor debe cubrir el total y el importe de la venta debe coincidir con el pedido.');
+      return null;
+    }
     const notaBase = datosPagoMultiple
       ? [notaVenta, datosPagoMultiple.notaPagos].filter(Boolean).join(' | ')
       : (notaForzada || notaVenta);
@@ -983,7 +1053,7 @@ const PuntoDeVenta = ({ cajaInfo, session, perfilUsuario, pedidoRestauranteInici
       metodo_pago: metodoPagoFinal,
       estado_pago: estadoPago,
       monto_pagado: montoPagadoFinal,
-      monto_pagado_moneda: datosPagoMultiple ? convertirDesdeGs(montoPagadoFinal) : (Number(montoPagado) || (tipoOperacion === 'venta' ? totalEnMoneda : 0)),
+      monto_pagado_moneda: pedidoDelivery || datosPagoMultiple ? convertirDesdeGs(montoPagadoFinal) : (Number(montoPagado) || (tipoOperacion === 'venta' ? totalEnMoneda : 0)),
       saldo_pendiente: estadoPago === 'Credito' ? totalConAjustes : saldoPendienteFinal,
       saldo_pendiente_moneda: estadoPago === 'Credito' ? totalEnMoneda : convertirDesdeGs(saldoPendienteFinal),
       articulos: carrito.length,
@@ -1036,19 +1106,30 @@ const PuntoDeVenta = ({ cajaInfo, session, perfilUsuario, pedidoRestauranteInici
         subtotal_moneda: convertirDesdeGs(Number.isFinite(Number(item.qr_subtotal_fijo)) ? Number(item.qr_subtotal_fijo) : (item.precio_venta || item.precio || 0) * item.cantidad),
       }));
 
-      const { data: ventaId, error } = pedidoRestaurante
-        ? await supabase.rpc('registrar_venta_pedidos_qr', {
-          p_pedido_ids: pedidoRestaurante.ids,
+      const { data: ventaId, error } = pedidoDelivery
+        ? await supabase.rpc('registrar_venta_pedido_delivery', {
+          p_pedido_id: pedidoDelivery.id,
           p_venta: nuevaVenta,
           p_items: itemsParaRpc,
           p_ubicacion_id: ubicacionActivaId || null,
         })
-        : await supabase.rpc('registrar_venta', {
-          p_venta: nuevaVenta,
-          p_items: itemsParaRpc,
-          p_ubicacion_id: ubicacionActivaId || null,
-        });
+        : pedidoRestaurante
+          ? await supabase.rpc('registrar_venta_pedidos_qr', {
+            p_pedido_ids: pedidoRestaurante.ids,
+            p_venta: nuevaVenta,
+            p_items: itemsParaRpc,
+            p_ubicacion_id: ubicacionActivaId || null,
+          })
+          : await supabase.rpc('registrar_venta', {
+            p_venta: nuevaVenta,
+            p_items: itemsParaRpc,
+            p_ubicacion_id: ubicacionActivaId || null,
+          });
       if (error) {
+        if (String(error.message || '').includes('PEDIDO_DELIVERY_YA_FACTURADO')) throw new Error('Este pedido delivery ya fue facturado. Actualiza la bandeja de Delivery.');
+        if (String(error.message || '').includes('PEDIDO_DELIVERY_TOTAL_O_COBRO_MODIFICADO')) throw new Error('El total o el efectivo no coincide con el importe registrado por el repartidor. No se guardó la venta.');
+        if (String(error.message || '').includes('PEDIDO_DELIVERY_SUCURSAL_NO_COINCIDE')) throw new Error('Abre la caja de la sucursal a la que pertenece este pedido delivery antes de facturarlo.');
+        if (pedidoDelivery && (String(error.message || '').includes('registrar_venta_pedido_delivery') || String(error.message || '').includes('finalizar_entrega_pedido_delivery_repartidor'))) throw new Error('Falta aplicar database/migration_restaurante_delivery_cobro_facturacion.sql en Supabase. No se registró la venta.');
         if (String(error.message || '').includes('PEDIDO_QR_YA_FACTURADO')) {
           throw new Error('Uno o más pedidos de esta cuenta ya fueron cobrados. No se registró otra venta. Actualiza Restaurante.');
         }
@@ -1315,6 +1396,7 @@ const PuntoDeVenta = ({ cajaInfo, session, perfilUsuario, pedidoRestauranteInici
     <div className="flex flex-col h-screen bg-gray-100 font-sans overflow-hidden">
 
       {pedidoRestaurante && <div className="mx-3 mt-2 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-900"><span><b>Cuenta QR de {pedidoRestaurante.mesa_nombre || 'mesa'} · {pedidoRestaurante.numero_pedido}</b> está cargada con sus precios originales. Los artículos están bloqueados para proteger el total. Revisa y selecciona cómo cobrar.</span><button type="button" onClick={vaciarCarrito} className="rounded-md border border-emerald-300 bg-white px-2.5 py-1 text-xs font-bold text-emerald-800">Salir de esta cuenta</button></div>}
+      {pedidoDelivery && <div className="mx-3 mt-2 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-sm text-blue-950"><span><b>Delivery {pedidoDelivery.numero_pedido}</b> · entrega confirmada. Total incluye envío de {formatGs(pedidoDelivery.delivery_costo)}. El repartidor recibió {formatGs(pedidoDelivery.efectivo_recibido)} y devolvió {formatGs(pedidoDelivery.vuelto)}. Los artículos y el importe están bloqueados; al cobrar se registra la venta en esta caja y se descuenta stock.</span><button type="button" onClick={vaciarCarrito} className="rounded-md border border-blue-300 bg-white px-2.5 py-1 text-xs font-bold text-blue-800">Salir del pedido</button></div>}
 
       <div data-guia-tour="operacion" className="bg-white border-b border-gray-200 px-4 py-2 flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-3">
@@ -1508,18 +1590,18 @@ const PuntoDeVenta = ({ cajaInfo, session, perfilUsuario, pedidoRestauranteInici
                           </td>
                           <td className="py-3 px-1 text-center whitespace-nowrap">
                             <div className="flex items-center justify-center gap-2">
-                              <button type="button" disabled={Boolean(pedidoRestaurante)} aria-label={`Restar cantidad de ${item.nombre}`} onClick={() => cambiarCantidad(lineaKey, item.cantidad - pasoCantidad(item.unidad))} className="h-7 w-7 rounded-md border border-slate-200 bg-white text-slate-600 font-bold hover:bg-slate-50 disabled:opacity-50">&#8722;</button>
+                              <button type="button" disabled={Boolean(pedidoVinculado)} aria-label={`Restar cantidad de ${item.nombre}`} onClick={() => cambiarCantidad(lineaKey, item.cantidad - pasoCantidad(item.unidad))} className="h-7 w-7 rounded-md border border-slate-200 bg-white text-slate-600 font-bold hover:bg-slate-50 disabled:opacity-50">&#8722;</button>
                               <input
                                 type="number"
                                 min={pasoVisible(item.unidad)}
                                 step={pasoVisible(item.unidad)}
                                 value={cantidadVisible(item.cantidad, item.unidad)}
                                 onChange={(e) => cambiarCantidad(lineaKey, cantidadInterna(e.target.value, item.unidad))}
-                                readOnly={Boolean(pedidoRestaurante)}
+                                readOnly={Boolean(pedidoVinculado)}
                                 className="w-12 border-b border-slate-300 bg-transparent px-1 py-1 text-center font-semibold focus:outline-none focus:border-sky-500"
                                 aria-label={`Cantidad de ${item.nombre} en ${etiquetaCantidad(item.unidad)}`}
                               />
-                              <button type="button" disabled={Boolean(pedidoRestaurante)} aria-label={`Sumar cantidad de ${item.nombre}`} onClick={() => cambiarCantidad(lineaKey, item.cantidad + pasoCantidad(item.unidad))} className="h-7 w-7 rounded-md border border-slate-200 bg-white text-emerald-600 font-bold hover:bg-emerald-50 disabled:opacity-50">+</button>
+                              <button type="button" disabled={Boolean(pedidoVinculado)} aria-label={`Sumar cantidad de ${item.nombre}`} onClick={() => cambiarCantidad(lineaKey, item.cantidad + pasoCantidad(item.unidad))} className="h-7 w-7 rounded-md border border-slate-200 bg-white text-emerald-600 font-bold hover:bg-emerald-50 disabled:opacity-50">+</button>
                               <select value={item.unidad || 'UNID'} aria-label={`Unidad de ${item.nombre}`} title="Unidad base definida para este producto" disabled className="h-9 max-w-[76px] rounded-md border border-slate-200 bg-white px-2 text-xs font-semibold disabled:cursor-not-allowed disabled:opacity-100">
                                 <option value={item.unidad || 'UNID'}>{String(item.unidad || 'UNID').toLocaleUpperCase('es')}</option>
                               </select>
@@ -1530,7 +1612,7 @@ const PuntoDeVenta = ({ cajaInfo, session, perfilUsuario, pedidoRestauranteInici
                               type="number"
                               value={precio}
                               onChange={(e) => cambiarPrecioUnitario(lineaKey, convertirAGs(Number(e.target.value) || 0))}
-                              readOnly={Boolean(pedidoRestaurante || item.configuracion_pizza)}
+                              readOnly={Boolean(pedidoVinculado || item.configuracion_pizza)}
                               className="w-24 rounded-md border border-slate-200 px-2 py-2 text-right font-semibold text-slate-800 focus:outline-none focus:ring-1 focus:ring-sky-400"
                             />
                           </td>
@@ -1539,12 +1621,12 @@ const PuntoDeVenta = ({ cajaInfo, session, perfilUsuario, pedidoRestauranteInici
                               type="number"
                               value={subtotalItem}
                               onChange={(e) => cambiarSubtotalManual(lineaKey, convertirAGs(Number(e.target.value) || 0))}
-                              readOnly={Boolean(pedidoRestaurante || item.configuracion_pizza)}
+                              readOnly={Boolean(pedidoVinculado || item.configuracion_pizza)}
                               className="w-24 rounded-md border border-slate-200 px-2 py-2 text-right font-bold text-slate-800 focus:outline-none focus:ring-1 focus:ring-sky-400"
                             />
                           </td>
                           <td className="py-3 pl-2 text-center whitespace-nowrap">
-                            <button type="button" disabled={Boolean(pedidoRestaurante)} aria-label={`Quitar ${item.nombre} del carrito`} onClick={() => eliminarDelCarrito(lineaKey)} className="text-red-400 hover:text-red-600 font-bold disabled:opacity-50">✕</button>
+                            <button type="button" disabled={Boolean(pedidoVinculado)} aria-label={`Quitar ${item.nombre} del carrito`} onClick={() => eliminarDelCarrito(lineaKey)} className="text-red-400 hover:text-red-600 font-bold disabled:opacity-50">✕</button>
                           </td>
                         </tr>
 
@@ -1661,20 +1743,20 @@ const PuntoDeVenta = ({ cajaInfo, session, perfilUsuario, pedidoRestauranteInici
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4 2xl:grid-cols-7">
           <div className="flex items-center justify-between rounded-md border border-slate-200 bg-white px-3 py-2"><span className="text-xs font-bold text-slate-500">Artículos</span><strong className="text-lg text-slate-900">{totalArticulos}</strong></div>
           <div className="flex items-center justify-between rounded-md border border-slate-200 bg-white px-3 py-2"><span className="text-xs font-bold text-slate-500">Total</span><strong className="text-sm text-slate-900">{formatMoneda(totalEnMoneda, monedaVenta)}</strong></div>
-          {!pedidoRestaurante && !ajustesEmpresa.disable_discount && <label className="rounded-md border border-slate-200 bg-white px-3 py-1.5 text-[11px] font-bold text-slate-600">Descuento ({monedaVenta})<input type="number" min="0" max={convertirDesdeGs(Math.max(0, subtotal - descuentoPromocional))} step={monedaVenta === 'PYG' ? '1' : '0.01'} value={monedaVenta === 'PYG' ? descuento : descuento === '' ? '' : convertirDesdeGs(Number(descuento) || 0)} onChange={(event) => setDescuento(event.target.value === '' ? '' : convertirAGs(Number(event.target.value) || 0))} onBlur={() => { if (String(descuento).trim() !== '') setDescuento(String(Math.min(Number(descuento) || 0, Math.max(0, subtotal - descuentoPromocional)) || '')); }} className="mt-1 h-7 w-full rounded border border-slate-300 px-2 text-sm font-semibold text-slate-900" />{Number(ajustesEmpresa.default_sales_discount) > 0 && String(descuento).trim() === '' && <span className="mt-0.5 block text-[10px] text-slate-500">Predeterminado {Number(ajustesEmpresa.default_sales_discount)}%: {formatMoneda(convertirDesdeGs(descuentoPredeterminado), monedaVenta)}</span>}{descuentoPromocional > 0 && <span className="mt-0.5 block text-[10px] text-emerald-700">Promo: {formatMoneda(convertirDesdeGs(descuentoPromocional), monedaVenta)}</span>}</label>}
-          {!pedidoRestaurante && <label className="rounded-md border border-slate-200 bg-white px-3 py-1.5 text-[11px] font-bold text-slate-600">Vencimiento<input type="date" value={fechaVencimientoPresupuesto} onChange={(event) => setFechaVencimientoPresupuesto(event.target.value)} className="mt-1 h-7 w-full rounded border border-slate-300 px-2 text-xs font-semibold text-slate-900" /></label>}
+          {!pedidoVinculado && !ajustesEmpresa.disable_discount && <label className="rounded-md border border-slate-200 bg-white px-3 py-1.5 text-[11px] font-bold text-slate-600">Descuento ({monedaVenta})<input type="number" min="0" max={convertirDesdeGs(Math.max(0, subtotal - descuentoPromocional))} step={monedaVenta === 'PYG' ? '1' : '0.01'} value={monedaVenta === 'PYG' ? descuento : descuento === '' ? '' : convertirDesdeGs(Number(descuento) || 0)} onChange={(event) => setDescuento(event.target.value === '' ? '' : convertirAGs(Number(event.target.value) || 0))} onBlur={() => { if (String(descuento).trim() !== '') setDescuento(String(Math.min(Number(descuento) || 0, Math.max(0, subtotal - descuentoPromocional)) || '')); }} className="mt-1 h-7 w-full rounded border border-slate-300 px-2 text-sm font-semibold text-slate-900" />{Number(ajustesEmpresa.default_sales_discount) > 0 && String(descuento).trim() === '' && <span className="mt-0.5 block text-[10px] text-slate-500">Predeterminado {Number(ajustesEmpresa.default_sales_discount)}%: {formatMoneda(convertirDesdeGs(descuentoPredeterminado), monedaVenta)}</span>}{descuentoPromocional > 0 && <span className="mt-0.5 block text-[10px] text-emerald-700">Promo: {formatMoneda(convertirDesdeGs(descuentoPromocional), monedaVenta)}</span>}</label>}
+          {!pedidoVinculado && <label className="rounded-md border border-slate-200 bg-white px-3 py-1.5 text-[11px] font-bold text-slate-600">Vencimiento<input type="date" value={fechaVencimientoPresupuesto} onChange={(event) => setFechaVencimientoPresupuesto(event.target.value)} className="mt-1 h-7 w-full rounded border border-slate-300 px-2 text-xs font-semibold text-slate-900" /></label>}
           <label className="rounded-md border border-slate-200 bg-white px-3 py-1.5 text-[11px] font-bold text-slate-600">Nota de remisión<input type="text" value={notaRemision} onChange={(event) => setNotaRemision(event.target.value)} placeholder="Opcional" className="mt-1 h-7 w-full rounded border border-slate-300 px-2 text-xs font-normal text-slate-900" /></label>
           <label className="rounded-md border border-slate-200 bg-white px-3 py-1.5 text-[11px] font-bold text-slate-600">Nota de venta<input type="text" value={notaVenta} onChange={(event) => setNotaVenta(event.target.value)} placeholder="Opcional" className="mt-1 h-7 w-full rounded border border-slate-300 px-2 text-xs font-normal text-slate-900" /></label>
-          {!pedidoRestaurante && <label className="rounded-md border border-slate-200 bg-white px-3 py-1.5 text-[11px] font-bold text-slate-600">Cargo de embalaje ({monedaVenta})<input type="number" min="0" step={monedaVenta === 'PYG' ? '1' : '0.01'} value={monedaVenta === 'PYG' ? cargoEmbalaje : cargoEmbalaje === '' ? '' : convertirDesdeGs(Number(cargoEmbalaje) || 0)} onChange={(event) => setCargoEmbalaje(event.target.value === '' ? '' : convertirAGs(Number(event.target.value) || 0))} onBlur={() => setCargoEmbalaje(String(cargoEmbalajeAplicado || ''))} className="mt-1 h-7 w-full rounded border border-slate-300 px-2 text-sm font-semibold text-slate-900" /></label>}
+          {!pedidoVinculado && <label className="rounded-md border border-slate-200 bg-white px-3 py-1.5 text-[11px] font-bold text-slate-600">Cargo de embalaje ({monedaVenta})<input type="number" min="0" step={monedaVenta === 'PYG' ? '1' : '0.01'} value={monedaVenta === 'PYG' ? cargoEmbalaje : cargoEmbalaje === '' ? '' : convertirDesdeGs(Number(cargoEmbalaje) || 0)} onChange={(event) => setCargoEmbalaje(event.target.value === '' ? '' : convertirAGs(Number(event.target.value) || 0))} onBlur={() => setCargoEmbalaje(String(cargoEmbalajeAplicado || ''))} className="mt-1 h-7 w-full rounded border border-slate-300 px-2 text-sm font-semibold text-slate-900" /></label>}
         </div>
         <div className="mt-2 flex min-w-0 items-center gap-2">
           <div className="flex min-w-0 flex-1 items-center gap-2 overflow-x-auto pb-0.5">
-          {!pedidoRestaurante && !ajustesEmpresa.disable_draft && !ajustesEmpresa.disable_suspend && <button onClick={() => procesarVenta('pendiente')} disabled={carrito.length === 0} className="shrink-0 whitespace-nowrap rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-50">▧ Pedido pendiente</button>}
-          <button hidden={Boolean(pedidoRestaurante)} onClick={guardarPresupuestoDesdePOS} disabled={pedidoRestaurante || carrito.length === 0 || guardandoPresupuesto} className="shrink-0 whitespace-nowrap rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-50">▧ {guardandoPresupuesto ? 'Guardando…' : 'Presupuesto'}</button>
-          <button hidden={Boolean(pedidoRestaurante)} onClick={procesarDelivery} disabled={pedidoRestaurante || carrito.length === 0} className="shrink-0 whitespace-nowrap rounded-md bg-slate-200 px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-300 disabled:opacity-50">▣ Delivery</button>
-          {!ajustesEmpresa.disable_credit_sale_button && <button onClick={() => procesarVenta('credito')} disabled={carrito.length === 0} className="shrink-0 whitespace-nowrap rounded-md bg-slate-200 px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-300 disabled:opacity-50">✓ Venta a crédito</button>}
-          {!ajustesEmpresa.disable_pay_checkout && !ajustesEmpresa.disable_express_checkout && <button onClick={() => cobrarConMetodo('Tarjeta')} disabled={carrito.length === 0} className="shrink-0 whitespace-nowrap rounded-md bg-pink-600 px-3 py-2 text-xs font-bold text-white hover:bg-pink-700 disabled:opacity-50">▣ Tarjeta</button>}
-          {!ajustesEmpresa.disable_pay_checkout && <button onClick={() => setMostrarPagoMultiple(true)} disabled={carrito.length === 0} className="shrink-0 whitespace-nowrap rounded-md bg-slate-900 px-3 py-2 text-xs font-bold text-white hover:bg-slate-800 disabled:opacity-50">▤ Pago múltiple</button>}
+          {!pedidoVinculado && !ajustesEmpresa.disable_draft && !ajustesEmpresa.disable_suspend && <button onClick={() => procesarVenta('pendiente')} disabled={carrito.length === 0} className="shrink-0 whitespace-nowrap rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-50">▧ Pedido pendiente</button>}
+          <button hidden={Boolean(pedidoVinculado)} onClick={guardarPresupuestoDesdePOS} disabled={pedidoVinculado || carrito.length === 0 || guardandoPresupuesto} className="shrink-0 whitespace-nowrap rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-50">▧ {guardandoPresupuesto ? 'Guardando…' : 'Presupuesto'}</button>
+          <button hidden={Boolean(pedidoVinculado)} onClick={procesarDelivery} disabled={pedidoVinculado || carrito.length === 0} className="shrink-0 whitespace-nowrap rounded-md bg-slate-200 px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-300 disabled:opacity-50">▣ Delivery</button>
+          {!pedidoDelivery && !ajustesEmpresa.disable_credit_sale_button && <button onClick={() => procesarVenta('credito')} disabled={carrito.length === 0} className="shrink-0 whitespace-nowrap rounded-md bg-slate-200 px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-300 disabled:opacity-50">✓ Venta a crédito</button>}
+          {!pedidoDelivery && !ajustesEmpresa.disable_pay_checkout && !ajustesEmpresa.disable_express_checkout && <button onClick={() => cobrarConMetodo('Tarjeta')} disabled={carrito.length === 0} className="shrink-0 whitespace-nowrap rounded-md bg-pink-600 px-3 py-2 text-xs font-bold text-white hover:bg-pink-700 disabled:opacity-50">▣ Tarjeta</button>}
+          {!pedidoDelivery && !ajustesEmpresa.disable_pay_checkout && <button onClick={() => setMostrarPagoMultiple(true)} disabled={carrito.length === 0} className="shrink-0 whitespace-nowrap rounded-md bg-slate-900 px-3 py-2 text-xs font-bold text-white hover:bg-slate-800 disabled:opacity-50">▤ Pago múltiple</button>}
           {!ajustesEmpresa.disable_pay_checkout && !ajustesEmpresa.disable_express_checkout && <button onClick={() => cobrarConMetodo('Efectivo')} disabled={carrito.length === 0} className="shrink-0 whitespace-nowrap rounded-md bg-emerald-600 px-3 py-2 text-xs font-bold text-white hover:bg-emerald-700 disabled:opacity-50">▣ Efectivo</button>}
           <button onClick={vaciarCarrito} className="shrink-0 whitespace-nowrap rounded-md bg-red-600 px-3 py-2 text-xs font-bold text-white hover:bg-red-700">× Cancelar</button>
           {!ajustesEmpresa.hide_recent_trans && <button onClick={abrirTransaccionesRecientes} className="shrink-0 whitespace-nowrap rounded-md bg-orange-600 px-3 py-2 text-xs font-bold text-white hover:bg-orange-700">◷ Transacciones recientes</button>}

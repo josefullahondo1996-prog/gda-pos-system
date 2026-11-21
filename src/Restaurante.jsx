@@ -8,6 +8,7 @@ import { useEmpresaInfo } from './utils/useEmpresa';
 import { useConfiguracionEmpresa, notificarConfiguracionEmpresaActualizada } from './utils/useConfiguracionEmpresa';
 import { useNotificacion } from './NotificacionContext';
 import DeliveryRestaurante from './DeliveryRestaurante';
+import HistorialDelivery from './HistorialDelivery';
 
 const URL_MESA = (token) => `${window.location.origin}/catalogo-qr/${token}`;
 const FECHA = (value) => new Date(value).toLocaleTimeString('es-PY', { hour: '2-digit', minute: '2-digit' });
@@ -22,16 +23,18 @@ const SECCIONES = [
 ];
 
 function PedidoCard({ pedido, onAvanzar, onCancelar, onEditar, guardando, objetivoMinutos = 20 }) {
+  const esDelivery = pedido.delivery_tipo === 'delivery';
   const siguiente = pedido.estado === 'pendiente' ? 'en_preparacion' : 'completado';
   const [ahora, setAhora] = useState(Date.now());
   useEffect(() => { const timer = window.setInterval(() => setAhora(Date.now()), 30000); return () => window.clearInterval(timer); }, []);
   const minutos = Math.max(0, Math.floor((ahora - new Date(pedido.creado_en).getTime()) / 60000));
   const fueraObjetivo = minutos > Number(objetivoMinutos || 20);
   return <article className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-    <div className="flex flex-wrap items-start justify-between gap-2"><div><p className="text-xs font-bold uppercase tracking-wide text-orange-600">{pedido.mesa_nombre || 'Pedido QR'} · {pedido.numero_pedido}</p><h3 className="mt-1 text-lg font-black text-slate-900">{pedido.estado === 'pendiente' ? 'Nuevo pedido' : pedido.estado === 'completado' ? 'Listo para cobrar' : 'En preparación'}</h3></div><span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-bold ${fueraObjetivo ? 'bg-rose-100 text-rose-800' : 'bg-slate-100 text-slate-600'}`}><Clock3 size={13}/>{FECHA(pedido.creado_en)} · {minutos} min</span></div>
+    <div className="flex flex-wrap items-start justify-between gap-2"><div><p className="text-xs font-bold uppercase tracking-wide text-orange-600">{esDelivery ? 'Delivery' : pedido.mesa_nombre || 'Pedido QR'} · {pedido.numero_pedido}</p><h3 className="mt-1 text-lg font-black text-slate-900">{pedido.estado === 'pendiente' ? 'Nuevo pedido' : pedido.estado === 'completado' ? (esDelivery ? 'Listo para despacho' : 'Listo para cobrar') : 'En preparación'}</h3></div><span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-bold ${fueraObjetivo ? 'bg-rose-100 text-rose-800' : 'bg-slate-100 text-slate-600'}`}><Clock3 size={13}/>{FECHA(pedido.creado_en)} · {minutos} min</span></div>
+    {esDelivery && <div className="rounded-lg border border-blue-100 bg-blue-50 p-3 text-sm text-blue-950"><p className="font-bold">{pedido.cliente_nombre}{pedido.cliente_telefono ? ` · ${pedido.cliente_telefono}` : ''}</p><p className="mt-1">Entrega: {pedido.delivery_direccion || 'Dirección por confirmar'}</p></div>}
     <div className="mt-3 divide-y divide-slate-100 rounded-lg border border-slate-100">{(pedido.items || []).map((item, index) => <div key={`${pedido.id}-${index}`} className="flex justify-between gap-3 px-3 py-2 text-sm"><span><b>{item.cantidad}×</b> {item.nombre}</span><span className="text-slate-500">{importe(item.subtotal)}</span></div>)}</div>
     {pedido.nota && <p className="mt-3 rounded-lg bg-amber-50 p-2.5 text-sm text-amber-900">Nota: {pedido.nota}</p>}
-    <div className="mt-3 flex items-center justify-between gap-3"><span className="font-bold text-slate-700">Total {importe(pedido.total)}</span><div className="flex flex-wrap justify-end gap-2">{onEditar && <button type="button" disabled={guardando} onClick={() => onEditar(pedido)} className="inline-flex items-center gap-1 rounded-lg border border-blue-200 px-3 py-2 text-sm font-bold text-blue-700 hover:bg-blue-50 disabled:opacity-50"><Pencil size={14}/>Corregir</button>}{onCancelar && <button disabled={guardando} onClick={() => onCancelar([pedido.id], pedido.mesa_nombre || 'pedido')} className="rounded-lg border border-rose-200 px-3 py-2 text-sm font-bold text-rose-700 hover:bg-rose-50 disabled:opacity-50">Cancelar</button>}{pedido.estado === 'completado' ? <span className="rounded-lg bg-emerald-100 px-3 py-2 text-sm font-bold text-emerald-800">Listo · espera cobro</span> : <button disabled={guardando} onClick={() => onAvanzar(pedido, siguiente)} className="rounded-lg bg-slate-900 px-3 py-2 text-sm font-bold text-white hover:bg-slate-700 disabled:opacity-50">{guardando ? 'Guardando…' : pedido.estado === 'pendiente' ? 'Comenzar preparación' : 'Marcar listo'}</button>}</div></div>
+    <div className="mt-3 flex items-center justify-between gap-3"><span className="font-bold text-slate-700">Total {importe(pedido.total)}</span><div className="flex flex-wrap justify-end gap-2">{!esDelivery && onEditar && <button type="button" disabled={guardando} onClick={() => onEditar(pedido)} className="inline-flex items-center gap-1 rounded-lg border border-blue-200 px-3 py-2 text-sm font-bold text-blue-700 hover:bg-blue-50 disabled:opacity-50"><Pencil size={14}/>Corregir</button>}{!esDelivery && onCancelar && <button disabled={guardando} onClick={() => onCancelar([pedido.id], pedido.mesa_nombre || 'pedido')} className="rounded-lg border border-rose-200 px-3 py-2 text-sm font-bold text-rose-700 hover:bg-rose-50 disabled:opacity-50">Cancelar</button>}{pedido.estado === 'completado' ? <span className="rounded-lg bg-emerald-100 px-3 py-2 text-sm font-bold text-emerald-800">{esDelivery ? pedido.delivery_estado === 'en_camino' ? 'Repartidor en camino' : pedido.delivery_estado === 'asignado' ? 'Repartidor asignado' : 'Listo · espera repartidor' : 'Listo · espera cobro'}</span> : <button disabled={guardando} onClick={() => onAvanzar(pedido, siguiente)} className="rounded-lg bg-slate-900 px-3 py-2 text-sm font-bold text-white hover:bg-slate-700 disabled:opacity-50">{guardando ? 'Guardando…' : pedido.estado === 'pendiente' ? 'Comenzar preparación' : 'Marcar listo'}</button>}</div></div>
   </article>;
 }
 
@@ -90,7 +93,7 @@ export default function Restaurante({ section = 'mapa' }) {
     const failure = rMesas.error || rPedidos.error || rCobros.error || rCatalogos.error || rProductos.error;
     if (failure) setError(`No se pudo cargar Restaurante. Aplicá database/migration_pedidos_qr_mesa.sql, database/migration_cobro_pedidos_qr.sql y database/migration_restaurante_cuentas_qr.sql, además de las migraciones de Pedidos y Catálogo QR. ${failure.message}`);
     setMesas(rMesas.data || []);
-    setPedidos((rPedidos.data || []).filter((pedido) => pedido.origen === 'catalogo_qr_mesa'));
+    setPedidos((rPedidos.data || []).filter((pedido) => pedido.origen === 'catalogo_qr_mesa' || pedido.delivery_tipo === 'delivery'));
     setPedidosCobrados(rCobros.data || []);
     setProductosDisponibles(rProductos.data || []);
     setCatalogos(rCatalogos.data || []);
@@ -140,7 +143,7 @@ export default function Restaurante({ section = 'mapa' }) {
   }, [empresaId, cargar]);
 
   const idsPedidosCobrados = useMemo(() => new Set(pedidosCobrados.map((item) => item.pedido_id)), [pedidosCobrados]);
-  const pedidosSinCobrar = useMemo(() => pedidos.filter((pedido) => !idsPedidosCobrados.has(pedido.id) && pedido.estado !== 'cancelado'), [pedidos, idsPedidosCobrados]);
+  const pedidosSinCobrar = useMemo(() => pedidos.filter((pedido) => pedido.delivery_tipo !== 'delivery' && !idsPedidosCobrados.has(pedido.id) && pedido.estado !== 'cancelado'), [pedidos, idsPedidosCobrados]);
   const cuentasPorMesa = useMemo(() => {
     const resultado = new Map();
     [...pedidosSinCobrar].sort((a, b) => new Date(a.creado_en) - new Date(b.creado_en)).forEach((pedido) => {
@@ -150,8 +153,12 @@ export default function Restaurante({ section = 'mapa' }) {
     });
     return resultado;
   }, [pedidosSinCobrar]);
-  const pedidosActivos = pedidosSinCobrar.filter((pedido) => ['pendiente', 'en_preparacion'].includes(pedido.estado)).sort((a, b) => new Date(a.creado_en) - new Date(b.creado_en));
-  const pedidosListos = pedidosSinCobrar.filter((pedido) => pedido.estado === 'completado').sort((a, b) => new Date(a.creado_en) - new Date(b.creado_en));
+  const pedidosParaCocina = useMemo(() => pedidos.filter((pedido) =>
+    (pedido.origen === 'catalogo_qr_mesa' || pedido.delivery_tipo === 'delivery')
+      && pedido.estado !== 'cancelado' && !['cancelado', 'entregado'].includes(pedido.delivery_estado)
+      && (pedido.delivery_tipo === 'delivery' || !idsPedidosCobrados.has(pedido.id))), [pedidos, idsPedidosCobrados]);
+  const pedidosActivos = pedidosParaCocina.filter((pedido) => ['pendiente', 'en_preparacion'].includes(pedido.estado)).sort((a, b) => new Date(a.creado_en) - new Date(b.creado_en));
+  const pedidosListos = pedidosParaCocina.filter((pedido) => pedido.estado === 'completado').sort((a, b) => new Date(a.creado_en) - new Date(b.creado_en));
   const pedidosListosParciales = pedidosSinCobrar.filter((pedido) => pedido.estado === 'completado'
     && cuentasPorMesa.get(pedido.mesa_id)?.pedidos.some((comanda) => comanda.estado !== 'completado'));
   const cuentasListasCobro = [...cuentasPorMesa.values()].filter((cuenta) => cuenta.pedidos.length && cuenta.pedidos.every((pedido) => pedido.estado === 'completado'));
@@ -269,9 +276,16 @@ export default function Restaurante({ section = 'mapa' }) {
 
   const avanzarPedido = async (pedido, estado) => {
     setGuardandoId(pedido.id);
-    const { error: updateError } = await supabase.from('pedidos').update({ estado, actualizado_en: new Date().toISOString() }).eq('id', pedido.id).eq('empresa_id', empresaId);
+    const cambios = { estado, actualizado_en: new Date().toISOString() };
+    if (pedido.delivery_tipo === 'delivery' && estado === 'en_preparacion' && pedido.delivery_estado === 'recibido') {
+      cambios.delivery_estado = 'preparando'; cambios.delivery_actualizado_en = new Date().toISOString();
+    }
+    if (pedido.delivery_tipo === 'delivery' && estado === 'completado' && ['recibido', 'preparando', 'asignado'].includes(pedido.delivery_estado)) {
+      cambios.delivery_estado = 'listo'; cambios.delivery_actualizado_en = new Date().toISOString();
+    }
+    const { error: updateError } = await supabase.from('pedidos').update(cambios).eq('id', pedido.id).eq('empresa_id', empresaId);
     if (updateError) notificar.error(`No se pudo actualizar el pedido: ${updateError.message}`);
-    else { setPedidos((actual) => actual.map((item) => item.id === pedido.id ? { ...item, estado } : item)); notificar.exito(estado === 'en_preparacion' ? 'Pedido enviado a preparación.' : 'Pedido marcado como listo.'); }
+    else { setPedidos((actual) => actual.map((item) => item.id === pedido.id ? { ...item, ...cambios } : item)); notificar.exito(estado === 'en_preparacion' ? 'Pedido enviado a preparación.' : 'Pedido marcado como listo.'); }
     setGuardandoId('');
   };
 
@@ -311,6 +325,7 @@ export default function Restaurante({ section = 'mapa' }) {
     {error && <div role="alert" className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">{error}</div>}
 
     {section === 'delivery' ? <DeliveryRestaurante /> : section === 'historial' ? (
+      <>
       <section className="space-y-4">
         <div className="flex flex-wrap items-center justify-between gap-3"><div><h2 className="text-lg font-black text-slate-900">Historial de mesas y comandas</h2><p className="text-sm text-slate-500">Cambios, cancelaciones y cuentas trasladadas dentro de tu empresa.</p></div><button type="button" onClick={cargarHistorial} disabled={cargandoHistorial} className="inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-bold"><RefreshCw size={15} className={cargandoHistorial?'animate-spin':''}/>Actualizar historial</button></div>
         {errorHistorial && <div role="alert" className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">{errorHistorial}</div>}
@@ -320,6 +335,8 @@ export default function Restaurante({ section = 'mapa' }) {
           <section className="rounded-xl border border-orange-200 bg-white p-4"><h3 className="mb-3 flex items-center gap-2 font-black text-orange-900"><ArrowRightLeft size={17}/>Movimientos de mesa ({historial.movimientos.length})</h3><div className="max-h-[65vh] space-y-3 overflow-y-auto">{historial.movimientos.map((movimiento)=><article key={movimiento.id} className="rounded-lg border border-slate-200 p-3"><p className="text-xs font-bold text-slate-500">{new Date(movimiento.creado_en).toLocaleString('es-PY')} · por {movimiento.usuario_nombre}</p><p className="mt-1 font-bold text-slate-800">{movimiento.mesa_origen_nombre} <ArrowRightLeft size={13} className="inline"/> {movimiento.mesa_destino_nombre}</p><p className="text-xs text-slate-600">{movimiento.cantidad_pedidos} comanda(s) trasladadas</p><p className="mt-2 rounded bg-orange-50 p-2 text-xs text-orange-900">Motivo: {movimiento.motivo}</p></article>)}{!historial.movimientos.length&&<p className="py-6 text-center text-sm text-slate-400">Sin movimientos de mesa.</p>}</div></section>
         </div>}
       </section>
+      <HistorialDelivery empresaId={empresaId}/>
+      </>
     ) : section === 'configuracion' ? (
       <form onSubmit={guardarConfiguracion} className="space-y-4 rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
         <div><h2 className="text-lg font-black">Configuración del restaurante</h2><p className="mt-1 text-sm text-slate-500">Elegí el catálogo que verán tus clientes al escanear las mesas y el tiempo objetivo de preparación.</p></div>

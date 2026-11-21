@@ -30,6 +30,10 @@ const CATEGORIAS_PERMISOS = [
         permisos: ['Acceder al Punto de Venta', 'Solo Punto de Venta (bloquea todo lo demás)', 'Aplicar descuentos', 'Registrar venta a crédito', 'Editar precio manualmente', 'Ver ventas de otros usuarios', 'Anular venta', 'Devolver venta'],
     },
     {
+        key: 'delivery_repartidor', titulo: 'Delivery / Repartidor',
+        permisos: ['Ver entregas asignadas'],
+    },
+    {
         key: 'caja', titulo: 'Caja',
         permisos: ['Abrir caja', 'Cerrar caja', 'Registrar gastos del turno', 'Ver caja registradora (histórico)'],
     },
@@ -64,6 +68,7 @@ const PERMISSION_KEYS = {
     'Ver marcas': 'viewBrands', 'Ver unidades': 'viewUnits', 'Ver precios de compra': 'viewPurchasePrices',
     'Ver compras': 'viewPurchases', 'Agregar compra': 'addPurchasePermission', 'Editar compra': 'editPurchasePermission', 'Borrar compra': 'deletePurchasePermission', 'Ver deudas a proveedores': 'viewSupplierDebts',
     'Acceder al Punto de Venta': 'accessPos', 'Solo Punto de Venta (bloquea todo lo demás)': 'posOnly', 'Aplicar descuentos': 'applyDiscounts', 'Registrar venta a crédito': 'registerCreditSale', 'Editar precio manualmente': 'editPrice', 'Ver ventas de otros usuarios': 'viewOtherSales',
+    'Ver entregas asignadas': 'Ver entregas asignadas',
     'Abrir caja': 'openCash', 'Cerrar caja': 'closeCash', 'Registrar gastos del turno': 'registerShiftExpenses', 'Ver caja registradora (histórico)': 'viewCashHistory',
     'Ver gastos': 'viewExpenses', 'Agregar gasto': 'addExpensePermission',
     'Ver Ganancias y Pérdidas': 'viewProfitLoss', 'Ver Caja registradora': 'viewCashRegister', 'Exportar reportes (CSV/Excel/PDF)': 'exportReports',

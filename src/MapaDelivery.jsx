@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 
 const TAM = 256;
 const aRad = (d) => d * Math.PI / 180;
@@ -30,6 +30,13 @@ function desProyectar([x, y], z) {
 // Mapa raster interactivo de OpenStreetMap; dibuja el polígono por clics sin API key.
 export default function MapaDelivery({ puntos = [], onChange, zonas = [], punto = null, selectedZoneId = null, onPuntoChange, modo = 'dibujar' }) {
   const [centro, setCentro] = useState([-25.2867, -57.647]); const [zoom, setZoom] = useState(13); const [medida, setMedida] = useState([900, 340]); const [dibujando, setDibujando] = useState(false);
+  useEffect(() => {
+    if (modo !== 'pin' || !punto || punto.length !== 2) return;
+    const [latitud, longitud] = punto.map(Number);
+    if (!Number.isFinite(latitud) || !Number.isFinite(longitud)) return;
+    setCentro([latitud, longitud]);
+    setZoom(16);
+  }, [modo, punto]);
   const [ancho, alto] = medida; const centroMundo = proyectar(centro, zoom); const esquina = [centroMundo[0] - ancho / 2, centroMundo[1] - alto / 2];
   const tiles = useMemo(() => {
     const minX = Math.floor(esquina[0] / TAM); const maxX = Math.floor((esquina[0] + ancho) / TAM);

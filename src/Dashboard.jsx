@@ -64,6 +64,7 @@ const PanelDesarrollador = lazy(() => import('./PanelDesarrollador'));
 const VentasPorPersonal = lazy(() => import('./VentasPorPersonal'));
 const Pedidos = lazy(() => import('./Pedidos'));
 const Restaurante = lazy(() => import('./Restaurante'));
+const RepartidorEntregas = lazy(() => import('./RepartidorEntregas'));
 const InformesOperativos = lazy(() => import('./InformesOperativos'));
 const InformesMicdepos = lazy(() => import('./InformesMicdepos'));
 const TransferenciasStock = lazy(() => import('./TransferenciasStock'));
@@ -105,6 +106,7 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
 
   const puedeVerVista = (vista) => {
     if (vista === 'restaurante' && ajustesEmpresa.enable_table_qr_orders !== true) return false;
+    if (vista === 'repartidor_entregas' && ajustesEmpresa.enable_table_qr_orders !== true) return false;
     if (ajustesEmpresa.module_settings_explicit) {
       const moduloPorVista = {
         compras: 'module_1', agregar_compra: 'module_1', devoluciones_compra: 'module_1',
@@ -128,7 +130,7 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
       ubicaciones_comerciales: ['ubicaciones', 'Ver ubicaciones'], clientes: ['clientes_proveedores', 'Ver clientes'], proveedores: ['clientes_proveedores', 'Ver proveedores'], grupos_clientes: ['clientes_proveedores', 'Ver clientes'],
       catalogo: ['productos', 'Ver productos'], stock_history: ['productos', 'Ver productos'], agregar_producto: ['productos', 'Agregar producto'], marcas: ['productos', 'Ver marcas'], categorias: ['productos', 'Ver productos'], unidades: ['productos', 'Ver unidades'], precio_grupo_producto: ['productos', 'Ver productos'], catalogo_qr: ['productos', 'Ver productos'], imprimir_etiquetas: ['productos', 'Ver productos'], variaciones_productos: ['productos', 'Ver productos'], grupos_precios_venta: ['productos', 'Ver productos'], garantias_productos: ['productos', 'Ver productos'], importar_productos: ['productos', 'Agregar producto'], importar_stock_inicial: ['productos', 'Ajustar stock'], transferencias_stock: ['productos', 'Transferir stock'], ajustes_stock: ['productos', 'Ajustar stock'], fabricacion: ['productos', 'Ajustar stock'],
       compras: ['compras', 'Ver compras'], agregar_compra: ['compras', 'Agregar compra'], devoluciones_compra: ['compras', 'Ver compras'], gastos: ['gastos', 'Ver gastos'], agregar_gasto: ['gastos', 'Agregar gasto'], categorias_gastos: ['gastos', 'Ver gastos'],
-      todas_ventas: ['ventas_pos', 'Ver ventas de otros usuarios'], pos: ['ventas_pos', 'Acceder al Punto de Venta'], cobros: ['ventas_pos', 'Registrar venta a crédito'], devoluciones_ventas: ['ventas_pos', 'Devolver venta'], descuentos_ventas: ['ventas_pos', 'Aplicar descuentos'], cotizaciones: ['ventas_pos', 'Acceder al Punto de Venta'], pedidos: ['ventas_pos', 'Acceder al Punto de Venta'], restaurante: ['ventas_pos', 'Acceder al Punto de Venta'], importar_ventas: ['ventas_pos', 'Acceder al Punto de Venta'], envios: ['ventas_pos', 'Acceder al Punto de Venta'], remisiones_electronicas: ['ventas_pos', 'Acceder al Punto de Venta'],
+      todas_ventas: ['ventas_pos', 'Ver ventas de otros usuarios'], pos: ['ventas_pos', 'Acceder al Punto de Venta'], cobros: ['ventas_pos', 'Registrar venta a crédito'], devoluciones_ventas: ['ventas_pos', 'Devolver venta'], descuentos_ventas: ['ventas_pos', 'Aplicar descuentos'], cotizaciones: ['ventas_pos', 'Acceder al Punto de Venta'], pedidos: ['ventas_pos', 'Acceder al Punto de Venta'], restaurante: ['ventas_pos', 'Acceder al Punto de Venta'], repartidor_entregas: ['delivery_repartidor', 'Ver entregas asignadas'], importar_ventas: ['ventas_pos', 'Acceder al Punto de Venta'], envios: ['ventas_pos', 'Acceder al Punto de Venta'], remisiones_electronicas: ['ventas_pos', 'Acceder al Punto de Venta'],
       cajas: ['caja', 'Ver caja registradora (histórico)'], informe_caja_pago: ['caja', 'Ver caja registradora (histórico)'], mesa_cambios: ['caja', 'Ver caja registradora (histórico)'], caja_registradora: ['informes', 'Ver Caja registradora'], ganancias_perdidas: ['informes', 'Ver Ganancias y Pérdidas'], flujo_fondos: ['informes', 'Ver Caja registradora'], ventas_por_producto: ['informes', 'Exportar reportes (CSV/Excel/PDF)'], compras_por_producto: ['informes', 'Exportar reportes (CSV/Excel/PDF)'], cobro_de_ventas: ['informes', 'Exportar reportes (CSV/Excel/PDF)'], vendedores_comisiones: ['informes', 'Exportar reportes (CSV/Excel/PDF)'], ventas_por_personal: ['informes', 'Exportar reportes (CSV/Excel/PDF)'], informes_operativos: ['informes', 'Exportar reportes (CSV/Excel/PDF)'], informes_micdepos: ['informes', 'Exportar reportes (CSV/Excel/PDF)'], usuarios: ['usuarios', 'Ver usuarios'], roles: ['roles', 'Ver roles'], plantillas_notificacion: ['configuraciones', 'Acceso a configuraciones generales del sistema'],
     };
     const permiso = permisoPorVista[vista];
@@ -141,7 +143,7 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
     '/': 'inicio', '/usuarios': 'usuarios', '/roles': 'roles', '/proveedores': 'proveedores', '/clientes': 'clientes', '/grupos_clientes': 'grupos_clientes', '/importar-contactos': 'importar_contactos',
     '/catalogo': 'catalogo', '/agregar_producto': 'agregar_producto', '/imprimir-etiquetas': 'imprimir_etiquetas', '/variaciones-productos': 'variaciones_productos', '/importar-productos': 'importar_productos', '/importar-stock-inicial': 'importar_stock_inicial', '/grupos-precios-venta': 'grupos_precios_venta', '/unidades': 'unidades', '/categorias': 'categorias', '/marcas': 'marcas', '/garantias': 'garantias_productos', '/catalogo-qr': 'catalogo_qr',
     '/fabricacion': 'fabricacion', '/ot': 'ot', '/compras': 'compras', '/agregar_compra': 'agregar_compra', '/devoluciones_compra': 'devoluciones_compra', '/todas_ventas': 'todas_ventas', '/pos': 'pos', '/cobros': 'cobros', '/presupuestos': 'cotizaciones', '/envios': 'envios', '/remisiones-electronicas': 'remisiones_electronicas', '/descuentos': 'descuentos_ventas', '/devoluciones-ventas': 'devoluciones_ventas', '/importar-ventas': 'importar_ventas', '/transferencias-stock': 'transferencias_stock', '/transferencias-stock/nuevo': 'transferencias_stock', '/control-stock': 'ajustes_stock', '/control-stock/nuevo': 'ajustes_stock', '/gastos': 'gastos', '/gastos/agregar': 'agregar_gasto', '/gastos/categorias': 'categorias_gastos', '/cajas': 'cajas', '/informe-caja-pago': 'informe_caja_pago', '/ganancias_perdidas': 'ganancias_perdidas', '/caja_registradora': 'caja_registradora', '/vendedores-comisiones': 'vendedores_comisiones', '/ventas-por-personal': 'ventas_por_personal', '/mesa-cambios': 'mesa_cambios', '/pedidos': 'pedidos', '/plantillas-notificacion': 'plantillas_notificacion', '/config_empresa': 'config_empresa', '/ubicaciones_comerciales': 'ubicaciones_comerciales', '/invoice-schemes': 'config_modulos', '/barcodes': 'config_modulos', '/printers': 'config_modulos', '/scales': 'config_modulos', '/tax-rates': 'config_modulos', '/types-of-service': 'config_modulos', '/subscription': 'config_modulos', '/config_factura': 'config_factura', '/admin-desarrollador': 'admin_desarrollador',
-    '/compras-por-producto': 'compras_por_producto', '/ventas-por-producto': 'ventas_por_producto', '/cobro-de-ventas': 'cobro_de_ventas', '/restaurante/mapa': 'restaurante', '/restaurante/pedidos': 'restaurante', '/restaurante/delivery': 'restaurante', '/restaurante/cocina-pro': 'restaurante', '/restaurante/historial': 'restaurante', '/restaurante/configuracion': 'restaurante',
+    '/compras-por-producto': 'compras_por_producto', '/ventas-por-producto': 'ventas_por_producto', '/cobro-de-ventas': 'cobro_de_ventas', '/restaurante/mapa': 'restaurante', '/restaurante/pedidos': 'restaurante', '/restaurante/delivery': 'restaurante', '/restaurante/cocina-pro': 'restaurante', '/restaurante/historial': 'restaurante', '/restaurante/configuracion': 'restaurante', '/repartidor/entregas': 'repartidor_entregas',
     '/informes/compras-ventas': 'informes_micdepos', '/informes/iva': 'informes_operativos', '/informes/rg-90': 'informes_micdepos', '/informes/clientes-proveedores': 'informes_micdepos', '/informes/grupos-clientes': 'informes_micdepos', '/informes/stock': 'informes_operativos', '/informes/vencimientos': 'informes_operativos', '/informes/ajustes': 'informes_operativos', '/informes/productos-mas-vendidos': 'informes_micdepos', '/informes/detalle-articulo': 'informes_micdepos', '/informes/pagos-compras': 'informes_micdepos', '/informes/gastos': 'informes_operativos', '/informes/actividad': 'informes_micdepos',
   };
   const PermittedLink = ({ to, ...props }) => {
@@ -210,6 +212,7 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
     catalogo: t('products'),
     catalogo_qr: 'Catálogo QR',
     restaurante: 'Restaurante',
+    repartidor_entregas: 'Mis entregas',
     stock_history: 'Historial de existencias',
     transferencias_stock: 'Transferencias de stock',
     ajustes_stock: 'Control de stock',
@@ -568,6 +571,9 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
       case '/entregas':
         setVistaActiva('envios');
         break;
+      case '/repartidor/entregas':
+        setVistaActiva('repartidor_entregas');
+        break;
       case '/remisiones-electronicas':
       case '/remisiones':
         setVistaActiva('remisiones_electronicas');
@@ -734,6 +740,7 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
             session={session}
             perfilUsuario={perfilUsuario}
             pedidoRestauranteInicial={location.state?.pedidoRestaurante || null}
+            pedidoDeliveryInicial={location.state?.pedidoDelivery || null}
             onPedidoRestauranteImportado={() => navigate(location.pathname, { replace: true, state: null })}
             onVolver={irAInicio}
             onAbrirGuia={() => setGuiaVisible(true)}
@@ -879,6 +886,9 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
 
       case 'restaurante':
         return <Restaurante key={location.pathname} section={location.pathname.split('/')[2] || 'mapa'} />;
+
+      case 'repartidor_entregas':
+        return <RepartidorEntregas perfilUsuario={perfilUsuario} />;
 
       case 'informes_operativos':
         return <InformesOperativos key={location.pathname} initialReport={location.pathname.startsWith('/informes/') ? location.pathname.split('/')[2] : 'stock'} hideNavigation />;
@@ -1387,6 +1397,8 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
                 </div>}
               </>
             )}
+
+            {puedeVerVista('repartidor_entregas') && !soloPOS && <PermittedLink to="/repartidor/entregas" onClick={() => irA('repartidor_entregas', '/repartidor/entregas')} className={estiloBotonSimple('repartidor_entregas')} title="Mis entregas"><Truck size={18} strokeWidth={2} /> {!sidebarColapsado && 'Mis entregas'}</PermittedLink>}
 
             <PermittedLink to="/plantillas-notificacion" onClick={() => irA('plantillas_notificacion', '/plantillas-notificacion')} className={estiloBotonSimple('plantillas_notificacion')} title="Plantillas de notificación">
               <Mail size={18} strokeWidth={2} /> {!sidebarColapsado && 'Plantillas de notificación'}
