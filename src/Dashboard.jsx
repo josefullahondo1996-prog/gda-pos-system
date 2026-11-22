@@ -1141,7 +1141,7 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
             ))}
 
             <div className="border-t border-[#e5e5e5] mt-2 pt-2">
-              <button type="button" onClick={() => irA('inicio', '/soporte')} className="w-full min-h-[74px] px-8 flex items-center gap-6 text-left text-[21px] tracking-wide text-[#202020] hover:bg-[#fff5f0]">
+              <button type="button" onClick={() => { setMenuMovilAbierto(false); setGuiaVisible(true); }} className="w-full min-h-[74px] px-8 flex items-center gap-6 text-left text-[21px] tracking-wide text-[#202020] hover:bg-[#fff5f0]">
                 <CircleHelp size={32} strokeWidth={2.1} className="shrink-0" />
                 <span>Soporte</span>
               </button>
