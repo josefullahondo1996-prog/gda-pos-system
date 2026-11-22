@@ -5,7 +5,7 @@ import {
   LayoutDashboard, Users, Contact, Package, Factory, Wrench, ChevronDown,
   ArrowDownToLine, ArrowUpFromLine, BarChart3, ShoppingCart, LogOut, Settings,
   MapPin, FileText, Barcode, Printer, Percent, ClipboardList, CreditCard, ArrowRightLeft,
-  Menu, X, DollarSign, BookOpen, Truck, ShoppingBag, Clock3, Building2, CircleHelp, CalendarDays, ShieldCheck, Mail, ClipboardCheck, QrCode, Bell, AlertTriangle, CalendarClock, PackageX, UtensilsCrossed
+  Menu, X, ChevronLeft, DollarSign, BookOpen, Truck, ShoppingBag, Clock3, Building2, CircleHelp, CalendarDays, ShieldCheck, Mail, ClipboardCheck, QrCode, Bell, AlertTriangle, CalendarClock, PackageX, UtensilsCrossed
 } from 'lucide-react';
 import { LanguageSelector, useLanguage } from './LanguageContext';
 import LogoPyPos from './LogoPyPos';
