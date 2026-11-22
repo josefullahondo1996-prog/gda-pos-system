@@ -7,12 +7,15 @@ import Dashboard from './Dashboard';
 import ChatBotFlotante from './ChatBotFlotante';
 import { useLanguage } from './LanguageContext';
 import { useLocation } from 'react-router-dom';
+import { useNotificacion } from './NotificacionContext';
+import { sonidoExito } from './utils/sonido';
 import GdaLandingPage from './GdaLandingPage';
 const CatalogoQRPublico = lazy(() => import('./CatalogoQR').then((m) => ({ default: m.CatalogoQRPublico })));
 const EstadoPedidoQRPublico = lazy(() => import('./CatalogoQR').then((m) => ({ default: m.EstadoPedidoQRPublico })));
 
 function App() {
   const { t } = useLanguage();
+  const { notificar } = useNotificacion();
   const location = useLocation();
   const [session, setSession] = useState(null);
   const [perfilUsuario, setPerfilUsuario] = useState(null);
@@ -23,6 +26,9 @@ function App() {
   // carga cuando Supabase reenvía "SIGNED_IN" con el mismo usuario
   // (esto pasa solo, al volver a la pestaña del navegador).
   const usuarioActualId = useRef(null);
+  const notificarRef = useRef(notificar);
+  const pedidosNotificadosRef = useRef(new Set());
+  notificarRef.current = notificar;
 
   const cargarPerfil = async (session) => {
     if (!session) {
@@ -139,6 +145,46 @@ function App() {
 
     return () => subscription.unsubscribe();
   }, []);
+
+  const empresaIdNotificaciones = perfilUsuario?.empresa_id || perfilUsuario?.empresas?.id;
+  const nombreRol = String(perfilUsuario?.roles?.nombre || '').toLowerCase();
+  const permisosRol = perfilUsuario?.roles?.permisos;
+  const puedeRecibirAvisosDePedido = nombreRol.includes('admin')
+    || perfilUsuario?.es_desarrollador === true
+    || permisosRol?.ventas_pos?.['Acceder al Punto de Venta'] === true;
+
+  useEffect(() => {
+    if (!session?.user?.id || !empresaIdNotificaciones || !puedeRecibirAvisosDePedido) return undefined;
+
+    const channel = supabase.channel(`avisos-pedidos-${empresaIdNotificaciones}-${session.user.id}`)
+      .on('postgres_changes', {
+        event: 'INSERT',
+        schema: 'public',
+        table: 'pedidos',
+        filter: `empresa_id=eq.${empresaIdNotificaciones}`,
+      }, ({ new: pedido }) => {
+        const esPedidoDeCatalogo = ['catalogo_qr', 'catalogo_qr_mesa'].includes(pedido?.origen);
+        if (!pedido || pedido.estado !== 'pendiente' || (!esPedidoDeCatalogo && pedido.delivery_tipo !== 'delivery')) return;
+
+        const clave = `${empresaIdNotificaciones}:${pedido.id || pedido.numero_pedido || pedido.creado_en}`;
+        if (pedidosNotificadosRef.current.has(clave)) return;
+        pedidosNotificadosRef.current.add(clave);
+        if (pedidosNotificadosRef.current.size > 200) {
+          pedidosNotificadosRef.current.delete(pedidosNotificadosRef.current.values().next().value);
+        }
+
+        sonidoExito();
+        const canal = pedido.delivery_tipo === 'delivery'
+          ? 'Delivery'
+          : pedido.origen === 'catalogo_qr_mesa'
+            ? `Mesa ${pedido.mesa_nombre || ''}`.trim()
+            : 'Catálogo QR';
+        notificarRef.current.info(`Llegó un nuevo pedido${pedido.numero_pedido ? ` · ${pedido.numero_pedido}` : ''} (${canal}).`);
+      })
+      .subscribe();
+
+    return () => { supabase.removeChannel(channel); };
+  }, [session?.user?.id, empresaIdNotificaciones, puedeRecibirAvisosDePedido]);
 
   if (location.pathname.startsWith('/pedido/seguimiento/')) return <Suspense fallback={<div className="grid min-h-screen place-items-center text-slate-500">Cargando seguimiento...</div>}><EstadoPedidoQRPublico /></Suspense>;
   if (location.pathname.startsWith('/catalogo-qr/')) return <Suspense fallback={<div className="grid min-h-screen place-items-center text-slate-500">Cargando catálogo...</div>}><CatalogoQRPublico /></Suspense>;

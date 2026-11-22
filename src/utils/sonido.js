@@ -1,12 +1,35 @@
 // Sonidos cortos generados con Web Audio API (sin archivos de audio externos)
 
 let audioCtx = null;
+
+const desbloquearAudio = () => {
+  if (typeof window === 'undefined') return;
+  window.removeEventListener('pointerdown', desbloquearAudio);
+  window.removeEventListener('keydown', desbloquearAudio);
+
+  try {
+    const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+    if (!AudioContextClass) return;
+    if (!audioCtx) audioCtx = new AudioContextClass();
+    if (audioCtx.state === 'suspended') audioCtx.resume().catch(() => {});
+  } catch (e) {
+    console.warn('No se pudo habilitar el audio:', e.message);
+  }
+};
+
+if (typeof window !== 'undefined') {
+  // Preparar el contexto en una interacción del usuario para que los sonidos
+  // posteriores a una respuesta de red no sean bloqueados por el navegador.
+  window.addEventListener('pointerdown', desbloquearAudio, { once: true, passive: true });
+  window.addEventListener('keydown', desbloquearAudio, { once: true });
+}
+
 const getAudioCtx = () => {
   if (!audioCtx) {
     const AudioContextClass = window.AudioContext || window.webkitAudioContext;
     audioCtx = new AudioContextClass();
   }
-  if (audioCtx.state === 'suspended') audioCtx.resume();
+  if (audioCtx.state === 'suspended') audioCtx.resume().catch(() => {});
   return audioCtx;
 };
 
