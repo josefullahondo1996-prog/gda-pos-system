@@ -1076,7 +1076,9 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
                 </div>
               )}
             </div>
-            {[
+            {(esRepartidorHabilitado ? [
+              ['Mis entregas', '/repartidor/entregas', Truck],
+            ] : [
               ['Vender', '/pos', ShoppingCart],
               ...(ajustesEmpresa.enable_table_qr_orders ? [['Restaurante', '/restaurante/mapa', UtensilsCrossed]] : []),
               ['Productos', '/catalogo', Package],
@@ -1097,7 +1099,7 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
               ['Asistencia', '/asistencia', Clock3],
               ['CRM / Follow-ups', '/crm', Users],
               ['Reportes', '/ganancias_perdidas', BarChart3],
-            ].map(([etiqueta, ruta, Icono]) => (
+            ]).map(([etiqueta, ruta, Icono]) => (
               <button
                 key={ruta}
                 type="button"
@@ -1638,8 +1640,19 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
         {/* BARRA DE NAVEGACIÓN INFERIOR PARA MÓVIL */}
         {!posPantallaCompleta && (
           <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-gray-300 h-16 flex items-center justify-around px-1 z-40">
+            {esRepartidorHabilitado ? (
+              <button
+                type="button"
+                onClick={() => irA('repartidor_entregas', '/repartidor/entregas')}
+                className={`flex flex-col items-center justify-center gap-0.5 flex-1 py-2 px-2 rounded-2xl transition-all ${vistaActiva === 'repartidor_entregas' ? 'bg-[#ffebe5] text-orange-600' : 'text-gray-500 hover:text-gray-700'}`}
+                title="Mis entregas"
+              >
+                <Truck size={22} />
+                <span className="text-[10px] font-bold">Mis entregas</span>
+              </button>
+            ) : <>
             {/* VENDER */}
-            <button
+            {puedeVerVista('pos') && <button
               onClick={() => irA('pos', '/pos')}
               className={`flex flex-col items-center justify-center gap-0.5 flex-1 py-2 px-2 rounded-2xl transition-all ${
                 vistaActiva === 'pos'
@@ -1650,10 +1663,10 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
             >
               <ShoppingCart size={22} />
               <span className="text-[10px] font-bold">Vender</span>
-            </button>
+            </button>}
 
             {/* PRODUCTOS */}
-            <button
+            {puedeVerVista('catalogo') && <button
               onClick={() => irA('catalogo', '/catalogo')}
               className={`flex flex-col items-center justify-center gap-0.5 flex-1 py-2 px-2 rounded-2xl transition-all ${
                 vistaActiva === 'catalogo'
@@ -1664,10 +1677,10 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
             >
               <Package size={22} />
               <span className="text-[10px] font-bold">Productos</span>
-            </button>
+            </button>}
 
             {/* CAJA */}
-            <button
+            {puedeVerVista('cajas') && <button
               onClick={() => irA('cajas', '/cajas')}
               className={`flex flex-col items-center justify-center gap-0.5 flex-1 py-2 px-2 rounded-2xl transition-all ${
                 vistaActiva === 'cajas'
@@ -1678,10 +1691,10 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
             >
               <DollarSign size={22} />
               <span className="text-[10px] font-bold">Caja</span>
-            </button>
+            </button>}
 
             {/* CLIENTES */}
-            <button
+            {puedeVerVista('clientes') && <button
               onClick={() => irA('clientes', '/clientes')}
               className={`flex flex-col items-center justify-center gap-0.5 flex-1 py-2 px-2 rounded-2xl transition-all ${
                 vistaActiva === 'clientes'
@@ -1692,10 +1705,10 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
             >
               <Users size={22} />
               <span className="text-[10px] font-bold">Clientes</span>
-            </button>
+            </button>}
 
             {/* REPORTES */}
-            <button
+            {puedeVerVista('ganancias_perdidas') && <button
               onClick={() => irA('ganancias_perdidas', '/ganancias_perdidas')}
               className={`flex flex-col items-center justify-center gap-0.5 flex-1 py-2 px-2 rounded-2xl transition-all ${
                 vistaActiva === 'ganancias_perdidas'
@@ -1706,7 +1719,8 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
             >
               <BarChart3 size={22} />
               <span className="text-[10px] font-bold">Reportes</span>
-            </button>
+            </button>}
+            </>}
           </nav>
         )}
 
