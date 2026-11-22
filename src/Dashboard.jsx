@@ -10,6 +10,7 @@ import {
 import { LanguageSelector, useLanguage } from './LanguageContext';
 import LogoPyPos from './LogoPyPos';
 import GuiaInicial from './GuiaInicial';
+const SoporteRepartidor = lazy(() => import('./SoporteRepartidor'));
 
 import { useUbicacionUsuario } from './utils/useUbicacion';
 import { useEmpresaInfo } from './utils/useEmpresa';
@@ -141,6 +142,7 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
     // El alta explícita en delivery_repartidores habilita solo la bandeja propia;
     // la consulta y las acciones siguen limitadas por RLS/RPC al usuario autenticado.
     if (vista === 'repartidor_entregas' && esRepartidorHabilitado) return true;
+    if (esRepartidorHabilitado && ['soporte_repartidor', 'plantillas_notificacion'].includes(vista)) return true;
     if (vista === 'admin_desarrollador') return esDesarrollador;
     if (vista === 'importar_contactos') {
       return puedeVerPermiso('clientes_proveedores', 'Agregar cliente')
@@ -165,7 +167,7 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
     '/': 'inicio', '/usuarios': 'usuarios', '/roles': 'roles', '/proveedores': 'proveedores', '/clientes': 'clientes', '/grupos_clientes': 'grupos_clientes', '/importar-contactos': 'importar_contactos',
     '/catalogo': 'catalogo', '/agregar_producto': 'agregar_producto', '/imprimir-etiquetas': 'imprimir_etiquetas', '/variaciones-productos': 'variaciones_productos', '/importar-productos': 'importar_productos', '/importar-stock-inicial': 'importar_stock_inicial', '/grupos-precios-venta': 'grupos_precios_venta', '/unidades': 'unidades', '/categorias': 'categorias', '/marcas': 'marcas', '/garantias': 'garantias_productos', '/catalogo-qr': 'catalogo_qr',
     '/fabricacion': 'fabricacion', '/ot': 'ot', '/compras': 'compras', '/agregar_compra': 'agregar_compra', '/devoluciones_compra': 'devoluciones_compra', '/todas_ventas': 'todas_ventas', '/pos': 'pos', '/cobros': 'cobros', '/presupuestos': 'cotizaciones', '/envios': 'envios', '/remisiones-electronicas': 'remisiones_electronicas', '/descuentos': 'descuentos_ventas', '/devoluciones-ventas': 'devoluciones_ventas', '/importar-ventas': 'importar_ventas', '/transferencias-stock': 'transferencias_stock', '/transferencias-stock/nuevo': 'transferencias_stock', '/control-stock': 'ajustes_stock', '/control-stock/nuevo': 'ajustes_stock', '/gastos': 'gastos', '/gastos/agregar': 'agregar_gasto', '/gastos/categorias': 'categorias_gastos', '/cajas': 'cajas', '/informe-caja-pago': 'informe_caja_pago', '/ganancias_perdidas': 'ganancias_perdidas', '/caja_registradora': 'caja_registradora', '/vendedores-comisiones': 'vendedores_comisiones', '/ventas-por-personal': 'ventas_por_personal', '/mesa-cambios': 'mesa_cambios', '/pedidos': 'pedidos', '/plantillas-notificacion': 'plantillas_notificacion', '/config_empresa': 'config_empresa', '/ubicaciones_comerciales': 'ubicaciones_comerciales', '/invoice-schemes': 'config_modulos', '/barcodes': 'config_modulos', '/printers': 'config_modulos', '/scales': 'config_modulos', '/tax-rates': 'config_modulos', '/types-of-service': 'config_modulos', '/subscription': 'config_modulos', '/config_factura': 'config_factura', '/admin-desarrollador': 'admin_desarrollador',
-    '/compras-por-producto': 'compras_por_producto', '/ventas-por-producto': 'ventas_por_producto', '/cobro-de-ventas': 'cobro_de_ventas', '/restaurante/mapa': 'restaurante', '/restaurante/pedidos': 'restaurante', '/restaurante/delivery': 'restaurante', '/restaurante/cocina-pro': 'restaurante', '/restaurante/historial': 'restaurante', '/restaurante/configuracion': 'restaurante', '/repartidor/entregas': 'repartidor_entregas',
+    '/compras-por-producto': 'compras_por_producto', '/ventas-por-producto': 'ventas_por_producto', '/cobro-de-ventas': 'cobro_de_ventas', '/restaurante/mapa': 'restaurante', '/restaurante/pedidos': 'restaurante', '/restaurante/delivery': 'restaurante', '/restaurante/cocina-pro': 'restaurante', '/restaurante/historial': 'restaurante', '/restaurante/configuracion': 'restaurante', '/repartidor/entregas': 'repartidor_entregas', '/soporte': 'soporte_repartidor',
     '/informes/compras-ventas': 'informes_micdepos', '/informes/iva': 'informes_operativos', '/informes/rg-90': 'informes_micdepos', '/informes/clientes-proveedores': 'informes_micdepos', '/informes/grupos-clientes': 'informes_micdepos', '/informes/stock': 'informes_operativos', '/informes/vencimientos': 'informes_operativos', '/informes/ajustes': 'informes_operativos', '/informes/productos-mas-vendidos': 'informes_micdepos', '/informes/detalle-articulo': 'informes_micdepos', '/informes/pagos-compras': 'informes_micdepos', '/informes/gastos': 'informes_operativos', '/informes/actividad': 'informes_micdepos',
   };
   const PermittedLink = ({ to, ...props }) => {
@@ -235,6 +237,7 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
     catalogo_qr: 'Catálogo QR',
     restaurante: 'Restaurante',
     repartidor_entregas: 'Mis entregas',
+    soporte_repartidor: 'Soporte',
     stock_history: 'Historial de existencias',
     transferencias_stock: 'Transferencias de stock',
     ajustes_stock: 'Control de stock',
@@ -596,6 +599,9 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
       case '/repartidor/entregas':
         setVistaActiva('repartidor_entregas');
         break;
+      case '/soporte':
+        setVistaActiva('soporte_repartidor');
+        break;
       case '/remisiones-electronicas':
       case '/remisiones':
         setVistaActiva('remisiones_electronicas');
@@ -936,6 +942,9 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
       case 'plantillas_notificacion':
         return <PlantillasNotificacion key={refreshKey} />;
 
+      case 'soporte_repartidor':
+        return <SoporteRepartidor onVolver={() => irA('repartidor_entregas', '/repartidor/entregas')} />;
+
       case 'variaciones_productos':
         return <VariacionesProductos key={refreshKey} />;
 
@@ -1021,6 +1030,26 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
           </div>
 
           <nav className="scrollbar-none flex-1 overflow-y-auto py-3">
+            {esRepartidorHabilitado ? (
+              <div className="space-y-1 px-2">
+                <button type="button" onClick={() => irA('repartidor_entregas', '/repartidor/entregas')} className="w-full min-h-[74px] px-6 flex items-center gap-5 rounded-xl text-left text-[20px] font-semibold text-slate-800 hover:bg-orange-50">
+                  <Truck size={30} strokeWidth={2.1} className="shrink-0" />
+                  <span>Mis pedidos</span>
+                </button>
+                <button type="button" onClick={() => irA('soporte_repartidor', '/soporte')} className="w-full min-h-[74px] px-6 flex items-center gap-5 rounded-xl text-left text-[20px] font-semibold text-slate-800 hover:bg-orange-50">
+                  <CircleHelp size={30} strokeWidth={2.1} className="shrink-0" />
+                  <span>Soporte</span>
+                </button>
+                <button type="button" onClick={() => irA('plantillas_notificacion', '/plantillas-notificacion')} className="w-full min-h-[74px] px-6 flex items-center gap-5 rounded-xl text-left text-[20px] font-semibold text-slate-800 hover:bg-orange-50">
+                  <Mail size={30} strokeWidth={2.1} className="shrink-0" />
+                  <span>Plantillas de notificación</span>
+                </button>
+                <button type="button" onClick={cerrarSesion} className="w-full min-h-[74px] px-6 flex items-center gap-5 rounded-xl text-left text-[20px] font-semibold text-red-600 hover:bg-red-50">
+                  <LogOut size={30} strokeWidth={2.1} className="shrink-0" />
+                  <span>Cerrar sesión</span>
+                </button>
+              </div>
+            ) : <>
             <button
               type="button"
               onClick={() => irA('plantillas_notificacion', '/plantillas-notificacion')}
@@ -1121,6 +1150,7 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
                 <span>Cerrar sesión</span>
               </button>
             </div>
+            </>}
           </nav>
 
           <div className="border-t border-[#e5e5e5] px-8 py-5 text-center text-[#999] text-base shrink-0">
@@ -1645,10 +1675,10 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
                 type="button"
                 onClick={() => irA('repartidor_entregas', '/repartidor/entregas')}
                 className={`flex flex-col items-center justify-center gap-0.5 flex-1 py-2 px-2 rounded-2xl transition-all ${vistaActiva === 'repartidor_entregas' ? 'bg-[#ffebe5] text-orange-600' : 'text-gray-500 hover:text-gray-700'}`}
-                title="Mis entregas"
+                title="Mis pedidos"
               >
                 <Truck size={22} />
-                <span className="text-[10px] font-bold">Mis entregas</span>
+                <span className="text-[10px] font-bold">Mis pedidos</span>
               </button>
               <button
                 type="button"
