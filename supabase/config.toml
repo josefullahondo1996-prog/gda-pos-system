@@ -13,6 +13,9 @@ verify_jwt = true
 [functions.configurar-goekua]
 verify_jwt = true
 
+[functions.delivery-push]
+verify_jwt = true
+
 [functions.crear-negocio]
 verify_jwt = false
 

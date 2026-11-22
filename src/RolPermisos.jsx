@@ -79,7 +79,7 @@ const PERMISSION_KEYS = {
 
 const CATEGORY_KEYS = {
     clientes_proveedores: 'contacts', usuarios: 'users', roles: 'roles', productos: 'products', compras: 'purchases',
-    ventas_pos: 'salesPos', caja: 'cash', gastos: 'expenses', informes: 'reports', configuraciones: 'settings',
+    ventas_pos: 'salesPos', delivery_repartidor: 'deliveryCourier', caja: 'cash', gastos: 'expenses', informes: 'reports', configuraciones: 'settings',
     ot: 'workOrders', ubicaciones: 'commercialLocations',
 };
 

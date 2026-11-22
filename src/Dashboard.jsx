@@ -100,13 +100,32 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
   const esAdmin = nombreRol.includes('admin');
   const esDesarrollador = perfilUsuario?.es_desarrollador === true || nombreRol.includes('desarrollador') || nombreRol.includes('developer');
   const permisosRol = perfilUsuario?.roles?.permisos || null;
+  const [esRepartidorHabilitado, setEsRepartidorHabilitado] = useState(false);
+
+  useEffect(() => {
+    let vigente = true;
+    const verificarRepartidor = async () => {
+      const empresaId = perfilUsuario?.empresa_id || empresaInfo?.id;
+      const usuarioId = perfilUsuario?.auth_user_id;
+      if (!empresaId || !usuarioId) { setEsRepartidorHabilitado(false); return; }
+      const { data, error } = await supabase.from('delivery_repartidores')
+        .select('usuario_auth_id')
+        .eq('empresa_id', empresaId)
+        .eq('usuario_auth_id', usuarioId)
+        .eq('activo', true)
+        .maybeSingle();
+      if (vigente) setEsRepartidorHabilitado(!error && !!data);
+    };
+    verificarRepartidor();
+    return () => { vigente = false; };
+  }, [perfilUsuario?.empresa_id, perfilUsuario?.auth_user_id, empresaInfo?.id]);
 
   const puedeVerPermiso = (categoria, permiso) => esAdmin
     || permisosRol?.[categoria]?.[permiso] === true;
 
   const puedeVerVista = (vista) => {
     if (vista === 'restaurante' && ajustesEmpresa.enable_table_qr_orders !== true) return false;
-    if (vista === 'repartidor_entregas' && ajustesEmpresa.enable_table_qr_orders !== true) return false;
+    if (vista === 'repartidor_entregas' && ajustesEmpresa.enable_table_qr_orders !== true && !esRepartidorHabilitado) return false;
     if (ajustesEmpresa.module_settings_explicit) {
       const moduloPorVista = {
         compras: 'module_1', agregar_compra: 'module_1', devoluciones_compra: 'module_1',
@@ -119,6 +138,9 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
       if (modulo && ajustesEmpresa[modulo] === false) return false;
     }
     if (esAdmin) return true;
+    // El alta explícita en delivery_repartidores habilita solo la bandeja propia;
+    // la consulta y las acciones siguen limitadas por RLS/RPC al usuario autenticado.
+    if (vista === 'repartidor_entregas' && esRepartidorHabilitado) return true;
     if (vista === 'admin_desarrollador') return esDesarrollador;
     if (vista === 'importar_contactos') {
       return puedeVerPermiso('clientes_proveedores', 'Agregar cliente')
@@ -675,7 +697,7 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
         setVistaActiva(initialView);
         break;
     }
-  }, [location.pathname, initialView, soloPOS, esDesarrollador, permisosRol]);
+  }, [location.pathname, initialView, soloPOS, esDesarrollador, permisosRol, esRepartidorHabilitado]);
 
   // 2. ENRUTADOR DE VISTAS (Aquí se decide qué se dibuja a la derecha)
   const renderizarVista = () => {
@@ -1398,7 +1420,7 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
               </>
             )}
 
-            {puedeVerVista('repartidor_entregas') && !soloPOS && <PermittedLink to="/repartidor/entregas" onClick={() => irA('repartidor_entregas', '/repartidor/entregas')} className={estiloBotonSimple('repartidor_entregas')} title="Mis entregas"><Truck size={18} strokeWidth={2} /> {!sidebarColapsado && 'Mis entregas'}</PermittedLink>}
+            {puedeVerVista('repartidor_entregas') && (!soloPOS || esRepartidorHabilitado) && <PermittedLink to="/repartidor/entregas" onClick={() => irA('repartidor_entregas', '/repartidor/entregas')} className={estiloBotonSimple('repartidor_entregas')} title="Mis entregas"><Truck size={18} strokeWidth={2} /> {!sidebarColapsado && 'Mis entregas'}</PermittedLink>}
 
             <PermittedLink to="/plantillas-notificacion" onClick={() => irA('plantillas_notificacion', '/plantillas-notificacion')} className={estiloBotonSimple('plantillas_notificacion')} title="Plantillas de notificación">
               <Mail size={18} strokeWidth={2} /> {!sidebarColapsado && 'Plantillas de notificación'}

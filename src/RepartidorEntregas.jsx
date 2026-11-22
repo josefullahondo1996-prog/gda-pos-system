@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { ArrowUpRight, CheckCircle2, MapPin, Phone, RefreshCw, Truck } from 'lucide-react';
+import { ArrowUpRight, Bell, CheckCircle2, MapPin, Phone, RefreshCw, Truck } from 'lucide-react';
 import { supabase } from './supabaseClient';
 import { useEmpresaInfo } from './utils/useEmpresa';
 import { useNotificacion } from './NotificacionContext';
@@ -19,6 +19,63 @@ export default function RepartidorEntregas({ perfilUsuario }) {
   const [error, setError] = useState('');
   const [pedidoParaFinalizar, setPedidoParaFinalizar] = useState(null);
   const [montoEfectivo, setMontoEfectivo] = useState('');
+  const [activandoAvisos, setActivandoAvisos] = useState(false);
+  const [avisosActivos, setAvisosActivos] = useState(false);
+
+  useEffect(() => {
+    let vigente = true;
+    const revisarSuscripcion = async () => {
+      if (!('serviceWorker' in navigator) || !('PushManager' in window)) return;
+      try {
+        const registration = await navigator.serviceWorker.getRegistration('/');
+        const subscription = await registration?.pushManager.getSubscription();
+        if (vigente) setAvisosActivos(!!subscription && Notification.permission === 'granted');
+      } catch { if (vigente) setAvisosActivos(false); }
+    };
+    revisarSuscripcion();
+    return () => { vigente = false; };
+  }, []);
+
+  const activarAvisos = async () => {
+    if (!empresaId || !authUserId) return;
+    if (!window.isSecureContext || !('serviceWorker' in navigator) || !('PushManager' in window) || !('Notification' in window)) {
+      return notificar.error('Este navegador no admite avisos Push. En iPhone, agregá PyPos a la pantalla de inicio y abrilo desde ese ícono.');
+    }
+    const esIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+    const instalado = window.matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
+    if (esIOS && !instalado) return notificar.error('En iPhone: Compartir → Añadir a pantalla de inicio. Después abrí PyPos desde el nuevo ícono y activá los avisos.');
+    if (Notification.permission === 'denied') return notificar.error('Los avisos están bloqueados en el navegador. Habilitalos en la configuración del sitio y volvé a intentar.');
+
+    setActivandoAvisos(true);
+    try {
+      const permiso = Notification.permission === 'granted' ? 'granted' : await Notification.requestPermission();
+      if (permiso !== 'granted') throw new Error('Aceptá el permiso de notificaciones para recibir pedidos asignados.');
+      const { data: clave, error: errorClave } = await supabase.functions.invoke('delivery-push', { body: { action: 'public-key' } });
+      if (errorClave || !clave?.publicKey) throw new Error(errorClave?.message || clave?.error || 'No se pudo preparar el aviso Push en Supabase.');
+      const registro = await navigator.serviceWorker.register('/service-worker.js', { scope: '/' });
+      await navigator.serviceWorker.ready;
+      const base64 = clave.publicKey.replace(/-/g, '+').replace(/_/g, '/');
+      const padding = '='.repeat((4 - base64.length % 4) % 4);
+      const applicationServerKey = Uint8Array.from(atob(base64 + padding), (caracter) => caracter.charCodeAt(0));
+      const suscripcion = await registro.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey });
+      const jsonSuscripcion = suscripcion.toJSON();
+      const { error: errorGuardar } = await supabase.from('delivery_push_suscripciones').upsert({
+        empresa_id: empresaId,
+        usuario_auth_id: authUserId,
+        endpoint: jsonSuscripcion.endpoint,
+        p256dh: jsonSuscripcion.keys?.p256dh,
+        auth: jsonSuscripcion.keys?.auth,
+        actualizado_en: new Date().toISOString(),
+      }, { onConflict: 'endpoint' });
+      if (errorGuardar) throw new Error(errorGuardar.message);
+      setAvisosActivos(true);
+      notificar.exito('Avisos activados en este celular. Te llegará una notificación cuando te asignen un pedido.');
+    } catch (errorPush) {
+      notificar.error(`No se pudieron activar los avisos: ${errorPush.message}`);
+    } finally {
+      setActivandoAvisos(false);
+    }
+  };
 
   const cargar = useCallback(async () => {
     if (!empresaId || !authUserId) { setCargando(false); return; }
@@ -113,6 +170,10 @@ export default function RepartidorEntregas({ perfilUsuario }) {
     {error && <div role="alert" className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-800">{error}</div>}
     {!error && !cargando && !repartidor && <div className="rounded-xl border border-amber-200 bg-amber-50 p-5 text-sm text-amber-900">Tu usuario todavía no está habilitado como repartidor. Pedile al administrador que lo active en <b>Restaurante → Delivery · Repartidores</b>.</div>}
     {repartidor && <>
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-blue-200 bg-blue-50 p-3">
+        <p className="flex items-center gap-2 text-sm font-semibold text-blue-950"><Bell size={17}/>{avisosActivos ? 'Este celular recibirá avisos de nuevos pedidos.' : 'Activá los avisos para enterarte cuando te asignen una entrega.'}</p>
+        {!avisosActivos && <button type="button" onClick={activarAvisos} disabled={activandoAvisos} className="rounded-lg bg-blue-700 px-3 py-2 text-sm font-bold text-white disabled:opacity-50">{activandoAvisos ? 'Activando…' : 'Activar avisos en este celular'}</button>}
+      </div>
       <div className="flex items-center justify-between gap-3"><h3 className="font-black text-slate-800">Pendientes de entrega</h3><span className="rounded-full bg-orange-100 px-2.5 py-1 text-xs font-black text-orange-800">{activos.length}</span></div>
       {cargando ? <p className="rounded-xl border bg-white p-8 text-center text-slate-500">Cargando tus pedidos…</p> : activos.length ? <div className="grid gap-3 lg:grid-cols-2">{activos.map((pedido) => {
         const tienePunto = pedido.delivery_latitud != null && pedido.delivery_longitud != null;
