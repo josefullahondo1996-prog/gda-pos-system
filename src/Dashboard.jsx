@@ -1085,7 +1085,7 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
               ['Pedidos pendientes', '/cobros', ClipboardList],
               ['Clientes', '/clientes', Users],
               ['Carta Online', '/carta-online', BookOpen],
-              ['Mis entregas', '/entregas', Truck],
+              ['Mis entregas', '/repartidor/entregas', Truck],
               ['Caja', '/caja_registradora', DollarSign],
               ['Caja / Banco', '/cajas', Building2],
               ['Flujo de fondos', '/flujo-fondos', BarChart3],
@@ -1101,7 +1101,7 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
               <button
                 key={ruta}
                 type="button"
-                onClick={() => irA(etiqueta === 'Restaurante' ? 'restaurante' : etiqueta === 'Vender' ? 'pos' : etiqueta === 'Productos' ? 'catalogo' : etiqueta === 'Clientes' ? 'clientes' : etiqueta === 'Caja' ? 'caja_registradora' : etiqueta === 'Caja / Banco' ? 'cajas' : etiqueta === 'Gastos' ? 'gastos' : etiqueta === 'Compras' ? 'compras' : etiqueta === 'Reportes' ? 'ganancias_perdidas' : etiqueta === 'Informe de cajas' ? 'informe_caja_pago' : etiqueta === 'Devoluciones' ? 'devoluciones_compra' : etiqueta === 'Pedidos pendientes' ? 'cobros' : etiqueta === 'Histórico de ventas' ? 'todas_ventas' : etiqueta === 'Presupuestos' ? 'cotizaciones' : etiqueta === 'Flujo de fondos' ? 'flujo_fondos' : etiqueta === 'Mis entregas' ? 'envios' : 'inicio', ruta)}
+                onClick={() => irA(etiqueta === 'Restaurante' ? 'restaurante' : etiqueta === 'Vender' ? 'pos' : etiqueta === 'Productos' ? 'catalogo' : etiqueta === 'Clientes' ? 'clientes' : etiqueta === 'Caja' ? 'caja_registradora' : etiqueta === 'Caja / Banco' ? 'cajas' : etiqueta === 'Gastos' ? 'gastos' : etiqueta === 'Compras' ? 'compras' : etiqueta === 'Reportes' ? 'ganancias_perdidas' : etiqueta === 'Informe de cajas' ? 'informe_caja_pago' : etiqueta === 'Devoluciones' ? 'devoluciones_compra' : etiqueta === 'Pedidos pendientes' ? 'cobros' : etiqueta === 'Histórico de ventas' ? 'todas_ventas' : etiqueta === 'Presupuestos' ? 'cotizaciones' : etiqueta === 'Flujo de fondos' ? 'flujo_fondos' : etiqueta === 'Mis entregas' ? 'repartidor_entregas' : 'inicio', ruta)}
                 className="w-full min-h-[74px] px-8 flex items-center gap-6 text-left text-[21px] tracking-wide text-[#202020] hover:bg-[#fff5f0] active:bg-[#ffe9df]"
               >
                 <Icono size={32} strokeWidth={2.1} className="shrink-0 text-[#161616]" />
