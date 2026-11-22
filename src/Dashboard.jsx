@@ -1640,7 +1640,7 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
         {/* BARRA DE NAVEGACIÓN INFERIOR PARA MÓVIL */}
         {!posPantallaCompleta && (
           <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-gray-300 h-16 flex items-center justify-around px-1 z-40">
-            {esRepartidorHabilitado ? (
+            {esRepartidorHabilitado ? <>
               <button
                 type="button"
                 onClick={() => irA('repartidor_entregas', '/repartidor/entregas')}
@@ -1650,7 +1650,17 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
                 <Truck size={22} />
                 <span className="text-[10px] font-bold">Mis entregas</span>
               </button>
-            ) : <>
+              <button
+                type="button"
+                onClick={cerrarSesion}
+                className="flex flex-col items-center justify-center gap-0.5 flex-1 py-2 px-2 rounded-2xl text-red-600 transition-colors hover:bg-red-50"
+                title="Salir de la cuenta"
+                aria-label="Salir de la cuenta"
+              >
+                <LogOut size={22} />
+                <span className="text-[10px] font-bold">Salir</span>
+              </button>
+            </> : <>
             {/* VENDER */}
             {puedeVerVista('pos') && <button
               onClick={() => irA('pos', '/pos')}
