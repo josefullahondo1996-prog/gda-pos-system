@@ -1018,6 +1018,9 @@ const PuntoDeVenta = ({ cajaInfo, session, perfilUsuario, pedidoRestauranteInici
     // Verificación final de stock antes de cobrar (por si cambió algo mientras armabas el carrito)
     const sinStockSuficiente = carrito.filter((item) => {
       const productoActual = productos.find((p) => p.id === item.id);
+      // Las pizzas personalizadas no descuentan stock del producto padre:
+      // registrar_venta valida y consume los ingredientes de la receta.
+      if (productoActual?.pizza?.id || item.configuracion_pizza?.presentacion_id) return false;
       const stockDisponible = productoActual ? stockEnSucursal(productoActual) : undefined;
       return stockDisponible !== null && stockDisponible !== undefined && item.cantidad > stockDisponible;
     });
@@ -1173,6 +1176,7 @@ const PuntoDeVenta = ({ cajaInfo, session, perfilUsuario, pedidoRestauranteInici
       setProductos((prev) => {
         let updated = prev.map((p) => {
           const vendido = carrito.find((item) => item.id === p.id);
+          if (p.pizza?.id || vendido?.configuracion_pizza?.presentacion_id) return p;
           if (!vendido || p.stock_actual === null || p.stock_actual === undefined) return p;
           return { ...p, stock_actual: Math.max(0, p.stock_actual - vendido.cantidad) };
         });
@@ -1726,7 +1730,7 @@ const PuntoDeVenta = ({ cajaInfo, session, perfilUsuario, pedidoRestauranteInici
                       <p className="line-clamp-2 min-h-10 text-[13px] font-bold leading-5 text-slate-800 group-hover:text-orange-700">{prod.nombre}</p>
                       <p className="mt-1 truncate text-[10px] font-medium text-slate-400">{prod.codigo || 'Sin código'}</p>
                       <div className="mt-auto flex items-end justify-between gap-2 pt-3">
-                        <span className="max-w-[55%] truncate rounded-full bg-slate-100 px-2 py-1 text-[9px] font-semibold text-slate-600">Stock {formatearStock(stockEnSucursal(prod), prod.unidad)}</span>
+                        <span className="max-w-[55%] truncate rounded-full bg-slate-100 px-2 py-1 text-[9px] font-semibold text-slate-600">{prod.pizza?.id ? 'Stock según receta' : `Stock ${formatearStock(stockEnSucursal(prod), prod.unidad)}`}</span>
                         {ajustesEmpresa.show_pricing_on_product_suggestion !== false && <span className="whitespace-nowrap text-sm font-black text-orange-600">{formatMoneda(convertirDesdeGs(precioParaCliente(prod)), monedaVenta)}</span>}
                       </div>
                     </div>
