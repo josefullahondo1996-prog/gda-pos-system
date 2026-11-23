@@ -22,17 +22,19 @@ function App() {
   const [cargando, setCargando] = useState(true);
   const [mostrarCrearNegocio, setMostrarCrearNegocio] = useState(false);
   const [errorAcceso, setErrorAcceso] = useState('');
+  const [errorInicializacion, setErrorInicializacion] = useState('');
   // Guarda qué usuario ya tenemos cargado, para no repetir el proceso de
   // carga cuando Supabase reenvía "SIGNED_IN" con el mismo usuario
   // (esto pasa solo, al volver a la pestaña del navegador).
   const usuarioActualId = useRef(null);
+  const transicionAuthRef = useRef(0);
   const notificarRef = useRef(notificar);
   const pedidosNotificadosRef = useRef(new Set());
   notificarRef.current = notificar;
 
-  const cargarPerfil = async (session) => {
+  const cargarPerfil = async (session, sigueVigente = () => true) => {
     if (!session) {
-      setPerfilUsuario(null);
+      if (sigueVigente()) setPerfilUsuario(null);
       return;
     }
     try {
@@ -42,10 +44,12 @@ function App() {
         .eq('auth_user_id', session.user.id)
         .maybeSingle();
 
+      if (!sigueVigente()) return;
       if (error) throw error;
 
       if (!data || !data.empresas) {
         const { data: esDesarrollador } = await supabase.rpc('admin_es_desarrollador');
+        if (!sigueVigente()) return;
         if (esDesarrollador === true) {
           setErrorAcceso('');
           setPerfilUsuario({
@@ -84,6 +88,7 @@ function App() {
       setErrorAcceso('');
       setPerfilUsuario(data);
     } catch (err) {
+      if (!sigueVigente()) return;
       console.error('Error al cargar el perfil del usuario:', err.message);
       setPerfilUsuario(null);
     }
@@ -91,30 +96,52 @@ function App() {
 
   useEffect(() => {
     console.log('App: Iniciando sesión de Supabase...');
-    supabase.auth.getSession().then(async ({ data: { session } }) => {
+    const cargaInicialId = transicionAuthRef.current;
+    const timeoutCarga = window.setTimeout(() => {
+      if (transicionAuthRef.current !== cargaInicialId) return;
+      console.error('App: Supabase tardó demasiado en restaurar la sesión.');
+      setErrorInicializacion('La conexión con Supabase está tardando demasiado. Revisá tu conexión y volvé a intentar.');
+      setCargando(false);
+    }, 15000);
+
+    supabase.auth.getSession().then(async ({ data: { session }, error }) => {
+      if (transicionAuthRef.current !== cargaInicialId) return;
+      if (error) throw error;
       console.log('App: Sesión obtenida:', session ? 'Usuario logueado' : 'Sin sesión');
       usuarioActualId.current = session?.user?.id || null;
       setSession(session);
+      setErrorInicializacion('');
       try {
-        await cargarPerfil(session);
+        await cargarPerfil(session, () => transicionAuthRef.current === cargaInicialId);
       } catch (e) {
         console.error('App: Error en cargarPerfil:', e);
       }
+      if (transicionAuthRef.current !== cargaInicialId) return;
+      window.clearTimeout(timeoutCarga);
       console.log('App: Finalizando estado de carga');
       setCargando(false);
     }).catch(err => {
+      window.clearTimeout(timeoutCarga);
+      if (transicionAuthRef.current !== cargaInicialId) return;
       console.error('App: Error al obtener sesión:', err);
+      setErrorInicializacion('No se pudo restaurar la sesión con Supabase. Volvé a intentar.');
       setCargando(false);
     });
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (_event, session) => {
+      (_event, session) => {
+        // Supabase emite este evento dentro de su bloqueo interno de Auth.
+        // La restauración inicial la resuelve getSession() fuera del callback.
+        if (_event === 'INITIAL_SESSION') return;
+
         const nuevoUsuarioId = session?.user?.id || null;
 
         if (_event === 'PASSWORD_RECOVERY') {
+          transicionAuthRef.current += 1;
           usuarioActualId.current = nuevoUsuarioId;
           setSession(session);
           setPerfilUsuario(null);
+          setErrorInicializacion('');
           setCargando(false);
           return;
         }
@@ -128,22 +155,44 @@ function App() {
         }
 
         // Acá sí cambió de verdad quién está logueado (login, logout, u otro usuario)
+        const transicionId = ++transicionAuthRef.current;
         usuarioActualId.current = nuevoUsuarioId;
-        setCargando(true);
         setSession(session);
-        await cargarPerfil(session);
-        if (_event === 'SIGNED_IN' && session?.user?.id) {
-          setTimeout(() => {
-            supabase.rpc('registrar_inicio_sesion_auditoria').then(({ error }) => {
-              if (error) console.warn('No se pudo guardar el evento de inicio de sesión:', error.message);
-            });
-          }, 0);
+
+        if (!session) {
+          setPerfilUsuario(null);
+          setErrorInicializacion('');
+          setCargando(false);
+          return;
         }
-        setCargando(false);
+
+        setCargando(true);
+        setErrorInicializacion('');
+        // No esperar peticiones de Supabase desde onAuthStateChange: el SDK
+        // mantiene su bloqueo de Auth durante el callback y eso puede trabar
+        // getSession() al restaurar una sesión guardada.
+        window.setTimeout(() => {
+          void (async () => {
+            await cargarPerfil(session, () => transicionAuthRef.current === transicionId);
+            if (transicionAuthRef.current !== transicionId) return;
+            if (_event === 'SIGNED_IN' && session.user.id) {
+              const { error } = await supabase.rpc('registrar_inicio_sesion_auditoria');
+              if (error) console.warn('No se pudo guardar el evento de inicio de sesión:', error.message);
+            }
+            if (transicionAuthRef.current === transicionId) setCargando(false);
+          })().catch(err => {
+            if (transicionAuthRef.current !== transicionId) return;
+            console.error('App: Error al procesar el cambio de sesión:', err);
+            setCargando(false);
+          });
+        }, 0);
       }
     );
 
-    return () => subscription.unsubscribe();
+    return () => {
+      window.clearTimeout(timeoutCarga);
+      subscription.unsubscribe();
+    };
   }, []);
 
   const empresaIdNotificaciones = perfilUsuario?.empresa_id || perfilUsuario?.empresas?.id;
@@ -188,6 +237,17 @@ function App() {
 
   if (location.pathname.startsWith('/pedido/seguimiento/')) return <Suspense fallback={<div className="grid min-h-screen place-items-center text-slate-500">Cargando seguimiento...</div>}><EstadoPedidoQRPublico /></Suspense>;
   if (location.pathname.startsWith('/catalogo-qr/')) return <Suspense fallback={<div className="grid min-h-screen place-items-center text-slate-500">Cargando catálogo...</div>}><CatalogoQRPublico /></Suspense>;
+
+  if (errorInicializacion) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center gap-4 px-6 text-center text-gray-600">
+        <p role="alert">{errorInicializacion}</p>
+        <button type="button" onClick={() => window.location.reload()} className="rounded-lg bg-orange-500 px-5 py-3 font-semibold text-white hover:bg-orange-600">
+          Volver a intentar
+        </button>
+      </div>
+    );
+  }
 
   if (cargando) {
     return (
