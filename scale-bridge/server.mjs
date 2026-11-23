@@ -3,7 +3,7 @@ import net from 'node:net';
 
 const HTTP_HOST = '127.0.0.1';
 const HTTP_PORT = Number(process.env.SCALE_BRIDGE_PORT || 8765);
-const ALLOWED_ORIGINS = new Set((process.env.SCALE_BRIDGE_ORIGINS || 'http://localhost:5173,http://127.0.0.1:5173').split(',').map((v) => v.trim()).filter(Boolean));
+const ALLOWED_ORIGINS = new Set((process.env.SCALE_BRIDGE_ORIGINS || 'http://localhost:5173,http://127.0.0.1:5173,https://pypos.vercel.app').split(',').map((v) => v.trim()).filter(Boolean));
 
 function privateIPv4(value) {
   const octets = String(value || '').split('.').map(Number);

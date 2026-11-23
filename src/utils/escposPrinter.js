@@ -116,6 +116,50 @@ export function buildEscPosReceipt(venta, empresa = {}, characters = 42) {
   return asBase64(commands);
 }
 
+export function buildEscPosKitchenTicket(pedido, empresa = {}, characters = 42) {
+  const width = Number(characters) <= 32 ? 32 : 42;
+  const commands = [];
+  const push = (...values) => commands.push(...values);
+  const text = (value) => { push(...encodeText(value), 0x0a); };
+  const center = (value) => { push(0x1b, 0x61, 0x01); text(value); push(0x1b, 0x61, 0x00); };
+  const bold = (enabled) => push(0x1b, 0x45, enabled ? 1 : 0);
+  const rule = () => text('-'.repeat(width));
+  const fecha = pedido.creado_en ? new Date(pedido.creado_en) : new Date();
+  const origen = pedido.delivery_tipo === 'delivery' ? 'DELIVERY' : pedido.mesa_nombre || 'PEDIDO QR';
+  const items = Array.isArray(pedido.items) ? pedido.items : [];
+
+  push(0x1b, 0x40, 0x1b, 0x74, 0x02);
+  center(String(empresa.nombre || 'PY POS').toUpperCase());
+  bold(true);
+  center('COMANDA DE COCINA');
+  bold(false);
+  rule();
+  text(`PEDIDO: ${pedido.numero_pedido || String(pedido.id || '').slice(0, 8)}`);
+  text(`TIPO: ${origen}`);
+  text(`HORA: ${fecha.toLocaleDateString('es-PY')} ${fecha.toLocaleTimeString('es-PY', { hour: '2-digit', minute: '2-digit' })}`);
+  if (pedido.delivery_tipo === 'delivery') {
+    if (pedido.cliente_nombre) for (const line of wrap(`CLIENTE: ${pedido.cliente_nombre}`, width)) text(line);
+    if (pedido.delivery_direccion) for (const line of wrap(`DIRECCION: ${pedido.delivery_direccion}`, width)) text(line);
+  }
+  rule();
+  bold(true);
+  for (const item of items) {
+    const cantidad = Number(item.cantidad) || 1;
+    for (const line of wrap(`${cantidad} x ${item.nombre || item.nombre_producto || 'Producto'}`, width)) text(line.toUpperCase());
+    const detalle = item.configuracion_pizza || item.detalle || item.variante;
+    if (detalle) for (const line of wrap(`  ${typeof detalle === 'string' ? detalle : JSON.stringify(detalle)}`, width)) text(line);
+  }
+  bold(false);
+  if (pedido.nota) {
+    rule();
+    for (const line of wrap(`NOTA: ${pedido.nota}`, width)) text(line);
+  }
+  rule();
+  center('--- NUEVO PEDIDO ---');
+  push(0x0a, 0x0a, 0x1d, 0x56, 0x00);
+  return asBase64(commands);
+}
+
 async function requestBridge(path, payload, timeoutMs = 2500) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
@@ -142,6 +186,16 @@ export async function printEscPos(printer, venta, empresa = {}) {
     ip: printer.ip,
     port: Number(printer.port || 9100),
     bytesBase64: buildEscPosReceipt(venta, empresa, printer.characters || 42),
+  }, 10000);
+}
+
+export async function printKitchenTicket(printer, pedido, empresa = {}) {
+  if (!printer || printer.connection !== 'Network' || !printer.ip) throw new Error('La impresión automática de cocina requiere una impresora de red con IP configurada.');
+  await requestBridge('/health');
+  return requestBridge('/api/printer/print', {
+    ip: printer.ip,
+    port: Number(printer.port || 9100),
+    bytesBase64: buildEscPosKitchenTicket(pedido, empresa, printer.characters || 42),
   }, 10000);
 }
 

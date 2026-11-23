@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { ChefHat, ClipboardList, Clock3, Download, ExternalLink, LayoutGrid, LoaderCircle, RefreshCw, Save, Settings2, UtensilsCrossed, X, CircleDollarSign, Pencil, Trash2, Search, CheckCircle2, Timer, Users, History as HistoryIcon, ArrowRightLeft, Truck } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
@@ -9,6 +9,7 @@ import { useConfiguracionEmpresa, notificarConfiguracionEmpresaActualizada } fro
 import { useNotificacion } from './NotificacionContext';
 import DeliveryRestaurante from './DeliveryRestaurante';
 import HistorialDelivery from './HistorialDelivery';
+import { printKitchenTicket } from './utils/escposPrinter';
 
 const URL_MESA = (token) => `${window.location.origin}/catalogo-qr/${token}`;
 const FECHA = (value) => new Date(value).toLocaleTimeString('es-PY', { hour: '2-digit', minute: '2-digit' });
@@ -79,6 +80,16 @@ export default function Restaurante({ section = 'mapa' }) {
   const [historial, setHistorial] = useState({ correcciones: [], cancelaciones: [], movimientos: [] });
   const [cargandoHistorial, setCargandoHistorial] = useState(false);
   const [errorHistorial, setErrorHistorial] = useState('');
+  const [impresorasCocina, setImpresorasCocina] = useState([]);
+  const [impresoraCocinaId, setImpresoraCocinaId] = useState('');
+  const [configImpresionLista, setConfigImpresionLista] = useState(false);
+  const [impresionAutomatica, setImpresionAutomatica] = useState(false);
+  const [estadoImpresion, setEstadoImpresion] = useState('');
+  const pedidosVistosRef = useRef(null);
+  const pedidosRealtimeRef = useRef(new Set());
+  const colaImpresionRef = useRef([]);
+  const procesandoImpresionRef = useRef(false);
+  const impresoraCocina = useMemo(() => impresorasCocina.find((item) => String(item.id || `${item.name || ''}-${item.ip}`) === impresoraCocinaId) || null, [impresorasCocina, impresoraCocinaId]);
 
   const cargar = useCallback(async () => {
     if (!empresaId) return;
@@ -136,11 +147,93 @@ export default function Restaurante({ section = 'mapa' }) {
   useEffect(() => {
     if (!empresaId) return undefined;
     const channel = supabase.channel(`restaurante-pedidos-${empresaId}`)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'pedidos', filter: `empresa_id=eq.${empresaId}` }, () => cargar())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'pedidos', filter: `empresa_id=eq.${empresaId}` }, (payload) => {
+        const pedidoNuevo = payload.eventType === 'INSERT' ? payload.new : null;
+        if (pedidoNuevo?.id && ['catalogo_qr', 'catalogo_qr_mesa'].includes(pedidoNuevo.origen)) pedidosRealtimeRef.current.add(pedidoNuevo.id);
+        cargar();
+      })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'pedidos_qr_ventas', filter: `empresa_id=eq.${empresaId}` }, () => cargar())
       .subscribe();
     return () => { supabase.removeChannel(channel); };
   }, [empresaId, cargar]);
+
+  useEffect(() => {
+    if (!empresaId) return undefined;
+    let activo = true;
+    pedidosVistosRef.current = null;
+    pedidosRealtimeRef.current.clear();
+    const claveImpresion = `pypos-restaurante-auto-print-${empresaId}`;
+    const claveImpresora = `pypos-restaurante-impresora-${empresaId}`;
+    setConfigImpresionLista(false);
+    try { setImpresionAutomatica(localStorage.getItem(claveImpresion) === 'true'); } catch { setImpresionAutomatica(false); }
+    (async () => {
+      const { data, error: errorConfig } = await supabase.from('empresas').select('configuracion').eq('id', empresaId).maybeSingle();
+      let configuracion = data?.configuracion;
+      if (errorConfig || !configuracion) {
+        try { configuracion = JSON.parse(localStorage.getItem(`pypos-config-empresa-${empresaId}`) || '{}'); } catch { configuracion = {}; }
+      }
+      const impresoras = configuracion?.modulos?.printers || configuracion?.extra?.printers;
+      const disponibles = Array.isArray(impresoras) ? impresoras.filter((item) => item.connection === 'Network' && item.ip) : [];
+      let seleccionada = '';
+      try { seleccionada = localStorage.getItem(claveImpresora) || ''; } catch { /* preferencia opcional */ }
+      if (!disponibles.some((item) => String(item.id || `${item.name || ''}-${item.ip}`) === seleccionada)) seleccionada = '';
+      if (activo) { setImpresorasCocina(disponibles); setImpresoraCocinaId(seleccionada); setConfigImpresionLista(true); }
+    })();
+    return () => { activo = false; };
+  }, [empresaId]);
+
+  useEffect(() => {
+    if (cargando || !configImpresionLista) return;
+    const actuales = pedidos.filter((pedido) => pedido.origen === 'catalogo_qr_mesa' || pedido.delivery_tipo === 'delivery');
+    let nuevos = [];
+    if (pedidosVistosRef.current === null) {
+      nuevos = actuales.filter((pedido) => pedidosRealtimeRef.current.has(pedido.id) && pedido.estado === 'pendiente');
+      const nuevosIds = new Set(nuevos.map((pedido) => pedido.id));
+      pedidosVistosRef.current = new Set(actuales.filter((pedido) => !nuevosIds.has(pedido.id)).map((pedido) => pedido.id));
+    } else {
+      const vistos = pedidosVistosRef.current;
+      nuevos = actuales.filter((pedido) => !vistos.has(pedido.id) && pedido.estado === 'pendiente');
+    }
+    actuales.forEach((pedido) => pedidosRealtimeRef.current.delete(pedido.id));
+    if (!nuevos.length) return;
+    const vistos = pedidosVistosRef.current;
+    const nuevosIds = new Set(nuevos.map((pedido) => pedido.id));
+    actuales.filter((pedido) => !nuevosIds.has(pedido.id)).forEach((pedido) => vistos.add(pedido.id));
+    if (!impresionAutomatica) { actuales.forEach((pedido) => vistos.add(pedido.id)); return; }
+    if (!impresoraCocina) {
+      setEstadoImpresion('Seleccioná una impresora de red de cocina para habilitar el envío automático.');
+      return;
+    }
+    actuales.forEach((pedido) => vistos.add(pedido.id));
+    nuevos.forEach((pedido) => colaImpresionRef.current.push({ pedido, impresora: impresoraCocina, empresa }));
+    if (procesandoImpresionRef.current) return;
+    procesandoImpresionRef.current = true;
+    (async () => {
+      while (colaImpresionRef.current.length) {
+        const { pedido, impresora, empresa: empresaTicket } = colaImpresionRef.current.shift();
+        try {
+          await printKitchenTicket(impresora, pedido, empresaTicket || {});
+          setEstadoImpresion(`Último ticket enviado: ${pedido.numero_pedido || pedido.id.slice(0, 8)}.`);
+        } catch (error) {
+          setEstadoImpresion(`No se pudo imprimir ${pedido.numero_pedido || 'el pedido'}: ${error.message}. Verificá el puente de impresión en esta computadora.`);
+        }
+      }
+      procesandoImpresionRef.current = false;
+    })();
+  }, [pedidos, cargando, configImpresionLista, impresionAutomatica, impresoraCocina, empresa]);
+
+  const cambiarImpresionAutomatica = () => {
+    const siguiente = !impresionAutomatica;
+    setImpresionAutomatica(siguiente);
+    setEstadoImpresion(siguiente ? 'Impresión automática activada en este equipo. Los pedidos que ya estaban pendientes no se imprimirán otra vez.' : 'Impresión automática desactivada en este equipo.');
+    try { if (empresaId) localStorage.setItem(`pypos-restaurante-auto-print-${empresaId}`, String(siguiente)); } catch { /* la preferencia sigue activa durante esta sesión */ }
+  };
+
+  const seleccionarImpresoraCocina = (id) => {
+    setImpresoraCocinaId(id);
+    try { if (empresaId) localStorage.setItem(`pypos-restaurante-impresora-${empresaId}`, id); } catch { /* la preferencia sigue activa durante esta sesión */ }
+    setEstadoImpresion(id ? 'Impresora de cocina seleccionada para este equipo.' : 'Seleccioná una impresora para habilitar la impresión automática.');
+  };
 
   const idsPedidosCobrados = useMemo(() => new Set(pedidosCobrados.map((item) => item.pedido_id)), [pedidosCobrados]);
   const pedidosSinCobrar = useMemo(() => pedidos.filter((pedido) => pedido.delivery_tipo !== 'delivery' && !idsPedidosCobrados.has(pedido.id) && pedido.estado !== 'cancelado'), [pedidos, idsPedidosCobrados]);
@@ -177,6 +270,8 @@ export default function Restaurante({ section = 'mapa' }) {
       && mesa.nombre.toLocaleLowerCase('es').includes(busquedaMesas.trim().toLocaleLowerCase('es'));
   }), [mesas, cuentasPorMesa, filtroMesas, busquedaMesas]);
   const pendientes = pedidosActivos.filter((pedido) => pedido.estado === 'pendiente');
+  const pendientesMesa = pedidosActivos.filter((pedido) => pedido.estado === 'pendiente' && pedido.origen === 'catalogo_qr_mesa');
+  const pendientesDelivery = pedidosParaCocina.filter((pedido) => pedido.delivery_tipo === 'delivery' && pedido.delivery_estado === 'recibido');
   const preparando = pedidosActivos.filter((pedido) => pedido.estado === 'en_preparacion');
   const resumenProductos = useMemo(() => {
     const acumulado = new Map();
@@ -321,7 +416,7 @@ export default function Restaurante({ section = 'mapa' }) {
   const activeTab = SECCIONES.find((item) => item.id === section) || SECCIONES[0];
   return <div className="mx-auto w-full max-w-7xl space-y-5 p-4 md:p-6">
     <header className="rounded-2xl bg-gradient-to-r from-slate-950 via-slate-900 to-orange-950 p-5 text-white shadow-lg md:p-7"><div className="flex items-center gap-3"><span className="grid h-11 w-11 place-items-center rounded-xl bg-white/10"><UtensilsCrossed size={22}/></span><div><p className="text-xs font-bold uppercase tracking-[.18em] text-orange-300">Operación gastronómica</p><h1 className="text-2xl font-black">Restaurante · {activeTab.label}</h1></div></div><p className="mt-3 max-w-3xl text-sm text-slate-300">Administrá mesas, recibí pedidos QR y coordiná la preparación desde una pantalla compartida.</p></header>
-    <nav className="grid grid-cols-2 gap-2 rounded-xl border border-slate-200 bg-white p-2 shadow-sm md:grid-cols-3 xl:grid-cols-6">{SECCIONES.map(({ id, label, path, icon: Icon }) => <Link key={id} to={path} className={`flex items-center justify-center gap-2 rounded-lg px-3 py-3 text-sm font-bold transition ${section === id ? 'bg-orange-500 text-white shadow-sm' : 'text-slate-600 hover:bg-orange-50 hover:text-orange-700'}`}><Icon size={17}/>{label}</Link>)}</nav>
+    <nav aria-label="Secciones de Restaurante" className="grid grid-cols-2 gap-2 rounded-xl border border-slate-200 bg-white p-2 shadow-sm md:grid-cols-3 xl:grid-cols-6">{SECCIONES.map(({ id, label, path, icon: Icon }) => { const solicitudesNuevas = id === 'mapa' ? pendientesMesa.length : id === 'delivery' ? pendientesDelivery.length : ['pedidos', 'cocina-pro'].includes(id) ? pendientes.length : 0; return <Link key={id} to={path} title={solicitudesNuevas ? `${solicitudesNuevas} pedido(s) nuevo(s)` : label} className={`flex items-center justify-center gap-2 rounded-lg px-3 py-3 text-sm font-bold transition ${section === id ? 'bg-orange-500 text-white shadow-sm' : 'text-slate-600 hover:bg-orange-50 hover:text-orange-700'}`}><Icon size={17}/><span>{label}</span>{solicitudesNuevas > 0 && <span aria-label={`${solicitudesNuevas} pedidos nuevos`} className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-rose-600 px-1.5 text-[11px] font-black leading-none text-white shadow-sm">{solicitudesNuevas > 99 ? '99+' : solicitudesNuevas}</span>}</Link>; })}</nav>
     {error && <div role="alert" className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">{error}</div>}
 
     {section === 'delivery' ? <DeliveryRestaurante /> : section === 'historial' ? (
@@ -361,7 +456,8 @@ export default function Restaurante({ section = 'mapa' }) {
       </>
     ) : (
       <>
-        <div className="flex flex-wrap items-end justify-between gap-3"><div><h2 className="text-lg font-black">Cocina Pro</h2><p className="text-sm text-slate-500">Cola ordenada por antigüedad. Los pedidos QR se actualizan en tiempo real.</p></div><span className="rounded-full bg-orange-50 px-3 py-1.5 text-xs font-bold text-orange-800">Objetivo {ajustes.restaurant_preparation_minutes || 20} min</span></div>
+        <div className="flex flex-wrap items-end justify-between gap-3"><div><h2 className="text-lg font-black">Cocina Pro</h2><p className="text-sm text-slate-500">Cola ordenada por antigüedad. Los pedidos QR se actualizan en tiempo real.</p></div><div className="flex flex-wrap items-end gap-2"><span className="rounded-full bg-orange-50 px-3 py-1.5 text-xs font-bold text-orange-800">Objetivo {ajustes.restaurant_preparation_minutes || 20} min</span><label className="text-xs font-bold text-slate-600">Impresora de cocina<select value={impresoraCocinaId} disabled={!configImpresionLista || !impresorasCocina.length} onChange={(event)=>seleccionarImpresoraCocina(event.target.value)} className="mt-1 block max-w-56 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold disabled:bg-slate-100"><option value="">Seleccionar impresora</option>{impresorasCocina.map((impresora)=><option key={impresora.id || `${impresora.name}-${impresora.ip}`} value={impresora.id || `${impresora.name || ''}-${impresora.ip}`}>{impresora.name || impresora.ip} · {impresora.ip}</option>)}</select></label><button type="button" onClick={cambiarImpresionAutomatica} disabled={!configImpresionLista || (!impresoraCocina && !impresionAutomatica)} aria-pressed={impresionAutomatica} className={`rounded-lg px-3 py-2.5 text-xs font-black disabled:cursor-not-allowed disabled:opacity-50 ${impresionAutomatica ? 'bg-emerald-700 text-white' : 'border border-slate-300 bg-white text-slate-700'}`}>{impresionAutomatica ? 'Automática activa' : 'Activar impresión automática'}</button></div></div>
+        <p role="status" className={`rounded-lg border p-3 text-xs ${impresionAutomatica && impresoraCocina ? 'border-emerald-200 bg-emerald-50 text-emerald-900' : 'border-amber-200 bg-amber-50 text-amber-900'}`}>{!configImpresionLista ? 'Cargando impresoras…' : !impresorasCocina.length ? 'No hay impresoras de red configuradas. Agregá una en Configuración → Impresoras de tickets; la impresión automática de cocina requiere conexión de red.' : !impresoraCocina ? 'Elegí la impresora de cocina de este equipo. La selección no cambia la impresora de caja.' : impresionAutomatica ? `Impresión automática activa en este equipo → ${impresoraCocina.name || impresoraCocina.ip}. Mantené PyPOS y el puente de impresión abiertos.` : `Impresora seleccionada: ${impresoraCocina.name || impresoraCocina.ip}. Activá la impresión automática en este equipo.`}{estadoImpresion && <span className="ml-1 font-bold">{estadoImpresion}</span>}</p>
         {cargando ? <p className="rounded-xl bg-white p-10 text-center text-slate-500">Cargando cocina…</p> : <div className="space-y-4">
           {resumenProductos.length > 0 && <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm"><h3 className="mb-3 text-sm font-black uppercase tracking-wide text-slate-600">Carga activa por producto</h3><div className="flex gap-2 overflow-x-auto pb-1">{resumenProductos.map((item) => <div key={item.nombre} className="min-w-36 rounded-lg bg-slate-50 px-3 py-2"><p className="truncate text-xs text-slate-500">{item.nombre}</p><p className="mt-1 text-lg font-black text-slate-900">{item.cantidad} <span className="text-xs font-semibold">unid.</span></p><p className="text-[10px] text-slate-400">{item.comandas} líneas activas</p></div>)}</div></section>}
           <div className="grid gap-4 xl:grid-cols-3"><section className="rounded-xl border border-amber-200 bg-amber-50/60 p-3"><h3 className="mb-3 flex items-center gap-2 font-black text-amber-900"><ClipboardList size={17}/>Entrantes ({pendientes.length})</h3><div className="space-y-3">{pendientes.map((pedido) => <PedidoCard key={pedido.id} pedido={pedido} onAvanzar={avanzarPedido} onCancelar={abrirCancelacion} onEditar={abrirCorreccion} guardando={guardandoId === pedido.id} objetivoMinutos={ajustes.restaurant_preparation_minutes}/>)}</div>{!pendientes.length && <p className="p-6 text-center text-sm text-amber-800">Sin pedidos nuevos</p>}</section><section className="rounded-xl border border-blue-200 bg-blue-50/60 p-3"><h3 className="mb-3 flex items-center gap-2 font-black text-blue-900"><ChefHat size={17}/>En preparación ({preparando.length})</h3><div className="space-y-3">{preparando.map((pedido) => <PedidoCard key={pedido.id} pedido={pedido} onAvanzar={avanzarPedido} onCancelar={abrirCancelacion} onEditar={abrirCorreccion} guardando={guardandoId === pedido.id} objetivoMinutos={ajustes.restaurant_preparation_minutes}/>)}</div>{!preparando.length && <p className="p-6 text-center text-sm text-blue-800">Nada en preparación</p>}</section><section className="rounded-xl border border-emerald-200 bg-emerald-50/60 p-3"><h3 className="mb-3 flex items-center gap-2 font-black text-emerald-900"><CheckCircle2 size={17}/>Listos ({pedidosListos.length})</h3><div className="space-y-3">{pedidosListos.map((pedido) => <PedidoCard key={pedido.id} pedido={pedido} onAvanzar={avanzarPedido} onCancelar={abrirCancelacion} onEditar={abrirCorreccion} guardando={guardandoId === pedido.id} objetivoMinutos={ajustes.restaurant_preparation_minutes}/>)}</div>{!pedidosListos.length && <p className="p-6 text-center text-sm text-emerald-800">Sin comandas listas</p>}</section></div>
