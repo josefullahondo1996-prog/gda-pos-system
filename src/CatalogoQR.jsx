@@ -18,7 +18,7 @@ const etiquetaEstadoSeguimiento = (estado, esDelivery = false) => {
   return ({ pendiente: 'Recibido · esperando confirmación', en_preparacion: 'En preparación', completado: 'Listo · avisá al personal' })[estado] || 'Pedido recibido';
 };
 
-export default function CatalogoQR() {
+export default function CatalogoQR({ initialSection = 'catalogos' }) {
   const { id: empresaId } = useEmpresaInfo();
   const { ajustes } = useConfiguracionEmpresa(empresaId);
   const { notificar, confirmar } = useNotificacion();
@@ -37,6 +37,7 @@ export default function CatalogoQR() {
   const [mesasCatalogo, setMesasCatalogo] = useState(null);
   const [mesas, setMesas] = useState([]);
   const [nuevaMesa, setNuevaMesa] = useState('');
+  const mesasAutoAbiertas = useRef(false);
 
   useEffect(() => {
     let vigente = true;
@@ -99,6 +100,19 @@ export default function CatalogoQR() {
     if (error) { notificar.error(`No se pudieron cargar las mesas. Aplicá database/migration_pedidos_qr_mesa.sql. ${error.message}`); setMesas([]); return; }
     setMesas(data || []);
   };
+  useEffect(() => {
+    if (initialSection !== 'mesas' || cargando || !catalogos.length || mesasAutoAbiertas.current) return;
+    const catalogoConfigurado = catalogos.find((item) => String(item.id) === String(ajustes.restaurant_catalogo_qr_id));
+    const catalogo = catalogoConfigurado?.estado === 'Activo'
+      ? catalogoConfigurado
+      : catalogos.find((item) => item.estado === 'Activo') || catalogos[0];
+    mesasAutoAbiertas.current = true;
+    if (!ajustes.enable_table_qr_orders) {
+      notificar.error('Activá los pedidos QR por mesa en Restaurante → Configuración para administrar sus mesas.');
+      return;
+    }
+    abrirMesas(catalogo);
+  }, [initialSection, cargando, catalogos, ajustes.restaurant_catalogo_qr_id, ajustes.enable_table_qr_orders]);
   const crearMesa = async (event) => {
     event.preventDefault(); const nombre = nuevaMesa.trim();
     if (!nombre || !mesasCatalogo) return;
@@ -120,7 +134,7 @@ export default function CatalogoQR() {
   return <div className="min-h-full overflow-auto bg-slate-50 p-4 md:p-7">
     <div className="mx-auto max-w-7xl space-y-6">
       <header className="flex flex-wrap items-center justify-between gap-4 rounded-2xl bg-gradient-to-r from-slate-900 to-slate-800 p-6 text-white shadow-lg">
-        <div><div className="mb-2 flex items-center gap-2 text-amber-300"><QrCode size={19}/><span className="text-xs font-bold uppercase tracking-[.18em]">Catálogo QR</span></div><h1 className="text-2xl font-bold">Tus catálogos públicos</h1><p className="mt-1 text-sm text-slate-300">Compartí tus productos y precios con un enlace o código QR.</p></div>
+        <div><div className="mb-2 flex items-center gap-2 text-amber-300"><QrCode size={19}/><span className="text-xs font-bold uppercase tracking-[.18em]">{initialSection === 'mesas' ? 'Configuración · Mesas' : 'Carta Online · Catálogo QR'}</span></div><h1 className="text-2xl font-bold">{initialSection === 'mesas' ? 'Mesas y códigos QR' : 'Tus catálogos públicos'}</h1><p className="mt-1 text-sm text-slate-300">{initialSection === 'mesas' ? 'Elegí un catálogo activo para crear mesas y administrar sus códigos QR.' : 'Compartí tus productos y precios con un enlace o código QR.'}</p></div>
         <button onClick={abrirNuevo} className="inline-flex items-center gap-2 rounded-xl bg-amber-400 px-4 py-3 font-bold text-slate-900 hover:bg-amber-300"><Plus size={18}/> Nuevo catálogo</button>
       </header>
       <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm md:p-6">

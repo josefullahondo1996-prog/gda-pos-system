@@ -9,12 +9,22 @@ import { useConfiguracionEmpresa, notificarConfiguracionEmpresaActualizada } fro
 import { useNotificacion } from './NotificacionContext';
 import DeliveryRestaurante from './DeliveryRestaurante';
 import HistorialDelivery from './HistorialDelivery';
+import RestaurantePOS from './RestaurantePOS';
+import EstacionesCocina from './EstacionesCocina';
 import { printKitchenTicket } from './utils/escposPrinter';
 
 const URL_MESA = (token) => `${window.location.origin}/catalogo-qr/${token}`;
 const FECHA = (value) => new Date(value).toLocaleTimeString('es-PY', { hour: '2-digit', minute: '2-digit' });
 const importe = (value) => `Gs ${Math.round(Number(value || 0)).toLocaleString('es-PY')}`;
+const esPedidoWeb = (pedido) => pedido.origen === 'catalogo_qr' && pedido.delivery_tipo === 'retiro';
+const esPedidoRestaurante = (pedido) => pedido.origen === 'catalogo_qr_mesa'
+  || pedido.delivery_tipo === 'delivery'
+  || esPedidoWeb(pedido);
+const esPedidoParaCocina = (pedido) => pedido.origen === 'catalogo_qr_mesa'
+  || pedido.delivery_tipo === 'delivery'
+  || (esPedidoWeb(pedido) && ['preparando', 'listo'].includes(pedido.delivery_estado));
 const SECCIONES = [
+  { id: 'pos', label: 'POS Restaurante', path: '/restaurante/pos', icon: ClipboardList },
   { id: 'mapa', label: 'Mapa de mesas', path: '/restaurante/mapa', icon: LayoutGrid },
   { id: 'pedidos', label: 'Pedidos en cocina', path: '/restaurante/pedidos', icon: ClipboardList },
   { id: 'delivery', label: 'Delivery', path: '/restaurante/delivery', icon: Truck },
@@ -25,13 +35,14 @@ const SECCIONES = [
 
 function PedidoCard({ pedido, onAvanzar, onCancelar, onEditar, guardando, objetivoMinutos = 20 }) {
   const esDelivery = pedido.delivery_tipo === 'delivery';
+  const esRetiro = !pedido.mesa_id && pedido.delivery_tipo === 'retiro';
   const siguiente = pedido.estado === 'pendiente' ? 'en_preparacion' : 'completado';
   const [ahora, setAhora] = useState(Date.now());
   useEffect(() => { const timer = window.setInterval(() => setAhora(Date.now()), 30000); return () => window.clearInterval(timer); }, []);
   const minutos = Math.max(0, Math.floor((ahora - new Date(pedido.creado_en).getTime()) / 60000));
   const fueraObjetivo = minutos > Number(objetivoMinutos || 20);
   return <article className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-    <div className="flex flex-wrap items-start justify-between gap-2"><div><p className="text-xs font-bold uppercase tracking-wide text-orange-600">{esDelivery ? 'Delivery' : pedido.mesa_nombre || 'Pedido QR'} · {pedido.numero_pedido}</p><h3 className="mt-1 text-lg font-black text-slate-900">{pedido.estado === 'pendiente' ? 'Nuevo pedido' : pedido.estado === 'completado' ? (esDelivery ? 'Listo para despacho' : 'Listo para cobrar') : 'En preparación'}</h3></div><span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-bold ${fueraObjetivo ? 'bg-rose-100 text-rose-800' : 'bg-slate-100 text-slate-600'}`}><Clock3 size={13}/>{FECHA(pedido.creado_en)} · {minutos} min</span></div>
+    <div className="flex flex-wrap items-start justify-between gap-2"><div><p className="text-xs font-bold uppercase tracking-wide text-orange-600">{esDelivery ? 'Delivery' : esRetiro ? 'Para llevar' : pedido.mesa_nombre || 'Pedido QR'} · {pedido.numero_pedido}</p><h3 className="mt-1 text-lg font-black text-slate-900">{pedido.estado === 'pendiente' ? 'Nuevo pedido' : pedido.estado === 'completado' ? (esDelivery ? 'Listo para despacho' : esRetiro ? 'Listo · cobrar en POS' : 'Listo para cobrar') : 'En preparación'}</h3></div><span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-bold ${fueraObjetivo ? 'bg-rose-100 text-rose-800' : 'bg-slate-100 text-slate-600'}`}><Clock3 size={13}/>{FECHA(pedido.creado_en)} · {minutos} min</span></div>
     {esDelivery && <div className="rounded-lg border border-blue-100 bg-blue-50 p-3 text-sm text-blue-950"><p className="font-bold">{pedido.cliente_nombre}{pedido.cliente_telefono ? ` · ${pedido.cliente_telefono}` : ''}</p><p className="mt-1">Entrega: {pedido.delivery_direccion || 'Dirección por confirmar'}</p></div>}
     <div className="mt-3 divide-y divide-slate-100 rounded-lg border border-slate-100">{(pedido.items || []).map((item, index) => <div key={`${pedido.id}-${index}`} className="flex justify-between gap-3 px-3 py-2 text-sm"><span><b>{item.cantidad}×</b> {item.nombre}</span><span className="text-slate-500">{importe(item.subtotal)}</span></div>)}</div>
     {pedido.nota && <p className="mt-3 rounded-lg bg-amber-50 p-2.5 text-sm text-amber-900">Nota: {pedido.nota}</p>}
@@ -45,7 +56,7 @@ function CuentaMesaCard({ cuenta, onCobrar, onCancelar, onEditar, guardando }) {
   return <article className="rounded-xl border border-emerald-200 bg-white p-4 shadow-sm"><div className="flex flex-wrap items-start justify-between gap-2"><div><p className="text-xs font-bold uppercase tracking-wide text-emerald-700">Cuenta de mesa</p><h3 className="mt-1 text-lg font-black text-slate-900">{cuenta.mesa_nombre}</h3><p className="mt-1 text-xs text-slate-500">{cuenta.pedidos.length} comandas · {articulos} líneas</p></div><span className="rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-bold text-emerald-800">Lista para cobrar</span></div><div className="mt-3 divide-y divide-slate-100 rounded-lg border border-slate-100">{cuenta.pedidos.map((pedido) => <div key={pedido.id} className="flex flex-wrap items-center justify-between gap-3 px-3 py-2 text-sm"><span>{pedido.numero_pedido} · {Array.isArray(pedido.items) ? pedido.items.reduce((n, item) => n + Number(item.cantidad || 0), 0) : 0} unidades · {importe(pedido.total)}</span><button type="button" disabled={guardando} onClick={() => onEditar(pedido)} className="inline-flex items-center gap-1 rounded-lg border border-blue-200 px-2.5 py-1.5 text-xs font-bold text-blue-700"><Pencil size={13}/>Corregir</button></div>)}</div><div className="mt-3 flex items-center justify-between gap-2"><span className="font-black text-slate-900">Total {importe(total)}</span><div className="flex gap-2"><button type="button" disabled={guardando} onClick={() => onCancelar(cuenta.pedidos.map((pedido) => pedido.id), cuenta.mesa_nombre)} className="rounded-lg border border-rose-200 px-3 py-2 text-sm font-bold text-rose-700 disabled:opacity-50">Cancelar cuenta</button><button type="button" disabled={guardando} onClick={() => onCobrar(cuenta)} className="inline-flex items-center gap-1 rounded-lg bg-emerald-600 px-3 py-2 text-sm font-bold text-white hover:bg-emerald-700 disabled:opacity-50"><CircleDollarSign size={16}/>{guardando ? 'Abriendo POS…' : 'Cobrar cuenta'}</button></div></div></article>;
 }
 
-export default function Restaurante({ section = 'mapa' }) {
+export default function Restaurante({ section = 'mapa', deliveryView = 'completo' }) {
   const navigate = useNavigate();
   const empresa = useEmpresaInfo();
   const empresaId = empresa?.id;
@@ -59,6 +70,7 @@ export default function Restaurante({ section = 'mapa' }) {
   const [catalogoSeleccionado, setCatalogoSeleccionado] = useState('');
   const [mesaQr, setMesaQr] = useState(null);
   const [mesaDetalle, setMesaDetalle] = useState(null);
+  const [mesaSeleccionadaId, setMesaSeleccionadaId] = useState('');
   const [filtroMesas, setFiltroMesas] = useState('todas');
   const [busquedaMesas, setBusquedaMesas] = useState('');
   const [minutosPreparacion, setMinutosPreparacion] = useState('20');
@@ -77,6 +89,7 @@ export default function Restaurante({ section = 'mapa' }) {
   const [mesaDestinoId, setMesaDestinoId] = useState('');
   const [motivoMovimiento, setMotivoMovimiento] = useState('');
   const [moviendoMesa, setMoviendoMesa] = useState(false);
+  const [estacionSeleccionada, setEstacionSeleccionada] = useState('todas');
   const [historial, setHistorial] = useState({ correcciones: [], cancelaciones: [], movimientos: [] });
   const [cargandoHistorial, setCargandoHistorial] = useState(false);
   const [errorHistorial, setErrorHistorial] = useState('');
@@ -99,12 +112,12 @@ export default function Restaurante({ section = 'mapa' }) {
       supabase.from('pedidos').select('*').eq('empresa_id', empresaId).order('creado_en', { ascending: false }).limit(250),
       section === 'configuracion' ? supabase.from('catalogos_qr').select('id,nombre,estado').eq('empresa_id', empresaId).eq('estado', 'Activo').order('nombre') : Promise.resolve({ data: [], error: null }),
       supabase.from('pedidos_qr_ventas').select('pedido_id,venta_id,estado_pago').eq('empresa_id', empresaId).order('creado_en', { ascending: false }).limit(250),
-      supabase.from('productos').select('id,nombre,codigo,precio_venta,stock_actual,activo').eq('empresa_id', empresaId).eq('activo', true).order('nombre').limit(1000),
+      supabase.from('productos').select('id,nombre,codigo,categoria,precio_venta,stock_actual,activo').eq('empresa_id', empresaId).eq('activo', true).order('nombre').limit(1000),
     ]);
     const failure = rMesas.error || rPedidos.error || rCobros.error || rCatalogos.error || rProductos.error;
     if (failure) setError(`No se pudo cargar Restaurante. Aplicá database/migration_pedidos_qr_mesa.sql, database/migration_cobro_pedidos_qr.sql y database/migration_restaurante_cuentas_qr.sql, además de las migraciones de Pedidos y Catálogo QR. ${failure.message}`);
     setMesas(rMesas.data || []);
-    setPedidos((rPedidos.data || []).filter((pedido) => pedido.origen === 'catalogo_qr_mesa' || pedido.delivery_tipo === 'delivery'));
+    setPedidos((rPedidos.data || []).filter(esPedidoRestaurante));
     setPedidosCobrados(rCobros.data || []);
     setProductosDisponibles(rProductos.data || []);
     setCatalogos(rCatalogos.data || []);
@@ -184,7 +197,7 @@ export default function Restaurante({ section = 'mapa' }) {
 
   useEffect(() => {
     if (cargando || !configImpresionLista) return;
-    const actuales = pedidos.filter((pedido) => pedido.origen === 'catalogo_qr_mesa' || pedido.delivery_tipo === 'delivery');
+    const actuales = pedidos.filter(esPedidoParaCocina);
     let nuevos = [];
     if (pedidosVistosRef.current === null) {
       nuevos = actuales.filter((pedido) => pedidosRealtimeRef.current.has(pedido.id) && pedido.estado === 'pendiente');
@@ -247,7 +260,7 @@ export default function Restaurante({ section = 'mapa' }) {
     return resultado;
   }, [pedidosSinCobrar]);
   const pedidosParaCocina = useMemo(() => pedidos.filter((pedido) =>
-    (pedido.origen === 'catalogo_qr_mesa' || pedido.delivery_tipo === 'delivery')
+    esPedidoParaCocina(pedido)
       && pedido.estado !== 'cancelado' && !['cancelado', 'entregado'].includes(pedido.delivery_estado)
       && (pedido.delivery_tipo === 'delivery' || !idsPedidosCobrados.has(pedido.id))), [pedidos, idsPedidosCobrados]);
   const pedidosActivos = pedidosParaCocina.filter((pedido) => ['pendiente', 'en_preparacion'].includes(pedido.estado)).sort((a, b) => new Date(a.creado_en) - new Date(b.creado_en));
@@ -269,18 +282,49 @@ export default function Restaurante({ section = 'mapa' }) {
     return (filtroMesas === 'todas' || filtroMesas === estado)
       && mesa.nombre.toLocaleLowerCase('es').includes(busquedaMesas.trim().toLocaleLowerCase('es'));
   }), [mesas, cuentasPorMesa, filtroMesas, busquedaMesas]);
+  const gruposMesas = useMemo(() => {
+    const grupos = new Map();
+    mesasFiltradas.forEach((mesa) => {
+      const nombre = mesa.piso || mesa.salon || mesa.sector || 'Salón principal';
+      if (!grupos.has(nombre)) grupos.set(nombre, []);
+      grupos.get(nombre).push(mesa);
+    });
+    return [...grupos.entries()].map(([nombre, items]) => ({ nombre, mesas: items }));
+  }, [mesasFiltradas]);
+  const mesaSeleccionada = mesas.find((mesa) => mesa.id === mesaSeleccionadaId) || null;
+  const cuentaMesaSeleccionada = mesaSeleccionada ? cuentasPorMesa.get(mesaSeleccionada.id) || null : null;
+  const cuentaListaSeleccionada = Boolean(cuentaMesaSeleccionada?.pedidos.length)
+    && cuentaMesaSeleccionada.pedidos.every((pedido) => pedido.estado === 'completado');
+  const totalMesaSeleccionada = cuentaMesaSeleccionada?.pedidos.reduce((sum, pedido) => sum + Number(pedido.total || 0), 0) || 0;
   const pendientes = pedidosActivos.filter((pedido) => pedido.estado === 'pendiente');
   const pendientesMesa = pedidosActivos.filter((pedido) => pedido.estado === 'pendiente' && pedido.origen === 'catalogo_qr_mesa');
   const pendientesDelivery = pedidosParaCocina.filter((pedido) => pedido.delivery_tipo === 'delivery' && pedido.delivery_estado === 'recibido');
   const preparando = pedidosActivos.filter((pedido) => pedido.estado === 'en_preparacion');
+  const estacionesCocina = Array.isArray(ajustes.restaurante_estaciones) ? ajustes.restaurante_estaciones : [];
+  const categoriasPorProducto = useMemo(() => new Map(productosDisponibles.map((producto) => [String(producto.id), producto.categoria || ''])), [productosDisponibles]);
+  const pedidosDeEstacion = useMemo(() => {
+    if (estacionSeleccionada === 'todas') return pedidosParaCocina;
+    const estacion = estacionesCocina.find((item) => item.id === estacionSeleccionada);
+    if (!estacion) return pedidosParaCocina;
+    const categorias = new Set(estacion.categorias || []);
+    return pedidosParaCocina.filter((pedido) => {
+      const items = Array.isArray(pedido.items) ? pedido.items : [];
+      const categoriasPedido = items.map((item) => categoriasPorProducto.get(String(item.producto_id))).filter(Boolean);
+      return categoriasPedido.length > 0 && categoriasPedido.length === items.length && categoriasPedido.every((categoria) => categorias.has(categoria));
+    });
+  }, [estacionSeleccionada, estacionesCocina, pedidosParaCocina, categoriasPorProducto]);
+  const pedidosActivosDeEstacion = pedidosDeEstacion.filter((pedido) => ['pendiente', 'en_preparacion'].includes(pedido.estado)).sort((a, b) => new Date(a.creado_en) - new Date(b.creado_en));
+  const pendientesDeEstacion = pedidosActivosDeEstacion.filter((pedido) => pedido.estado === 'pendiente');
+  const preparandoDeEstacion = pedidosActivosDeEstacion.filter((pedido) => pedido.estado === 'en_preparacion');
+  const listosDeEstacion = pedidosDeEstacion.filter((pedido) => pedido.estado === 'completado').sort((a, b) => new Date(a.creado_en) - new Date(b.creado_en));
   const resumenProductos = useMemo(() => {
     const acumulado = new Map();
-    pedidosActivos.forEach((pedido) => (pedido.items || []).forEach((item) => {
+    pedidosActivosDeEstacion.forEach((pedido) => (pedido.items || []).forEach((item) => {
       const actual = acumulado.get(item.nombre) || { nombre: item.nombre, cantidad: 0, comandas: 0 };
       actual.cantidad += Number(item.cantidad || 0); actual.comandas += 1; acumulado.set(item.nombre, actual);
     }));
     return [...acumulado.values()].sort((a, b) => b.cantidad - a.cantidad);
-  }, [pedidosActivos]);
+  }, [pedidosActivosDeEstacion]);
 
   const cobrarCuenta = (cuenta) => navigate('/pos', { state: { pedidoRestaurante: { ids: cuenta.pedidos.map((pedido) => pedido.id) } } });
 
@@ -378,6 +422,9 @@ export default function Restaurante({ section = 'mapa' }) {
     if (pedido.delivery_tipo === 'delivery' && estado === 'completado' && ['recibido', 'preparando', 'asignado'].includes(pedido.delivery_estado)) {
       cambios.delivery_estado = 'listo'; cambios.delivery_actualizado_en = new Date().toISOString();
     }
+    if (esPedidoWeb(pedido) && estado === 'completado') {
+      cambios.delivery_estado = 'listo'; cambios.delivery_actualizado_en = new Date().toISOString();
+    }
     const { error: updateError } = await supabase.from('pedidos').update(cambios).eq('id', pedido.id).eq('empresa_id', empresaId);
     if (updateError) notificar.error(`No se pudo actualizar el pedido: ${updateError.message}`);
     else { setPedidos((actual) => actual.map((item) => item.id === pedido.id ? { ...item, ...cambios } : item)); notificar.exito(estado === 'en_preparacion' ? 'Pedido enviado a preparación.' : 'Pedido marcado como listo.'); }
@@ -413,13 +460,22 @@ export default function Restaurante({ section = 'mapa' }) {
     window.setTimeout(() => URL.revokeObjectURL(url), 1000);
   };
 
+  if (section === 'pos') return <div className="h-full min-h-0 w-full"><RestaurantePOS /></div>;
+  if (section === 'estaciones') return <div className="mx-auto w-full max-w-7xl space-y-5 p-4 md:p-6"><header className="rounded-2xl bg-gradient-to-r from-slate-950 via-slate-900 to-orange-950 p-5 text-white shadow-lg"><p className="text-xs font-bold uppercase tracking-[.18em] text-orange-300">Configuraciones del restaurante</p><h1 className="mt-1 text-2xl font-black">Estaciones de Cocina</h1><p className="mt-2 text-sm text-slate-300">Organizá las categorías de productos que prepara cada área.</p></header><EstacionesCocina /></div>;
+
   const activeTab = SECCIONES.find((item) => item.id === section) || SECCIONES[0];
-  return <div className="mx-auto w-full max-w-7xl space-y-5 p-4 md:p-6">
-    <header className="rounded-2xl bg-gradient-to-r from-slate-950 via-slate-900 to-orange-950 p-5 text-white shadow-lg md:p-7"><div className="flex items-center gap-3"><span className="grid h-11 w-11 place-items-center rounded-xl bg-white/10"><UtensilsCrossed size={22}/></span><div><p className="text-xs font-bold uppercase tracking-[.18em] text-orange-300">Operación gastronómica</p><h1 className="text-2xl font-black">Restaurante · {activeTab.label}</h1></div></div><p className="mt-3 max-w-3xl text-sm text-slate-300">Administrá mesas, recibí pedidos QR y coordiná la preparación desde una pantalla compartida.</p></header>
-    <nav aria-label="Secciones de Restaurante" className="grid grid-cols-2 gap-2 rounded-xl border border-slate-200 bg-white p-2 shadow-sm md:grid-cols-3 xl:grid-cols-6">{SECCIONES.map(({ id, label, path, icon: Icon }) => { const solicitudesNuevas = id === 'mapa' ? pendientesMesa.length : id === 'delivery' ? pendientesDelivery.length : ['pedidos', 'cocina-pro'].includes(id) ? pendientes.length : 0; return <Link key={id} to={path} title={solicitudesNuevas ? `${solicitudesNuevas} pedido(s) nuevo(s)` : label} className={`flex items-center justify-center gap-2 rounded-lg px-3 py-3 text-sm font-bold transition ${section === id ? 'bg-orange-500 text-white shadow-sm' : 'text-slate-600 hover:bg-orange-50 hover:text-orange-700'}`}><Icon size={17}/><span>{label}</span>{solicitudesNuevas > 0 && <span aria-label={`${solicitudesNuevas} pedidos nuevos`} className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-rose-600 px-1.5 text-[11px] font-black leading-none text-white shadow-sm">{solicitudesNuevas > 99 ? '99+' : solicitudesNuevas}</span>}</Link>; })}</nav>
+  const solicitudesDeSeccion = section === 'mapa'
+    ? pendientesMesa.length
+    : section === 'delivery' && deliveryView === 'completo'
+      ? pendientesDelivery.length
+      : ['pedidos', 'cocina-pro'].includes(section)
+        ? pendientes.length
+        : 0;
+  return <div className="restaurant-page mx-auto w-full max-w-[1600px] space-y-4 p-3 md:p-5">
+    <header className="rounded-2xl bg-gradient-to-r from-slate-950 via-slate-900 to-orange-950 p-5 text-white shadow-lg md:p-7"><div className="flex flex-wrap items-center justify-between gap-3"><div className="flex items-center gap-3"><span className="grid h-11 w-11 place-items-center rounded-xl bg-white/10"><UtensilsCrossed size={22}/></span><div><p className="text-xs font-bold uppercase tracking-[.18em] text-orange-300">Operación gastronómica</p><h1 className="text-2xl font-black">Restaurante · {activeTab.label}</h1></div></div>{solicitudesDeSeccion > 0 && <span aria-label={`${solicitudesDeSeccion} solicitudes nuevas`} className="inline-flex h-8 min-w-8 items-center justify-center rounded-full bg-rose-600 px-2 text-sm font-black text-white shadow">{solicitudesDeSeccion > 99 ? '99+' : solicitudesDeSeccion}</span>}</div><p className="mt-3 max-w-3xl text-sm text-slate-300">Administrá mesas, recibí pedidos QR y coordiná la preparación desde una pantalla compartida.</p></header>
     {error && <div role="alert" className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">{error}</div>}
 
-    {section === 'delivery' ? <DeliveryRestaurante /> : section === 'historial' ? (
+    {section === 'delivery' ? <DeliveryRestaurante section={deliveryView}/> : section === 'historial' ? (
       <>
       <section className="space-y-4">
         <div className="flex flex-wrap items-center justify-between gap-3"><div><h2 className="text-lg font-black text-slate-900">Historial de mesas y comandas</h2><p className="text-sm text-slate-500">Cambios, cancelaciones y cuentas trasladadas dentro de tu empresa.</p></div><button type="button" onClick={cargarHistorial} disabled={cargandoHistorial} className="inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-bold"><RefreshCw size={15} className={cargandoHistorial?'animate-spin':''}/>Actualizar historial</button></div>
@@ -442,10 +498,110 @@ export default function Restaurante({ section = 'mapa' }) {
       </form>
     ) : section === 'mapa' ? (
       <>
-        <div className="flex flex-wrap items-center justify-between gap-3"><div><h2 className="text-lg font-black text-slate-900">Estado de las mesas</h2><p className="text-sm text-slate-500">Una mesa queda ocupada hasta cobrar o cancelar todos sus pedidos abiertos.</p></div><button onClick={cargar} className="inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-bold"><RefreshCw size={15}/>Actualizar</button></div>
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">{[['libres','Libres','border-emerald-200 bg-emerald-50 text-emerald-800'],['ocupadas','En cocina','border-orange-200 bg-orange-50 text-orange-800'],['listas','Listas para cobrar','border-blue-200 bg-blue-50 text-blue-800'],['desactivadas','Desactivadas','border-slate-200 bg-slate-100 text-slate-600']].map(([id,label,style])=><button key={id} type="button" onClick={()=>setFiltroMesas(filtroMesas===id?'todas':id)} className={`rounded-xl border p-3 text-left transition ${style} ${filtroMesas===id?'ring-2 ring-slate-800':''}`}><p className="text-xs font-bold uppercase">{label}</p><p className="mt-1 text-2xl font-black">{resumenMesas[id]}</p></button>)}</div>
-        <div className="flex flex-col gap-2 sm:flex-row"><label className="relative flex-1"><Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"/><input value={busquedaMesas} onChange={(event)=>setBusquedaMesas(event.target.value)} placeholder="Buscar mesa…" className="w-full rounded-lg border border-slate-300 bg-white py-2.5 pl-9 pr-3 text-sm"/></label><select value={filtroMesas} onChange={(event)=>setFiltroMesas(event.target.value)} className="rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm font-semibold"><option value="todas">Todas las mesas</option><option value="libres">Libres</option><option value="ocupadas">En cocina</option><option value="listas">Listas para cobrar</option><option value="desactivadas">Desactivadas</option></select></div>
-        {cargando ? <div className="rounded-xl bg-white p-12 text-center text-slate-500"><LoaderCircle className="mx-auto animate-spin"/></div> : mesas.length ? mesasFiltradas.length ? <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">{mesasFiltradas.map((mesa) => { const cuenta = cuentasPorMesa.get(mesa.id); const lista = cuenta?.pedidos.length > 0 && cuenta.pedidos.every((pedido) => pedido.estado === 'completado'); const total = cuenta?.pedidos.reduce((sum, pedido) => sum + Number(pedido.total || 0), 0) || 0; const enCocina = cuenta?.pedidos.filter((pedido) => pedido.estado !== 'completado').length || 0; const estado = !mesa.activo && cuenta ? 'Desactivada · con cuenta' : !mesa.activo ? 'Desactivada' : cuenta ? lista ? 'Lista para cobrar' : 'En cocina' : 'Libre'; const estadoStyle = !mesa.activo && !cuenta ? 'bg-slate-200 text-slate-600' : lista ? 'bg-blue-100 text-blue-800' : cuenta ? 'bg-orange-100 text-orange-800' : 'bg-emerald-100 text-emerald-800'; const masAntiguo = cuenta ? Math.max(0, Math.floor((Date.now() - Math.min(...cuenta.pedidos.map((pedido) => new Date(pedido.creado_en).getTime()))) / 60000)) : 0; return <article key={mesa.id} className={`rounded-2xl border p-4 shadow-sm ${!mesa.activo && !cuenta ? 'border-slate-200 bg-slate-100' : lista ? 'border-blue-200 bg-blue-50/50' : cuenta ? 'border-orange-200 bg-orange-50' : 'border-emerald-200 bg-white'}`}><div className="flex items-start justify-between gap-2"><div><span className={`rounded-full px-2 py-1 text-[11px] font-black uppercase ${estadoStyle}`}>{estado}</span><h3 className="mt-2 text-xl font-black text-slate-900">{mesa.nombre}</h3></div><span className="grid h-10 w-10 place-items-center rounded-xl bg-white/80 text-slate-500"><Users size={19}/></span></div>{cuenta ? <><div className="mt-4 flex items-center justify-between text-sm"><span className="text-slate-600">{cuenta.pedidos.length} {cuenta.pedidos.length===1?'comanda':'comandas'}</span><span className="font-black text-slate-900">{importe(total)}</span></div><div className="mt-2 flex items-center gap-2 text-xs text-slate-600"><Timer size={14}/>{masAntiguo} min desde el primer pedido{enCocina>0&&<span className="ml-auto font-bold text-orange-700">{enCocina} en cocina</span>}</div></> : <p className="mt-4 text-sm text-slate-500">Sin pedidos abiertos</p>}<div className="mt-4 grid grid-cols-2 gap-2"><button type="button" onClick={()=>setMesaQr(mesa)} className="inline-flex items-center justify-center gap-1 rounded-lg border border-slate-300 bg-white px-2 py-2 text-xs font-bold text-slate-700"><UtensilsCrossed size={14}/>Código QR</button><button type="button" onClick={()=>abrirDetalleMesa(mesa)} className="rounded-lg bg-slate-900 px-2 py-2 text-xs font-bold text-white">Ver mesa</button>{cuenta&&lista&&<button type="button" onClick={()=>cobrarCuenta(cuenta)} className="col-span-2 inline-flex items-center justify-center gap-1 rounded-lg bg-emerald-600 px-3 py-2 text-sm font-bold text-white"><CircleDollarSign size={15}/>Cobrar {importe(total)}</button>}</div></article>;})}</div> : <div className="rounded-xl border border-dashed border-slate-300 bg-white p-8 text-center text-sm text-slate-500">No hay mesas que coincidan con la búsqueda y el filtro seleccionados.</div> : !error && <div className="rounded-xl border border-dashed border-slate-300 bg-white p-10 text-center"><LayoutGrid className="mx-auto text-slate-300" size={34}/><p className="mt-3 font-bold">Aún no hay mesas configuradas</p><p className="mt-1 text-sm text-slate-500">Creá el catálogo QR y agregá mesas para generar sus códigos.</p><Link to="/catalogo-qr" className="mt-4 inline-flex rounded-lg bg-orange-500 px-4 py-2 text-sm font-bold text-white">Configurar mesas QR</Link></div>}
+        <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h2 className="text-lg font-black text-slate-900">Mapa de mesas</h2>
+              <p className="text-sm text-slate-500">Estado de las mesas en tiempo real.</p>
+            </div>
+            <button type="button" onClick={cargar} disabled={cargando} className="inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-bold text-slate-700 disabled:opacity-50">
+              <RefreshCw size={15} className={cargando ? 'animate-spin' : ''}/>Actualizar
+            </button>
+          </div>
+          <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
+            <div role="group" aria-label="Filtrar mesas" className="inline-flex flex-wrap rounded-lg border border-slate-200 bg-slate-50 p-1">
+              {[
+                ['todas', 'Todas'],
+                ['ocupadas', 'Ocupadas'],
+                ['listas', 'Por cobrar'],
+              ].map(([id, label]) => (
+                <button key={id} type="button" aria-pressed={filtroMesas === id} onClick={() => setFiltroMesas(id)} className={filtroMesas === id ? 'rounded-md bg-orange-500 px-4 py-2 text-sm font-bold text-white shadow-sm' : 'rounded-md px-4 py-2 text-sm font-bold text-slate-600 hover:bg-white'}>
+                  {label + ' (' + (id === 'todas' ? mesas.length : id === 'ocupadas' ? resumenMesas.ocupadas : resumenMesas.listas) + ')'}
+                </button>
+              ))}
+            </div>
+            <div className="flex flex-wrap items-center gap-2 text-xs font-bold">
+              <span className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-emerald-800">● {resumenMesas.libres} Libre{resumenMesas.libres === 1 ? '' : 's'}</span>
+              <span className="rounded-full border border-amber-200 bg-amber-50 px-3 py-1.5 text-amber-800">● {resumenMesas.ocupadas} Ocupada{resumenMesas.ocupadas === 1 ? '' : 's'}</span>
+              <span className="rounded-full border border-blue-200 bg-blue-50 px-3 py-1.5 text-blue-800">● {resumenMesas.listas} Por cobrar</span>
+              <span className="text-slate-400">Actualización en vivo</span>
+            </div>
+          </div>
+          <div className="mt-3 flex flex-col gap-2 sm:flex-row">
+            <label className="relative flex-1">
+              <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"/>
+              <input value={busquedaMesas} onChange={(event) => setBusquedaMesas(event.target.value)} placeholder="Buscar mesa…" className="w-full rounded-lg border border-slate-300 bg-white py-2.5 pl-9 pr-3 text-sm"/>
+            </label>
+            <select value={filtroMesas} onChange={(event) => setFiltroMesas(event.target.value)} className="rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm font-semibold">
+              <option value="todas">Todas las mesas</option><option value="libres">Libres</option><option value="ocupadas">Ocupadas</option><option value="listas">Por cobrar</option><option value="desactivadas">Desactivadas</option>
+            </select>
+          </div>
+        </section>
+        {cargando ? <div className="rounded-xl bg-white p-12 text-center text-slate-500"><LoaderCircle className="mx-auto animate-spin"/></div> : mesas.length ? mesasFiltradas.length ? (
+          <section className="grid items-start gap-4 xl:grid-cols-[minmax(0,1fr)_380px]">
+            <div className="min-w-0 space-y-5">
+              {gruposMesas.map((grupo) => (
+                <section key={grupo.nombre} className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+                  <header className="mb-3 flex items-center justify-between border-b border-slate-200 pb-2">
+                    <h3 className="flex items-center gap-2 font-bold text-slate-800"><LayoutGrid size={16} className="text-orange-600"/>{grupo.nombre}</h3>
+                    <span className="text-xs font-semibold text-slate-500">{grupo.mesas.length} {grupo.mesas.length === 1 ? 'mesa' : 'mesas'}</span>
+                  </header>
+                  <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+                    {grupo.mesas.map((mesa) => {
+                      const cuenta = cuentasPorMesa.get(mesa.id);
+                      const lista = Boolean(cuenta && cuenta.pedidos.length) && cuenta.pedidos.every((pedido) => pedido.estado === 'completado');
+                      const total = cuenta ? cuenta.pedidos.reduce((sum, pedido) => sum + Number(pedido.total || 0), 0) : 0;
+                      const masAntiguo = cuenta ? Math.max(0, Math.floor((Date.now() - Math.min(...cuenta.pedidos.map((pedido) => new Date(pedido.creado_en).getTime()))) / 60000)) : 0;
+                      const seleccionada = mesaSeleccionadaId === mesa.id;
+                      const estiloEstado = !mesa.activo && !cuenta ? 'border-slate-300 bg-slate-100 text-slate-500' : lista ? 'border-blue-300 bg-blue-50 text-blue-800' : cuenta ? 'border-amber-300 bg-amber-50 text-amber-900' : 'border-emerald-300 bg-white text-emerald-800';
+                      return (
+                        <button key={mesa.id} type="button" aria-pressed={seleccionada} onClick={() => setMesaSeleccionadaId(mesa.id)} className={['min-h-28 rounded-lg border p-3 text-left shadow-sm transition-colors hover:border-slate-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-600 focus-visible:ring-offset-2', estiloEstado, seleccionada ? 'ring-2 ring-orange-600 ring-offset-2' : ''].filter(Boolean).join(' ')}>
+                          <span className="flex items-center justify-between gap-1"><span className="text-base font-bold">{mesa.nombre}</span><span className="rounded-full bg-white/80 px-2 py-1 text-[11px] font-bold">{lista ? 'Por cobrar' : cuenta ? 'Ocupada' : mesa.activo ? 'Libre' : 'Desactivada'}</span></span>
+                          {cuenta ? <><span className="mt-2 block text-xs font-semibold text-slate-600">{masAntiguo} min · {cuenta.pedidos.length} {cuenta.pedidos.length === 1 ? 'comanda' : 'comandas'}</span><span className="mt-1 block text-sm font-black">{importe(total)}</span></> : <span className="mt-3 block text-xs font-semibold text-slate-500">{mesa.activo ? 'Sin pedido abierto' : 'Mesa desactivada'}</span>}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </section>
+              ))}
+            </div>
+            <aside aria-label="Detalle de mesa seleccionada" className="min-h-[280px] rounded-xl border border-slate-200 bg-white p-4 shadow-sm xl:sticky xl:top-4">
+              {mesaSeleccionada ? (
+                <>
+                  <header className="flex items-start justify-between gap-3 border-b border-slate-200 pb-3">
+                    <div><p className="text-xs font-bold uppercase tracking-wide text-slate-500">Detalle de la mesa</p><h3 className="mt-1 text-xl font-black text-slate-900">{mesaSeleccionada.nombre}</h3></div>
+                    <button type="button" onClick={() => setMesaSeleccionadaId('')} aria-label="Limpiar mesa seleccionada" className="rounded-lg px-2 py-1 text-slate-500 hover:bg-slate-100">×</button>
+                  </header>
+                  {cuentaMesaSeleccionada ? (
+                    <div className="mt-3 space-y-3">
+                      {cuentaMesaSeleccionada.pedidos.map((pedido) => {
+                        const minutos = Math.max(0, Math.floor((Date.now() - new Date(pedido.creado_en).getTime()) / 60000));
+                        return <article key={pedido.id} className="rounded-lg border border-slate-200 p-3">
+                          <div className="flex items-start justify-between gap-2"><div><p className="text-xs font-black text-slate-600">{pedido.numero_pedido || 'Comanda'}</p><p className="mt-1 text-[11px] text-slate-500">{minutos} min · {pedido.estado === 'completado' ? 'Lista' : pedido.estado === 'en_preparacion' ? 'En preparación' : 'Nueva'}</p></div><span className="text-sm font-black">{importe(pedido.total)}</span></div>
+                          {pedido.cliente_nombre && <p className="mt-2 text-xs font-semibold text-slate-700">{pedido.cliente_nombre}</p>}
+                          <div className="mt-2 space-y-1">{(pedido.items || []).map((item, index) => <p key={pedido.id + '-' + index} className="text-xs text-slate-700">{item.cantidad}× {item.nombre} <span className="float-right text-slate-500">{importe(item.subtotal)}</span></p>)}</div>
+                          {pedido.nota && <p className="mt-2 rounded bg-amber-50 p-2 text-xs text-amber-900">{pedido.nota}</p>}
+                          <button type="button" onClick={() => abrirCorreccion(pedido)} className="mt-3 inline-flex items-center gap-1 rounded-md border border-blue-200 px-2.5 py-1.5 text-xs font-bold text-blue-700"><Pencil size={13}/>Corregir comanda</button>
+                        </article>;
+                      })}
+                      <div className="flex items-center justify-between border-t border-slate-200 pt-3"><span className="font-bold text-slate-700">Total mesa</span><strong className="text-lg font-black text-orange-700">{importe(totalMesaSeleccionada)}</strong></div>
+                      <div className="grid grid-cols-2 gap-2">
+                        <button type="button" onClick={() => setMesaQr(mesaSeleccionada)} className="rounded-lg border border-slate-300 px-3 py-2 text-xs font-bold text-slate-700">Ver QR</button>
+                        <button type="button" onClick={() => abrirDetalleMesa(mesaSeleccionada)} className="rounded-lg border border-slate-300 px-3 py-2 text-xs font-bold text-slate-700">Mover / combinar</button>
+                        {cuentaListaSeleccionada && <button type="button" onClick={() => cobrarCuenta(cuentaMesaSeleccionada)} className="col-span-2 inline-flex items-center justify-center gap-2 rounded-lg bg-orange-500 px-3 py-2.5 text-sm font-black text-white"><CircleDollarSign size={16}/>Cobrar {importe(totalMesaSeleccionada)}</button>}
+                        {!cuentaListaSeleccionada && <button type="button" onClick={() => navigate('/restaurante/pedidos')} className="col-span-2 rounded-lg bg-slate-900 px-3 py-2.5 text-sm font-bold text-white">Ver estado en cocina</button>}
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="mt-5 rounded-lg bg-emerald-50 p-4 text-center"><CheckCircle2 className="mx-auto text-emerald-600"/><p className="mt-2 font-bold text-emerald-900">Mesa libre</p><p className="mt-1 text-xs text-emerald-800">No tiene pedidos abiertos.</p><button type="button" onClick={() => navigate('/restaurante/pos')} className="mt-3 rounded-lg bg-orange-500 px-3 py-2 text-sm font-bold text-white">Abrir POS Restaurante</button><button type="button" onClick={() => setMesaQr(mesaSeleccionada)} className="ml-2 mt-3 rounded-lg border border-emerald-300 bg-white px-3 py-2 text-sm font-bold text-emerald-800">Ver QR</button></div>
+                  )}
+                </>
+              ) : (
+                <div className="grid min-h-[245px] place-items-center text-center"><div><span className="mx-auto grid h-12 w-12 place-items-center rounded-full bg-slate-100 text-slate-400"><Users size={22}/></span><p className="mt-3 font-bold text-slate-700">Seleccioná una mesa</p><p className="mt-1 text-sm text-slate-500">El pedido y las acciones aparecerán acá.</p></div></div>
+              )}
+            </aside>
+          </section>
+        ) : <div className="rounded-xl border border-dashed border-slate-300 bg-white p-8 text-center text-sm text-slate-500">No hay mesas que coincidan con la búsqueda y el filtro seleccionados.</div> : !error && <div className="rounded-xl border border-dashed border-slate-300 bg-white p-10 text-center"><LayoutGrid className="mx-auto text-slate-300" size={34}/><p className="mt-3 font-bold">Aún no hay mesas configuradas</p><p className="mt-1 text-sm text-slate-500">Creá el catálogo QR y agregá mesas para generar sus códigos.</p><Link to="/catalogo-qr" className="mt-4 inline-flex rounded-lg bg-orange-500 px-4 py-2 text-sm font-bold text-white">Configurar mesas QR</Link></div>}
       </>
     ) : section === 'pedidos' ? (
       <>
@@ -456,11 +612,12 @@ export default function Restaurante({ section = 'mapa' }) {
       </>
     ) : (
       <>
-        <div className="flex flex-wrap items-end justify-between gap-3"><div><h2 className="text-lg font-black">Cocina Pro</h2><p className="text-sm text-slate-500">Cola ordenada por antigüedad. Los pedidos QR se actualizan en tiempo real.</p></div><div className="flex flex-wrap items-end gap-2"><span className="rounded-full bg-orange-50 px-3 py-1.5 text-xs font-bold text-orange-800">Objetivo {ajustes.restaurant_preparation_minutes || 20} min</span><label className="text-xs font-bold text-slate-600">Impresora de cocina<select value={impresoraCocinaId} disabled={!configImpresionLista || !impresorasCocina.length} onChange={(event)=>seleccionarImpresoraCocina(event.target.value)} className="mt-1 block max-w-56 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold disabled:bg-slate-100"><option value="">Seleccionar impresora</option>{impresorasCocina.map((impresora)=><option key={impresora.id || `${impresora.name}-${impresora.ip}`} value={impresora.id || `${impresora.name || ''}-${impresora.ip}`}>{impresora.name || impresora.ip} · {impresora.ip}</option>)}</select></label><button type="button" onClick={cambiarImpresionAutomatica} disabled={!configImpresionLista || (!impresoraCocina && !impresionAutomatica)} aria-pressed={impresionAutomatica} className={`rounded-lg px-3 py-2.5 text-xs font-black disabled:cursor-not-allowed disabled:opacity-50 ${impresionAutomatica ? 'bg-emerald-700 text-white' : 'border border-slate-300 bg-white text-slate-700'}`}>{impresionAutomatica ? 'Automática activa' : 'Activar impresión automática'}</button></div></div>
+        <div className="flex flex-wrap items-end justify-between gap-3"><div><h2 className="text-lg font-black">Cocina Pro</h2><p className="text-sm text-slate-500">Cola ordenada por antigüedad. Los pedidos QR se actualizan en tiempo real.</p></div><div className="flex flex-wrap items-end gap-2">{estacionesCocina.length > 0 && <label className="text-xs font-bold text-slate-600">Estación<select value={estacionSeleccionada} onChange={(event)=>setEstacionSeleccionada(event.target.value)} className="mt-1 block max-w-56 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold"><option value="todas">Todas las estaciones</option>{estacionesCocina.map((estacion)=><option key={estacion.id} value={estacion.id}>{estacion.nombre}</option>)}</select></label>}<span className="rounded-full bg-orange-50 px-3 py-1.5 text-xs font-bold text-orange-800">Objetivo {ajustes.restaurant_preparation_minutes || 20} min</span><label className="text-xs font-bold text-slate-600">Impresora de cocina<select value={impresoraCocinaId} disabled={!configImpresionLista || !impresorasCocina.length} onChange={(event)=>seleccionarImpresoraCocina(event.target.value)} className="mt-1 block max-w-56 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold disabled:bg-slate-100"><option value="">Seleccionar impresora</option>{impresorasCocina.map((impresora)=><option key={impresora.id || `${impresora.name}-${impresora.ip}`} value={impresora.id || `${impresora.name || ''}-${impresora.ip}`}>{impresora.name || impresora.ip} · {impresora.ip}</option>)}</select></label><button type="button" onClick={cambiarImpresionAutomatica} disabled={!configImpresionLista || (!impresoraCocina && !impresionAutomatica)} aria-pressed={impresionAutomatica} className={`rounded-lg px-3 py-2.5 text-xs font-black disabled:cursor-not-allowed disabled:opacity-50 ${impresionAutomatica ? 'bg-emerald-700 text-white' : 'border border-slate-300 bg-white text-slate-700'}`}>{impresionAutomatica ? 'Automática activa' : 'Activar impresión automática'}</button></div></div>
+        {estacionSeleccionada !== 'todas' && <p className="rounded-lg border border-blue-100 bg-blue-50 p-3 text-xs text-blue-900">Se muestran pedidos cuyas líneas corresponden todas a esta estación. Las comandas con productos de varias estaciones se gestionan en “Todas las estaciones” para mantener un solo estado por pedido.</p>}
         <p role="status" className={`rounded-lg border p-3 text-xs ${impresionAutomatica && impresoraCocina ? 'border-emerald-200 bg-emerald-50 text-emerald-900' : 'border-amber-200 bg-amber-50 text-amber-900'}`}>{!configImpresionLista ? 'Cargando impresoras…' : !impresorasCocina.length ? 'No hay impresoras de red configuradas. Agregá una en Configuración → Impresoras de tickets; la impresión automática de cocina requiere conexión de red.' : !impresoraCocina ? 'Elegí la impresora de cocina de este equipo. La selección no cambia la impresora de caja.' : impresionAutomatica ? `Impresión automática activa en este equipo → ${impresoraCocina.name || impresoraCocina.ip}. Mantené PyPOS y el puente de impresión abiertos.` : `Impresora seleccionada: ${impresoraCocina.name || impresoraCocina.ip}. Activá la impresión automática en este equipo.`}{estadoImpresion && <span className="ml-1 font-bold">{estadoImpresion}</span>}</p>
         {cargando ? <p className="rounded-xl bg-white p-10 text-center text-slate-500">Cargando cocina…</p> : <div className="space-y-4">
           {resumenProductos.length > 0 && <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm"><h3 className="mb-3 text-sm font-black uppercase tracking-wide text-slate-600">Carga activa por producto</h3><div className="flex gap-2 overflow-x-auto pb-1">{resumenProductos.map((item) => <div key={item.nombre} className="min-w-36 rounded-lg bg-slate-50 px-3 py-2"><p className="truncate text-xs text-slate-500">{item.nombre}</p><p className="mt-1 text-lg font-black text-slate-900">{item.cantidad} <span className="text-xs font-semibold">unid.</span></p><p className="text-[10px] text-slate-400">{item.comandas} líneas activas</p></div>)}</div></section>}
-          <div className="grid gap-4 xl:grid-cols-3"><section className="rounded-xl border border-amber-200 bg-amber-50/60 p-3"><h3 className="mb-3 flex items-center gap-2 font-black text-amber-900"><ClipboardList size={17}/>Entrantes ({pendientes.length})</h3><div className="space-y-3">{pendientes.map((pedido) => <PedidoCard key={pedido.id} pedido={pedido} onAvanzar={avanzarPedido} onCancelar={abrirCancelacion} onEditar={abrirCorreccion} guardando={guardandoId === pedido.id} objetivoMinutos={ajustes.restaurant_preparation_minutes}/>)}</div>{!pendientes.length && <p className="p-6 text-center text-sm text-amber-800">Sin pedidos nuevos</p>}</section><section className="rounded-xl border border-blue-200 bg-blue-50/60 p-3"><h3 className="mb-3 flex items-center gap-2 font-black text-blue-900"><ChefHat size={17}/>En preparación ({preparando.length})</h3><div className="space-y-3">{preparando.map((pedido) => <PedidoCard key={pedido.id} pedido={pedido} onAvanzar={avanzarPedido} onCancelar={abrirCancelacion} onEditar={abrirCorreccion} guardando={guardandoId === pedido.id} objetivoMinutos={ajustes.restaurant_preparation_minutes}/>)}</div>{!preparando.length && <p className="p-6 text-center text-sm text-blue-800">Nada en preparación</p>}</section><section className="rounded-xl border border-emerald-200 bg-emerald-50/60 p-3"><h3 className="mb-3 flex items-center gap-2 font-black text-emerald-900"><CheckCircle2 size={17}/>Listos ({pedidosListos.length})</h3><div className="space-y-3">{pedidosListos.map((pedido) => <PedidoCard key={pedido.id} pedido={pedido} onAvanzar={avanzarPedido} onCancelar={abrirCancelacion} onEditar={abrirCorreccion} guardando={guardandoId === pedido.id} objetivoMinutos={ajustes.restaurant_preparation_minutes}/>)}</div>{!pedidosListos.length && <p className="p-6 text-center text-sm text-emerald-800">Sin comandas listas</p>}</section></div>
+          <div className="grid gap-4 xl:grid-cols-3"><section className="rounded-xl border border-amber-200 bg-amber-50/60 p-3"><h3 className="mb-3 flex items-center gap-2 font-black text-amber-900"><ClipboardList size={17}/>Entrantes ({pendientesDeEstacion.length})</h3><div className="space-y-3">{pendientesDeEstacion.map((pedido) => <PedidoCard key={pedido.id} pedido={pedido} onAvanzar={avanzarPedido} onCancelar={abrirCancelacion} onEditar={abrirCorreccion} guardando={guardandoId === pedido.id} objetivoMinutos={ajustes.restaurant_preparation_minutes}/>)}</div>{!pendientesDeEstacion.length && <p className="p-6 text-center text-sm text-amber-800">Sin pedidos nuevos</p>}</section><section className="rounded-xl border border-blue-200 bg-blue-50/60 p-3"><h3 className="mb-3 flex items-center gap-2 font-black text-blue-900"><ChefHat size={17}/>En preparación ({preparandoDeEstacion.length})</h3><div className="space-y-3">{preparandoDeEstacion.map((pedido) => <PedidoCard key={pedido.id} pedido={pedido} onAvanzar={avanzarPedido} onCancelar={abrirCancelacion} onEditar={abrirCorreccion} guardando={guardandoId === pedido.id} objetivoMinutos={ajustes.restaurant_preparation_minutes}/>)}</div>{!preparandoDeEstacion.length && <p className="p-6 text-center text-sm text-blue-800">Nada en preparación</p>}</section><section className="rounded-xl border border-emerald-200 bg-emerald-50/60 p-3"><h3 className="mb-3 flex items-center gap-2 font-black text-emerald-900"><CheckCircle2 size={17}/>Listos ({listosDeEstacion.length})</h3><div className="space-y-3">{listosDeEstacion.map((pedido) => <PedidoCard key={pedido.id} pedido={pedido} onAvanzar={avanzarPedido} onCancelar={abrirCancelacion} onEditar={abrirCorreccion} guardando={guardandoId === pedido.id} objetivoMinutos={ajustes.restaurant_preparation_minutes}/>)}</div>{!listosDeEstacion.length && <p className="p-6 text-center text-sm text-emerald-800">Sin comandas listas</p>}</section></div>
         </div>}
       </>
     )}

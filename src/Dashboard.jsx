@@ -167,7 +167,7 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
     '/': 'inicio', '/usuarios': 'usuarios', '/roles': 'roles', '/proveedores': 'proveedores', '/clientes': 'clientes', '/grupos_clientes': 'grupos_clientes', '/importar-contactos': 'importar_contactos',
     '/catalogo': 'catalogo', '/agregar_producto': 'agregar_producto', '/imprimir-etiquetas': 'imprimir_etiquetas', '/variaciones-productos': 'variaciones_productos', '/importar-productos': 'importar_productos', '/importar-stock-inicial': 'importar_stock_inicial', '/grupos-precios-venta': 'grupos_precios_venta', '/unidades': 'unidades', '/categorias': 'categorias', '/marcas': 'marcas', '/garantias': 'garantias_productos', '/catalogo-qr': 'catalogo_qr',
     '/fabricacion': 'fabricacion', '/ot': 'ot', '/compras': 'compras', '/agregar_compra': 'agregar_compra', '/devoluciones_compra': 'devoluciones_compra', '/todas_ventas': 'todas_ventas', '/pos': 'pos', '/cobros': 'cobros', '/presupuestos': 'cotizaciones', '/envios': 'envios', '/remisiones-electronicas': 'remisiones_electronicas', '/descuentos': 'descuentos_ventas', '/devoluciones-ventas': 'devoluciones_ventas', '/importar-ventas': 'importar_ventas', '/transferencias-stock': 'transferencias_stock', '/transferencias-stock/nuevo': 'transferencias_stock', '/control-stock': 'ajustes_stock', '/control-stock/nuevo': 'ajustes_stock', '/gastos': 'gastos', '/gastos/agregar': 'agregar_gasto', '/gastos/categorias': 'categorias_gastos', '/cajas': 'cajas', '/informe-caja-pago': 'informe_caja_pago', '/ganancias_perdidas': 'ganancias_perdidas', '/caja_registradora': 'caja_registradora', '/vendedores-comisiones': 'vendedores_comisiones', '/ventas-por-personal': 'ventas_por_personal', '/mesa-cambios': 'mesa_cambios', '/pedidos': 'pedidos', '/plantillas-notificacion': 'plantillas_notificacion', '/config_empresa': 'config_empresa', '/ubicaciones_comerciales': 'ubicaciones_comerciales', '/invoice-schemes': 'config_modulos', '/barcodes': 'config_modulos', '/printers': 'config_modulos', '/scales': 'config_modulos', '/tax-rates': 'config_modulos', '/types-of-service': 'config_modulos', '/subscription': 'config_modulos', '/config_factura': 'config_factura', '/admin-desarrollador': 'admin_desarrollador',
-    '/compras-por-producto': 'compras_por_producto', '/ventas-por-producto': 'ventas_por_producto', '/cobro-de-ventas': 'cobro_de_ventas', '/restaurante/mapa': 'restaurante', '/restaurante/pedidos': 'restaurante', '/restaurante/delivery': 'restaurante', '/restaurante/cocina-pro': 'restaurante', '/restaurante/historial': 'restaurante', '/restaurante/configuracion': 'restaurante', '/repartidor/entregas': 'repartidor_entregas', '/soporte': 'soporte_repartidor',
+    '/compras-por-producto': 'compras_por_producto', '/ventas-por-producto': 'ventas_por_producto', '/cobro-de-ventas': 'cobro_de_ventas', '/restaurante/mapa': 'restaurante', '/restaurante/pedidos': 'restaurante', '/restaurante/delivery': 'restaurante', '/restaurante/delivery/configuracion': 'restaurante', '/restaurante/cocina-pro': 'restaurante', '/restaurante/historial': 'restaurante', '/restaurante/configuracion': 'restaurante', '/restaurante/pos': 'restaurante', '/restaurante/estaciones': 'restaurante', '/restaurante/mesas': 'restaurante', '/restaurante/catalogos': 'restaurante', '/repartidor/entregas': 'repartidor_entregas', '/soporte': 'soporte_repartidor',
     '/informes/compras-ventas': 'informes_micdepos', '/informes/iva': 'informes_operativos', '/informes/rg-90': 'informes_micdepos', '/informes/clientes-proveedores': 'informes_micdepos', '/informes/grupos-clientes': 'informes_micdepos', '/informes/stock': 'informes_operativos', '/informes/vencimientos': 'informes_operativos', '/informes/ajustes': 'informes_operativos', '/informes/productos-mas-vendidos': 'informes_micdepos', '/informes/detalle-articulo': 'informes_micdepos', '/informes/pagos-compras': 'informes_micdepos', '/informes/gastos': 'informes_operativos', '/informes/actividad': 'informes_micdepos',
   };
   const PermittedLink = ({ to, ...props }) => {
@@ -325,6 +325,7 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
   };
 
   const posPantallaCompleta = vistaActiva === 'pos' && !!cajaActual;
+  const restaurantePosPantallaCompleta = location.pathname === '/restaurante/pos';
 
   useEffect(() => {
     let activo = true;
@@ -809,7 +810,7 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
         );
 
       case 'catalogo_qr':
-        return <CatalogoQR key={refreshKey} />;
+        return <CatalogoQR key={refreshKey} initialSection={new URLSearchParams(location.search).get('seccion') || 'catalogos'} />;
 
       case 'stock_history':
         return <HistorialExistencias key={refreshKey} />;
@@ -912,8 +913,13 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
       case 'pedidos':
         return <Pedidos />;
 
-      case 'restaurante':
-        return <Restaurante key={location.pathname} section={location.pathname.split('/')[2] || 'mapa'} />;
+      case 'restaurante': {
+        const partesRestaurante = location.pathname.split('/').filter(Boolean);
+        const sectionRestaurante = partesRestaurante[1] === 'pedidos-web' ? 'pos' : partesRestaurante[1] || 'mapa';
+        if (sectionRestaurante === 'mesas') return <CatalogoQR key={`${refreshKey}-mesas`} initialSection="mesas" />;
+        if (sectionRestaurante === 'catalogos') return <CatalogoQR key={`${refreshKey}-catalogos`} initialSection="catalogos" />;
+        return <Restaurante key={location.pathname} section={sectionRestaurante} deliveryView={partesRestaurante[2] === 'configuracion' ? 'configuracion' : 'completo'} />;
+      }
 
       case 'repartidor_entregas':
         return <RepartidorEntregas perfilUsuario={perfilUsuario} />;
@@ -998,7 +1004,7 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
   `;
 
   return (
-    <div className="flex h-screen bg-[#f3f4f6] font-sans flex-col md:flex-row overflow-hidden">
+    <div className="flex h-screen bg-[var(--ui-canvas)] font-sans flex-col md:flex-row overflow-hidden">
 
       {cargandoNavegacion && (
         <div className="gda-navigation-progress" role="progressbar" aria-label="Cargando módulo" aria-valuetext="Cargando módulo" />
@@ -1203,10 +1209,10 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
                 {menuRenderizado === 'usuarios' && !sidebarColapsado && (
                   <div aria-hidden={menuExpandido !== 'usuarios'} inert={menuExpandido !== 'usuarios'} style={estiloSubmenu('usuarios')} className="sidebar-submenu mx-1.5 flex flex-col rounded-b bg-[#1e1f35] py-1.5">
                     {puedeVerVista('usuarios') && (
-                      <PermittedLink to="/usuarios" onClick={() => irA('usuarios', '/usuarios')} className={estiloSubItem('usuarios')}>🠖 {t('users')}</PermittedLink>
+                      <PermittedLink to="/usuarios" onClick={() => irA('usuarios', '/usuarios')} className={estiloSubItem('usuarios')}>{t('users')}</PermittedLink>
                     )}
                     {puedeVerVista('roles') && (
-                      <PermittedLink to="/roles" onClick={() => irA('roles', '/roles')} className={estiloSubItem('roles')}>🠖 {t('roles')}</PermittedLink>
+                      <PermittedLink to="/roles" onClick={() => irA('roles', '/roles')} className={estiloSubItem('roles')}>{t('roles')}</PermittedLink>
                     )}
                   </div>
                 )}
@@ -1224,10 +1230,10 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
                 </button>
                 {menuRenderizado === 'contactos' && !sidebarColapsado && (
                   <div aria-hidden={menuExpandido !== 'contactos'} inert={menuExpandido !== 'contactos'} style={estiloSubmenu('contactos')} className="sidebar-submenu mx-1.5 flex flex-col rounded-b bg-[#1e1f35] py-1.5">
-                    <PermittedLink to="/proveedores" onClick={() => irA('proveedores', '/proveedores')} className={estiloSubItem('proveedores')}>🠖 {t('suppliers')}</PermittedLink>
-                    <PermittedLink to="/clientes" onClick={() => irA('clientes', '/clientes')} className={estiloSubItem('clientes')}>🠖 {t('customers')}</PermittedLink>
-                    <PermittedLink to="/grupos_clientes" onClick={() => irA('grupos_clientes', '/grupos_clientes')} className={estiloSubItem('grupos_clientes')}>🠖 {t('customerGroups')}</PermittedLink>
-                    {(esAdmin || !permisosRol || permisosRol.clientes_proveedores?.['Agregar cliente'] === true || permisosRol.clientes_proveedores?.['Agregar proveedor'] === true) && <PermittedLink to="/importar-contactos" onClick={() => irA('importar_contactos', '/importar-contactos')} className={estiloSubItem('importar_contactos')}>🠖 Importar contactos</PermittedLink>}
+                    <PermittedLink to="/proveedores" onClick={() => irA('proveedores', '/proveedores')} className={estiloSubItem('proveedores')}>{t('suppliers')}</PermittedLink>
+                    <PermittedLink to="/clientes" onClick={() => irA('clientes', '/clientes')} className={estiloSubItem('clientes')}>{t('customers')}</PermittedLink>
+                    <PermittedLink to="/grupos_clientes" onClick={() => irA('grupos_clientes', '/grupos_clientes')} className={estiloSubItem('grupos_clientes')}>{t('customerGroups')}</PermittedLink>
+                    {(esAdmin || !permisosRol || permisosRol.clientes_proveedores?.['Agregar cliente'] === true || permisosRol.clientes_proveedores?.['Agregar proveedor'] === true) && <PermittedLink to="/importar-contactos" onClick={() => irA('importar_contactos', '/importar-contactos')} className={estiloSubItem('importar_contactos')}>Importar contactos</PermittedLink>}
                   </div>
                 )}
               </>
@@ -1244,17 +1250,17 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
                 </button>
                 {menuRenderizado === 'productos' && !sidebarColapsado && (
                   <div id="submenu-productos" aria-hidden={menuExpandido !== 'productos'} inert={menuExpandido !== 'productos'} style={estiloSubmenu('productos')} className="sidebar-submenu mx-1.5 flex flex-col rounded-b bg-[#1e1f35] py-1.5">
-                    <PermittedLink to="/catalogo" onClick={() => irA('catalogo', '/catalogo')} className={estiloSubItem('catalogo')}>🠖 {t('productList')}</PermittedLink>
-                    <PermittedLink to="/agregar_producto" onClick={() => irA('agregar_producto', '/agregar_producto')} className={estiloSubItem('agregar_producto')}>🠖 {t('addProduct')}</PermittedLink>
-                    <PermittedLink to="/imprimir-etiquetas" onClick={() => irA('imprimir_etiquetas', '/imprimir-etiquetas')} className={estiloSubItem('imprimir_etiquetas')}>🠖 Imprimir etiquetas</PermittedLink>
-                    <PermittedLink to="/variaciones-productos" onClick={() => irA('variaciones_productos', '/variaciones-productos')} className={estiloSubItem('variaciones_productos')}>🠖 Variaciones</PermittedLink>
-                    {(esAdmin || !permisosRol || permisosRol.productos?.['Agregar producto'] === true) && <PermittedLink to="/importar-productos" onClick={() => irA('importar_productos', '/importar-productos')} className={estiloSubItem('importar_productos')}>🠖 Importar productos</PermittedLink>}
-                    {(esAdmin || !permisosRol || permisosRol.productos?.['Ajustar stock'] === true) && <PermittedLink to="/importar-stock-inicial" onClick={() => irA('importar_stock_inicial', '/importar-stock-inicial')} className={estiloSubItem('importar_stock_inicial')}>🠖 Importar stock inicial</PermittedLink>}
-                    <PermittedLink to="/grupos-precios-venta" onClick={() => irA('grupos_precios_venta', '/grupos-precios-venta')} className={estiloSubItem('grupos_precios_venta')}>🠖 Grupo de precios de venta</PermittedLink>
-                    <PermittedLink to="/unidades" onClick={() => irA('unidades', '/unidades')} className={estiloSubItem('unidades')}>🠖 {t('units')}</PermittedLink>
-                    <PermittedLink to="/categorias" onClick={() => irA('categorias', '/categorias')} className={estiloSubItem('categorias')}>🠖 {t('categories')}</PermittedLink>
-                    <PermittedLink to="/marcas" onClick={() => irA('marcas', '/marcas')} className={estiloSubItem('marcas')}>🠖 {t('brands')}</PermittedLink>
-                    <PermittedLink to="/garantias" onClick={() => irA('garantias_productos', '/garantias')} className={estiloSubItem('garantias_productos')}>🠖 Garantías</PermittedLink>
+                    <PermittedLink to="/catalogo" onClick={() => irA('catalogo', '/catalogo')} className={estiloSubItem('catalogo')}>{t('productList')}</PermittedLink>
+                    <PermittedLink to="/agregar_producto" onClick={() => irA('agregar_producto', '/agregar_producto')} className={estiloSubItem('agregar_producto')}>{t('addProduct')}</PermittedLink>
+                    <PermittedLink to="/imprimir-etiquetas" onClick={() => irA('imprimir_etiquetas', '/imprimir-etiquetas')} className={estiloSubItem('imprimir_etiquetas')}>Imprimir etiquetas</PermittedLink>
+                    <PermittedLink to="/variaciones-productos" onClick={() => irA('variaciones_productos', '/variaciones-productos')} className={estiloSubItem('variaciones_productos')}>Variaciones</PermittedLink>
+                    {(esAdmin || !permisosRol || permisosRol.productos?.['Agregar producto'] === true) && <PermittedLink to="/importar-productos" onClick={() => irA('importar_productos', '/importar-productos')} className={estiloSubItem('importar_productos')}>Importar productos</PermittedLink>}
+                    {(esAdmin || !permisosRol || permisosRol.productos?.['Ajustar stock'] === true) && <PermittedLink to="/importar-stock-inicial" onClick={() => irA('importar_stock_inicial', '/importar-stock-inicial')} className={estiloSubItem('importar_stock_inicial')}>Importar stock inicial</PermittedLink>}
+                    <PermittedLink to="/grupos-precios-venta" onClick={() => irA('grupos_precios_venta', '/grupos-precios-venta')} className={estiloSubItem('grupos_precios_venta')}>Grupo de precios de venta</PermittedLink>
+                    <PermittedLink to="/unidades" onClick={() => irA('unidades', '/unidades')} className={estiloSubItem('unidades')}>{t('units')}</PermittedLink>
+                    <PermittedLink to="/categorias" onClick={() => irA('categorias', '/categorias')} className={estiloSubItem('categorias')}>{t('categories')}</PermittedLink>
+                    <PermittedLink to="/marcas" onClick={() => irA('marcas', '/marcas')} className={estiloSubItem('marcas')}>{t('brands')}</PermittedLink>
+                    <PermittedLink to="/garantias" onClick={() => irA('garantias_productos', '/garantias')} className={estiloSubItem('garantias_productos')}>Garantías</PermittedLink>
                   </div>
                 )}
               </>
@@ -1284,9 +1290,9 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
                 </button>
                 {menuRenderizado === 'compras' && !sidebarColapsado && (
                   <div aria-hidden={menuExpandido !== 'compras'} inert={menuExpandido !== 'compras'} style={estiloSubmenu('compras')} className="sidebar-submenu mx-1.5 flex flex-col rounded-b bg-[#1e1f35] py-1.5">
-                    <PermittedLink to="/compras" onClick={() => irA('compras', '/compras')} className={estiloSubItem('compras')}>🠖 {t('purchaseList')}</PermittedLink>
-                    <PermittedLink to="/agregar_compra" onClick={() => irA('agregar_compra', '/agregar_compra')} className={estiloSubItem('agregar_compra')}>🠖 {t('addPurchase')}</PermittedLink>
-                    <PermittedLink to="/devoluciones_compra" onClick={() => irA('devoluciones_compra', '/devoluciones_compra')} className={estiloSubItem('devoluciones_compra')}>🠖 {t('purchaseReturns')}</PermittedLink>
+                    <PermittedLink to="/compras" onClick={() => irA('compras', '/compras')} className={estiloSubItem('compras')}>{t('purchaseList')}</PermittedLink>
+                    <PermittedLink to="/agregar_compra" onClick={() => irA('agregar_compra', '/agregar_compra')} className={estiloSubItem('agregar_compra')}>{t('addPurchase')}</PermittedLink>
+                    <PermittedLink to="/devoluciones_compra" onClick={() => irA('devoluciones_compra', '/devoluciones_compra')} className={estiloSubItem('devoluciones_compra')}>{t('purchaseReturns')}</PermittedLink>
                   </div>
                 )}
               </>
@@ -1303,15 +1309,15 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
                 </button>
                 {menuRenderizado === 'ventas' && !sidebarColapsado && (
                   <div aria-hidden={menuExpandido !== 'ventas'} inert={menuExpandido !== 'ventas'} style={estiloSubmenu('ventas')} className="sidebar-submenu mx-1.5 flex flex-col rounded-b bg-[#1e1f35] py-1.5">
-                    <PermittedLink to="/todas_ventas" onClick={() => irA('todas_ventas', '/todas_ventas')} className={estiloSubItem('todas_ventas')}>🠖 {t('allSales')}</PermittedLink>
-                    <PermittedLink to="/pos" aria-current={vistaActiva === 'pos' ? 'page' : undefined} onClick={() => irA('pos', '/pos')} className={estiloSubItem('pos')}>🠖 {t('pos')}</PermittedLink>
-                    <PermittedLink to="/cobros" onClick={() => irA('cobros', '/cobros')} className={estiloSubItem('cobros')}>🠖 {t('pendingOrders')}</PermittedLink>
-                    <PermittedLink to="/presupuestos" onClick={() => irA('cotizaciones', '/presupuestos')} className={estiloSubItem('cotizaciones')}>🠖 Presupuestos / Cotizaciones</PermittedLink>
-                    <PermittedLink to="/envios" onClick={() => irA('envios', '/envios')} className={estiloSubItem('envios')}>🠖 Envíos</PermittedLink>
-                    <PermittedLink to="/remisiones-electronicas" onClick={() => irA('remisiones_electronicas', '/remisiones-electronicas')} className={estiloSubItem('remisiones_electronicas')}>🠖 Remisiones electrónicas</PermittedLink>
-                    <PermittedLink to="/descuentos" onClick={() => irA('descuentos_ventas', '/descuentos')} className={estiloSubItem('descuentos_ventas')}>🠖 Descuentos</PermittedLink>
-                    <PermittedLink to="/devoluciones-ventas" onClick={() => irA('devoluciones_ventas', '/devoluciones-ventas')} className={estiloSubItem('devoluciones_ventas')}>🠖 Devoluciones</PermittedLink>
-                    {(esAdmin || !permisosRol || permisosRol.ventas_pos?.['Acceder al Punto de Venta'] === true) && <PermittedLink to="/importar-ventas" onClick={() => irA('importar_ventas', '/importar-ventas')} className={estiloSubItem('importar_ventas')}>🠖 Importar ventas</PermittedLink>}
+                    <PermittedLink to="/todas_ventas" onClick={() => irA('todas_ventas', '/todas_ventas')} className={estiloSubItem('todas_ventas')}>{t('allSales')}</PermittedLink>
+                    <PermittedLink to="/pos" aria-current={vistaActiva === 'pos' ? 'page' : undefined} onClick={() => irA('pos', '/pos')} className={estiloSubItem('pos')}>{t('pos')}</PermittedLink>
+                    <PermittedLink to="/cobros" onClick={() => irA('cobros', '/cobros')} className={estiloSubItem('cobros')}>{t('pendingOrders')}</PermittedLink>
+                    <PermittedLink to="/presupuestos" onClick={() => irA('cotizaciones', '/presupuestos')} className={estiloSubItem('cotizaciones')}>Presupuestos / Cotizaciones</PermittedLink>
+                    <PermittedLink to="/envios" onClick={() => irA('envios', '/envios')} className={estiloSubItem('envios')}>Envíos</PermittedLink>
+                    <PermittedLink to="/remisiones-electronicas" onClick={() => irA('remisiones_electronicas', '/remisiones-electronicas')} className={estiloSubItem('remisiones_electronicas')}>Remisiones electrónicas</PermittedLink>
+                    <PermittedLink to="/descuentos" onClick={() => irA('descuentos_ventas', '/descuentos')} className={estiloSubItem('descuentos_ventas')}>Descuentos</PermittedLink>
+                    <PermittedLink to="/devoluciones-ventas" onClick={() => irA('devoluciones_ventas', '/devoluciones-ventas')} className={estiloSubItem('devoluciones_ventas')}>Devoluciones</PermittedLink>
+                    {(esAdmin || !permisosRol || permisosRol.ventas_pos?.['Acceder al Punto de Venta'] === true) && <PermittedLink to="/importar-ventas" onClick={() => irA('importar_ventas', '/importar-ventas')} className={estiloSubItem('importar_ventas')}>Importar ventas</PermittedLink>}
                   </div>
                 )}
               </>
@@ -1336,8 +1342,8 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
                   {!sidebarColapsado && indicadorDesplegable('transferencias_stock')}
                 </button>
                 {menuRenderizado === 'transferencias_stock' && !sidebarColapsado && <div aria-hidden={menuExpandido !== 'transferencias_stock'} inert={menuExpandido !== 'transferencias_stock'} style={estiloSubmenu('transferencias_stock')} className="sidebar-submenu mx-1.5 flex flex-col rounded-b bg-[#1e1f35] py-1.5">
-                  <PermittedLink to="/transferencias-stock" onClick={() => irA('transferencias_stock', '/transferencias-stock')} className={estiloSubItem('transferencias_stock', '/transferencias-stock')}>🠖 Listar transferencias</PermittedLink>
-                  <PermittedLink to="/transferencias-stock/nuevo" onClick={() => irA('transferencias_stock', '/transferencias-stock/nuevo')} className={estiloSubItem('', '/transferencias-stock/nuevo')}>🠖 Agregar transferencia</PermittedLink>
+                  <PermittedLink to="/transferencias-stock" onClick={() => irA('transferencias_stock', '/transferencias-stock')} className={estiloSubItem('transferencias_stock', '/transferencias-stock')}>Listar transferencias</PermittedLink>
+                  <PermittedLink to="/transferencias-stock/nuevo" onClick={() => irA('transferencias_stock', '/transferencias-stock/nuevo')} className={estiloSubItem('', '/transferencias-stock/nuevo')}>Agregar transferencia</PermittedLink>
                 </div>}
               </>
             )}
@@ -1349,8 +1355,8 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
                   {!sidebarColapsado && indicadorDesplegable('control_stock')}
                 </button>
                 {menuRenderizado === 'control_stock' && !sidebarColapsado && <div aria-hidden={menuExpandido !== 'control_stock'} inert={menuExpandido !== 'control_stock'} style={estiloSubmenu('control_stock')} className="sidebar-submenu mx-1.5 flex flex-col rounded-b bg-[#1e1f35] py-1.5">
-                  <PermittedLink to="/control-stock" onClick={() => irA('ajustes_stock', '/control-stock')} className={estiloSubItem('ajustes_stock', '/control-stock')}>🠖 Listar controles de stock</PermittedLink>
-                  <PermittedLink to="/control-stock/nuevo" onClick={() => irA('ajustes_stock', '/control-stock/nuevo')} className={estiloSubItem('', '/control-stock/nuevo')}>🠖 Nuevo control de stock</PermittedLink>
+                  <PermittedLink to="/control-stock" onClick={() => irA('ajustes_stock', '/control-stock')} className={estiloSubItem('ajustes_stock', '/control-stock')}>Listar controles de stock</PermittedLink>
+                  <PermittedLink to="/control-stock/nuevo" onClick={() => irA('ajustes_stock', '/control-stock/nuevo')} className={estiloSubItem('', '/control-stock/nuevo')}>Nuevo control de stock</PermittedLink>
                 </div>}
               </>
             )}
@@ -1366,9 +1372,9 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
                 </button>
                 {menuRenderizado === 'gastos' && !sidebarColapsado && (
                   <div aria-hidden={menuExpandido !== 'gastos'} inert={menuExpandido !== 'gastos'} style={estiloSubmenu('gastos')} className="sidebar-submenu mx-1.5 flex flex-col rounded-b bg-[#1e1f35] py-1.5">
-                    <PermittedLink to="/gastos" onClick={() => irA('gastos', '/gastos')} className={estiloSubItem('gastos')}>🠖 {t('expenseList')}</PermittedLink>
-                    <PermittedLink to="/gastos/agregar" onClick={() => irA('agregar_gasto', '/gastos/agregar')} className={estiloSubItem('agregar_gasto')}>🠖 {t('addExpense')}</PermittedLink>
-                    <PermittedLink to="/gastos/categorias" onClick={() => irA('categorias_gastos', '/gastos/categorias')} className={estiloSubItem('categorias_gastos')}>🠖 {t('expenseCategories')}</PermittedLink>
+                    <PermittedLink to="/gastos" onClick={() => irA('gastos', '/gastos')} className={estiloSubItem('gastos')}>{t('expenseList')}</PermittedLink>
+                    <PermittedLink to="/gastos/agregar" onClick={() => irA('agregar_gasto', '/gastos/agregar')} className={estiloSubItem('agregar_gasto')}>{t('addExpense')}</PermittedLink>
+                    <PermittedLink to="/gastos/categorias" onClick={() => irA('categorias_gastos', '/gastos/categorias')} className={estiloSubItem('categorias_gastos')}>{t('expenseCategories')}</PermittedLink>
                   </div>
                 )}
               </>
@@ -1385,8 +1391,8 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
                 </button>
                 {menuRenderizado === 'caja_banco' && !sidebarColapsado && (
                   <div aria-hidden={menuExpandido !== 'caja_banco'} inert={menuExpandido !== 'caja_banco'} style={estiloSubmenu('caja_banco')} className="sidebar-submenu mx-1.5 flex flex-col rounded-b bg-[#1e1f35] py-1.5">
-                    <PermittedLink to="/cajas" onClick={() => irA('cajas', '/cajas')} className={estiloSubItem('cajas')}>🠖 {t('cashRegisters')}</PermittedLink>
-                    <PermittedLink to="/informe-caja-pago" onClick={() => irA('informe_caja-pago', '/informe-caja-pago')} className={estiloSubItem('informe_caja_pago')}>🠖 {t('paymentReport')}</PermittedLink>
+                    <PermittedLink to="/cajas" onClick={() => irA('cajas', '/cajas')} className={estiloSubItem('cajas')}>{t('cashRegisters')}</PermittedLink>
+                    <PermittedLink to="/informe-caja-pago" onClick={() => irA('informe_caja-pago', '/informe-caja-pago')} className={estiloSubItem('informe_caja_pago')}>{t('paymentReport')}</PermittedLink>
                   </div>
                 )}
               </>
@@ -1400,26 +1406,26 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
                   {!sidebarColapsado && indicadorDesplegable('informes')}
                 </button>
                 {menuRenderizado === 'informes' && !sidebarColapsado && <div aria-hidden={menuExpandido !== 'informes'} inert={menuExpandido !== 'informes'} style={estiloSubmenu('informes')} className="sidebar-submenu mx-1.5 flex flex-col rounded-b bg-[#1e1f35] py-1.5">
-                  <PermittedLink to="/ganancias_perdidas" onClick={() => irA('ganancias_perdidas', '/ganancias_perdidas')} className={estiloSubItem('', '/ganancias_perdidas')}>🠖 Ganancias y Pérdidas</PermittedLink>
-                  <PermittedLink to="/informes/compras-ventas" onClick={() => irA('informes_micdepos', '/informes/compras-ventas')} className={estiloSubItem('', '/informes/compras-ventas')}>🠖 Compras y Ventas</PermittedLink>
-                  <PermittedLink to="/informes/iva" onClick={() => irA('informes_operativos', '/informes/iva')} className={estiloSubItem('', '/informes/iva')}>🠖 Informe Fiscal (IVA)</PermittedLink>
-                  <PermittedLink to="/informes/rg-90" onClick={() => irA('informes_micdepos', '/informes/rg-90')} className={estiloSubItem('', '/informes/rg-90')}>🠖 RG 90 — Marangatu</PermittedLink>
-                  <PermittedLink to="/informes/clientes-proveedores" onClick={() => irA('informes_micdepos', '/informes/clientes-proveedores')} className={estiloSubItem('', '/informes/clientes-proveedores')}>🠖 Proveedores y Clientes</PermittedLink>
-                  <PermittedLink to="/informes/grupos-clientes" onClick={() => irA('informes_micdepos', '/informes/grupos-clientes')} className={estiloSubItem('', '/informes/grupos-clientes')}>🠖 Grupos de clientes</PermittedLink>
-                  <PermittedLink to="/informes/stock" onClick={() => irA('informes_operativos', '/informes/stock')} className={estiloSubItem('', '/informes/stock')}>🠖 Inventario / Stock</PermittedLink>
-                  <PermittedLink to="/informes/vencimientos" onClick={() => irA('informes_operativos', '/informes/vencimientos')} className={estiloSubItem('', '/informes/vencimientos')}>🠖 Vencimiento de productos</PermittedLink>
-                  <PermittedLink to="/informes/ajustes" onClick={() => irA('informes_operativos', '/informes/ajustes')} className={estiloSubItem('', '/informes/ajustes')}>🠖 Ajustes de inventario</PermittedLink>
-                  <PermittedLink to="/informes/productos-mas-vendidos" onClick={() => irA('informes_micdepos', '/informes/productos-mas-vendidos')} className={estiloSubItem('', '/informes/productos-mas-vendidos')}>🠖 Productos más vendidos</PermittedLink>
-                  <PermittedLink to="/informes/detalle-articulo" onClick={() => irA('informes_micdepos', '/informes/detalle-articulo')} className={estiloSubItem('', '/informes/detalle-articulo')}>🠖 Detalle por artículo</PermittedLink>
-                  <PermittedLink to="/compras-por-producto" onClick={() => irA('compras_por_producto', '/compras-por-producto')} className={estiloSubItem('', '/compras-por-producto')}>🠖 Compras por producto</PermittedLink>
-                  <PermittedLink to="/ventas-por-producto" onClick={() => irA('ventas_por_producto', '/ventas-por-producto')} className={estiloSubItem('', '/ventas-por-producto')}>🠖 Ventas por producto</PermittedLink>
-                  <PermittedLink to="/informes/pagos-compras" onClick={() => irA('informes_micdepos', '/informes/pagos-compras')} className={estiloSubItem('', '/informes/pagos-compras')}>🠖 Pagos de compra</PermittedLink>
-                  <PermittedLink to="/cobro-de-ventas" onClick={() => irA('cobro_de_ventas', '/cobro-de-ventas')} className={estiloSubItem('', '/cobro-de-ventas')}>🠖 Cobros de venta</PermittedLink>
-                  <PermittedLink to="/informes/gastos" onClick={() => irA('informes_operativos', '/informes/gastos')} className={estiloSubItem('', '/informes/gastos')}>🠖 Comprobantes de egresos</PermittedLink>
-                  <PermittedLink to="/caja_registradora" onClick={() => irA('caja_registradora', '/caja_registradora')} className={estiloSubItem('', '/caja_registradora')}>🠖 Caja registradora</PermittedLink>
-                  <PermittedLink to="/vendedores-comisiones" onClick={() => irA('vendedores_comisiones', '/vendedores-comisiones')} className={estiloSubItem('', '/vendedores-comisiones')}>🠖 Vendedores / Comisiones</PermittedLink>
-                  <PermittedLink to="/ventas-por-personal" onClick={() => irA('ventas_por_personal', '/ventas-por-personal')} className={estiloSubItem('', '/ventas-por-personal')}>🠖 Ventas por personal</PermittedLink>
-                  <PermittedLink to="/informes/actividad" onClick={() => irA('informes_micdepos', '/informes/actividad')} className={estiloSubItem('', '/informes/actividad')}>🠖 Historial de actividades</PermittedLink>
+                  <PermittedLink to="/ganancias_perdidas" onClick={() => irA('ganancias_perdidas', '/ganancias_perdidas')} className={estiloSubItem('', '/ganancias_perdidas')}>Ganancias y Pérdidas</PermittedLink>
+                  <PermittedLink to="/informes/compras-ventas" onClick={() => irA('informes_micdepos', '/informes/compras-ventas')} className={estiloSubItem('', '/informes/compras-ventas')}>Compras y Ventas</PermittedLink>
+                  <PermittedLink to="/informes/iva" onClick={() => irA('informes_operativos', '/informes/iva')} className={estiloSubItem('', '/informes/iva')}>Informe Fiscal (IVA)</PermittedLink>
+                  <PermittedLink to="/informes/rg-90" onClick={() => irA('informes_micdepos', '/informes/rg-90')} className={estiloSubItem('', '/informes/rg-90')}>RG 90 — Marangatu</PermittedLink>
+                  <PermittedLink to="/informes/clientes-proveedores" onClick={() => irA('informes_micdepos', '/informes/clientes-proveedores')} className={estiloSubItem('', '/informes/clientes-proveedores')}>Proveedores y Clientes</PermittedLink>
+                  <PermittedLink to="/informes/grupos-clientes" onClick={() => irA('informes_micdepos', '/informes/grupos-clientes')} className={estiloSubItem('', '/informes/grupos-clientes')}>Grupos de clientes</PermittedLink>
+                  <PermittedLink to="/informes/stock" onClick={() => irA('informes_operativos', '/informes/stock')} className={estiloSubItem('', '/informes/stock')}>Inventario / Stock</PermittedLink>
+                  <PermittedLink to="/informes/vencimientos" onClick={() => irA('informes_operativos', '/informes/vencimientos')} className={estiloSubItem('', '/informes/vencimientos')}>Vencimiento de productos</PermittedLink>
+                  <PermittedLink to="/informes/ajustes" onClick={() => irA('informes_operativos', '/informes/ajustes')} className={estiloSubItem('', '/informes/ajustes')}>Ajustes de inventario</PermittedLink>
+                  <PermittedLink to="/informes/productos-mas-vendidos" onClick={() => irA('informes_micdepos', '/informes/productos-mas-vendidos')} className={estiloSubItem('', '/informes/productos-mas-vendidos')}>Productos más vendidos</PermittedLink>
+                  <PermittedLink to="/informes/detalle-articulo" onClick={() => irA('informes_micdepos', '/informes/detalle-articulo')} className={estiloSubItem('', '/informes/detalle-articulo')}>Detalle por artículo</PermittedLink>
+                  <PermittedLink to="/compras-por-producto" onClick={() => irA('compras_por_producto', '/compras-por-producto')} className={estiloSubItem('', '/compras-por-producto')}>Compras por producto</PermittedLink>
+                  <PermittedLink to="/ventas-por-producto" onClick={() => irA('ventas_por_producto', '/ventas-por-producto')} className={estiloSubItem('', '/ventas-por-producto')}>Ventas por producto</PermittedLink>
+                  <PermittedLink to="/informes/pagos-compras" onClick={() => irA('informes_micdepos', '/informes/pagos-compras')} className={estiloSubItem('', '/informes/pagos-compras')}>Pagos de compra</PermittedLink>
+                  <PermittedLink to="/cobro-de-ventas" onClick={() => irA('cobro_de_ventas', '/cobro-de-ventas')} className={estiloSubItem('', '/cobro-de-ventas')}>Cobros de venta</PermittedLink>
+                  <PermittedLink to="/informes/gastos" onClick={() => irA('informes_operativos', '/informes/gastos')} className={estiloSubItem('', '/informes/gastos')}>Comprobantes de egresos</PermittedLink>
+                  <PermittedLink to="/caja_registradora" onClick={() => irA('caja_registradora', '/caja_registradora')} className={estiloSubItem('', '/caja_registradora')}>Caja registradora</PermittedLink>
+                  <PermittedLink to="/vendedores-comisiones" onClick={() => irA('vendedores_comisiones', '/vendedores-comisiones')} className={estiloSubItem('', '/vendedores-comisiones')}>Vendedores / Comisiones</PermittedLink>
+                  <PermittedLink to="/ventas-por-personal" onClick={() => irA('ventas_por_personal', '/ventas-por-personal')} className={estiloSubItem('', '/ventas-por-personal')}>Ventas por personal</PermittedLink>
+                  <PermittedLink to="/informes/actividad" onClick={() => irA('informes_micdepos', '/informes/actividad')} className={estiloSubItem('', '/informes/actividad')}>Historial de actividades</PermittedLink>
                 </div>}
               </>
             )}
@@ -1442,12 +1448,17 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
                   {!sidebarColapsado && indicadorDesplegable('restaurante')}
                 </button>
                 {menuRenderizado === 'restaurante' && !sidebarColapsado && <div aria-hidden={menuExpandido !== 'restaurante'} inert={menuExpandido !== 'restaurante'} style={estiloSubmenu('restaurante')} className="sidebar-submenu mx-1.5 flex flex-col rounded-b bg-[#1e1f35] py-1.5">
-                  <PermittedLink to="/restaurante/mapa" onClick={() => irA('restaurante', '/restaurante/mapa')} className={estiloSubItem('restaurante', '/restaurante/mapa')}>🠖 Mapa de mesas</PermittedLink>
-                  <PermittedLink to="/restaurante/pedidos" onClick={() => irA('restaurante', '/restaurante/pedidos')} className={estiloSubItem('restaurante', '/restaurante/pedidos')}>🠖 Pedidos en cocina</PermittedLink>
-                  <PermittedLink to="/restaurante/delivery" onClick={() => irA('restaurante', '/restaurante/delivery')} className={estiloSubItem('restaurante', '/restaurante/delivery')}>🠖 Delivery · Repartidores</PermittedLink>
-                  <PermittedLink to="/restaurante/cocina-pro" onClick={() => irA('restaurante', '/restaurante/cocina-pro')} className={estiloSubItem('restaurante', '/restaurante/cocina-pro')}>🠖 Cocina Pro</PermittedLink>
-                  <PermittedLink to="/restaurante/historial" onClick={() => irA('restaurante', '/restaurante/historial')} className={estiloSubItem('restaurante', '/restaurante/historial')}>🠖 Historial</PermittedLink>
-                  <PermittedLink to="/restaurante/configuracion" onClick={() => irA('restaurante', '/restaurante/configuracion')} className={estiloSubItem('restaurante', '/restaurante/configuracion')}>🠖 Configuración</PermittedLink>
+                  <PermittedLink to="/restaurante/pos" onClick={() => irA('restaurante', '/restaurante/pos')} className={estiloSubItem('restaurante', '/restaurante/pos')}>POS Restaurante · Comanda</PermittedLink>
+                  <PermittedLink to="/restaurante/mapa" onClick={() => irA('restaurante', '/restaurante/mapa')} className={estiloSubItem('restaurante', '/restaurante/mapa')}>Mapa de mesas</PermittedLink>
+                  <PermittedLink to="/restaurante/pedidos" onClick={() => irA('restaurante', '/restaurante/pedidos')} className={estiloSubItem('restaurante', '/restaurante/pedidos')}>Pedidos en cocina</PermittedLink>
+                  <PermittedLink to="/restaurante/delivery" onClick={() => irA('restaurante', '/restaurante/delivery')} className={estiloSubItem('restaurante', '/restaurante/delivery')}>Delivery · Repartidores</PermittedLink>
+                  <PermittedLink to="/restaurante/cocina-pro" onClick={() => irA('restaurante', '/restaurante/cocina-pro')} className={estiloSubItem('restaurante', '/restaurante/cocina-pro')}>Cocina (Pro)</PermittedLink>
+                  <span className="px-3 pb-1 pt-3 text-[10px] font-black uppercase tracking-[.16em] text-slate-400">Configuraciones</span>
+                  <PermittedLink to="/restaurante/estaciones" onClick={() => irA('restaurante', '/restaurante/estaciones')} className={estiloSubItem('restaurante', '/restaurante/estaciones')}>Estaciones de Cocina</PermittedLink>
+                  <PermittedLink to="/restaurante/mesas" onClick={() => irA('restaurante', '/restaurante/mesas')} className={estiloSubItem('restaurante', '/restaurante/mesas')}>Mesas</PermittedLink>
+                  <PermittedLink to="/restaurante/delivery/configuracion" onClick={() => irA('restaurante', '/restaurante/delivery/configuracion')} className={estiloSubItem('restaurante', '/restaurante/delivery/configuracion')}>Delivery — Zonas y Repartidores</PermittedLink>
+                  <PermittedLink to="/restaurante/catalogos" onClick={() => irA('restaurante', '/restaurante/catalogos')} className={estiloSubItem('restaurante', '/restaurante/catalogos')}>Carta Online (Catálogos)</PermittedLink>
+                  <PermittedLink to="/restaurante/historial" onClick={() => irA('restaurante', '/restaurante/historial')} className={estiloSubItem('restaurante', '/restaurante/historial')}>Historial</PermittedLink>
                 </div>}
               </>
             )}
@@ -1467,16 +1478,16 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
               </button>
               {menuRenderizado === 'configuraciones' && !sidebarColapsado && (
                 <div aria-hidden={menuExpandido !== 'configuraciones'} inert={menuExpandido !== 'configuraciones'} style={estiloSubmenu('configuraciones')} className="sidebar-submenu mx-1.5 flex flex-col rounded-b bg-[#1e1f35] py-1.5">
-                  <PermittedLink to="/config_empresa" onClick={() => irA('config_empresa', '/config_empresa')} className={estiloSubItem('config_empresa')}>🠖 {t('companySettings')}</PermittedLink>
-                    <PermittedLink to="/ubicaciones_comerciales" onClick={() => irA('ubicaciones_comerciales', '/ubicaciones_comerciales')} className={estiloSubItem('ubicaciones_comerciales')}>🠖 {t('commercialLocations')}</PermittedLink>
-                    <PermittedLink to="/invoice-schemes" onClick={() => irA('config_modulos', '/invoice-schemes')} className={estiloSubItem('config_modulos', '/invoice-schemes')}>🠖 Configuración de factura</PermittedLink>
-                    <PermittedLink to="/barcodes" onClick={() => irA('config_modulos', '/barcodes')} className={estiloSubItem('config_modulos', '/barcodes')}>🠖 Configuraciones de código de barras</PermittedLink>
-                    <PermittedLink to="/printers" onClick={() => irA('config_modulos', '/printers')} className={estiloSubItem('config_modulos', '/printers')}>🠖 Impresoras de tickets</PermittedLink>
-                    <PermittedLink to="/scales" onClick={() => irA('config_modulos', '/scales')} className={estiloSubItem('config_modulos', '/scales')}>🠖 Balanzas de red</PermittedLink>
-                    <PermittedLink to="/tax-rates" onClick={() => irA('config_modulos', '/tax-rates')} className={estiloSubItem('config_modulos', '/tax-rates')}>🠖 Tasas de impuestos</PermittedLink>
-                    <PermittedLink to="/types-of-service" onClick={() => irA('config_modulos', '/types-of-service')} className={estiloSubItem('config_modulos', '/types-of-service')}>🠖 Tipos de servicio</PermittedLink>
-                    <PermittedLink to="/subscription" onClick={() => irA('config_modulos', '/subscription')} className={estiloSubItem('config_modulos', '/subscription')}>🠖 Suscripción</PermittedLink>
-                    <PermittedLink to="/config_factura" onClick={() => irA('config_factura', '/config_factura')} className={estiloSubItem('config_factura')}>🠖 Facturación electrónica SIFEN</PermittedLink>
+                  <PermittedLink to="/config_empresa" onClick={() => irA('config_empresa', '/config_empresa')} className={estiloSubItem('config_empresa')}>{t('companySettings')}</PermittedLink>
+                    <PermittedLink to="/ubicaciones_comerciales" onClick={() => irA('ubicaciones_comerciales', '/ubicaciones_comerciales')} className={estiloSubItem('ubicaciones_comerciales')}>{t('commercialLocations')}</PermittedLink>
+                    <PermittedLink to="/invoice-schemes" onClick={() => irA('config_modulos', '/invoice-schemes')} className={estiloSubItem('config_modulos', '/invoice-schemes')}>Configuración de factura</PermittedLink>
+                    <PermittedLink to="/barcodes" onClick={() => irA('config_modulos', '/barcodes')} className={estiloSubItem('config_modulos', '/barcodes')}>Configuraciones de código de barras</PermittedLink>
+                    <PermittedLink to="/printers" onClick={() => irA('config_modulos', '/printers')} className={estiloSubItem('config_modulos', '/printers')}>Impresoras de tickets</PermittedLink>
+                    <PermittedLink to="/scales" onClick={() => irA('config_modulos', '/scales')} className={estiloSubItem('config_modulos', '/scales')}>Balanzas de red</PermittedLink>
+                    <PermittedLink to="/tax-rates" onClick={() => irA('config_modulos', '/tax-rates')} className={estiloSubItem('config_modulos', '/tax-rates')}>Tasas de impuestos</PermittedLink>
+                    <PermittedLink to="/types-of-service" onClick={() => irA('config_modulos', '/types-of-service')} className={estiloSubItem('config_modulos', '/types-of-service')}>Tipos de servicio</PermittedLink>
+                    <PermittedLink to="/subscription" onClick={() => irA('config_modulos', '/subscription')} className={estiloSubItem('config_modulos', '/subscription')}>Suscripción</PermittedLink>
+                    <PermittedLink to="/config_factura" onClick={() => irA('config_factura', '/config_factura')} className={estiloSubItem('config_factura')}>Facturación electrónica SIFEN</PermittedLink>
                 </div>
               )}
             </>}
@@ -1659,8 +1670,8 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
         )}
 
         {/* Inyección de los Módulos Activos */}
-        <main className={`flex-1 overflow-y-auto bg-[#f3f4f6] pb-16 md:pb-0 ${posPantallaCompleta ? '' : 'p-3 md:p-6'}`}>
-          <div key={`${vistaActiva}-${refreshKey}`}>
+        <main className={`flex-1 bg-[var(--ui-canvas)] ${posPantallaCompleta ? 'overflow-hidden pb-0' : restaurantePosPantallaCompleta ? 'min-h-0 overflow-hidden pb-16 md:pb-0' : 'overflow-y-auto pb-16 md:pb-0'} ${posPantallaCompleta || restaurantePosPantallaCompleta ? '' : 'p-3 md:p-6'}`}>
+          <div key={`${vistaActiva}-${refreshKey}`} className={restaurantePosPantallaCompleta ? 'h-full min-h-0' : undefined}>
             <Suspense fallback={<div className="p-10 text-center text-gray-500">{t('loading')}</div>}>
               {renderizarVista()}
             </Suspense>

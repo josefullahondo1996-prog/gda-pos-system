@@ -41,12 +41,17 @@ function desProyectar([x, y], z) {
 }
 
 // Mapa raster interactivo de OpenStreetMap; dibuja el polígono por clics sin API key.
-export default function MapaDelivery({ puntos = [], onChange, zonas = [], punto = null, selectedZoneId = null, onPuntoChange, modo = 'dibujar', radioKm = null }) {
+export default function MapaDelivery({ puntos = [], onChange, zonas = [], punto = null, selectedZoneId = null, onPuntoChange, modo = 'dibujar', radioKm = null, centroInicial = null }) {
   const latitudPunto = Array.isArray(punto) ? Number(punto[0]) : NaN;
   const longitudPunto = Array.isArray(punto) ? Number(punto[1]) : NaN;
   const puntoValido = Number.isFinite(latitudPunto) && Number.isFinite(longitudPunto);
-  const [centro, setCentro] = useState(() => modo === 'pin' && puntoValido ? [latitudPunto, longitudPunto] : [-25.2867, -57.647]); const [zoom, setZoom] = useState(modo === 'pin' && puntoValido ? 16 : 13); const [medida, setMedida] = useState([900, 340]); const [dibujando, setDibujando] = useState(false);
+  const centroConfigurado = Array.isArray(centroInicial) && Number.isFinite(Number(centroInicial[0])) && Number.isFinite(Number(centroInicial[1]));
+  const [centro, setCentro] = useState(() => modo === 'pin' && puntoValido ? [latitudPunto, longitudPunto] : centroConfigurado ? centroInicial.map(Number) : [-25.2867, -57.647]); const [zoom, setZoom] = useState(modo === 'pin' && puntoValido ? 16 : 13); const [medida, setMedida] = useState([900, 340]); const [dibujando, setDibujando] = useState(false);
   const arrastreRef = useRef(null); const ignorarClickRef = useRef(false); const arrastrandoPinRef = useRef(false);
+  useLayoutEffect(() => {
+    if (modo !== 'pin' || puntoValido || !centroConfigurado) return;
+    setCentro(centroInicial.map(Number));
+  }, [modo, puntoValido, centroConfigurado, centroInicial?.[0], centroInicial?.[1]]);
   useLayoutEffect(() => {
     if (modo !== 'pin' || !puntoValido) return;
     if (arrastrandoPinRef.current) return;

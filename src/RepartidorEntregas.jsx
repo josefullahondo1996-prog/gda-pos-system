@@ -7,13 +7,38 @@ import { useNotificacion } from './NotificacionContext';
 const importe = (valor) => `Gs ${Math.round(Number(valor || 0)).toLocaleString('es-PY')}`;
 const etiquetaEstado = (estado) => ({ recibido: 'Recibido', preparando: 'Preparando', listo: 'Listo para despacho', asignado: 'Asignado', en_camino: 'En camino', entregado: 'Entregado', cancelado: 'Cancelado' })[estado] || 'Recibido';
 
+function PedidoAdminDelivery({ pedido, nombreRepartidor }) {
+  const tienePunto = pedido.delivery_latitud != null && pedido.delivery_longitud != null;
+  const mapa = tienePunto
+    ? `https://www.google.com/maps/dir/?api=1&destination=${pedido.delivery_latitud},${pedido.delivery_longitud}`
+    : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(pedido.delivery_direccion || '')}`;
+  const tonos = pedido.delivery_estado === 'entregado' ? 'bg-emerald-100 text-emerald-800'
+    : pedido.delivery_estado === 'cancelado' ? 'bg-rose-100 text-rose-800'
+      : pedido.delivery_estado === 'en_camino' ? 'bg-blue-100 text-blue-800' : 'bg-amber-100 text-amber-900';
+  return <article className="space-y-3 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+    <div className="flex flex-wrap items-start justify-between gap-3"><div><p className="text-xs font-black uppercase tracking-wide text-orange-700">{pedido.numero_pedido} · {new Date(pedido.creado_en).toLocaleString('es-PY')}</p><h3 className="mt-1 text-lg font-black text-slate-900">{pedido.cliente_nombre || 'Cliente sin nombre'}</h3>{pedido.cliente_telefono && <a href={`tel:${pedido.cliente_telefono}`} className="text-sm font-semibold text-blue-700">{pedido.cliente_telefono}</a>}</div><span className={`rounded-full px-2.5 py-1 text-xs font-black ${tonos}`}>{etiquetaEstado(pedido.delivery_estado)}</span></div>
+    <div className="rounded-lg border border-orange-100 bg-orange-50 p-3 text-sm"><p className="text-xs font-bold uppercase text-orange-800">Repartidor asignado</p><p className="mt-1 font-black text-slate-900">{nombreRepartidor}</p></div>
+    {pedido.delivery_destinatario && <p className="text-sm text-slate-700">Recibe: <b>{pedido.delivery_destinatario}</b>{pedido.delivery_destinatario_telefono && ` · ${pedido.delivery_destinatario_telefono}`}</p>}
+    <div className="rounded-lg bg-slate-50 p-3 text-sm"><p className="font-bold text-slate-800"><MapPin size={15} className="mr-1 inline"/>{pedido.delivery_direccion || 'Dirección por confirmar'}</p>{tienePunto && <p className="mt-1 text-xs text-slate-500">{Number(pedido.delivery_latitud).toFixed(6)}, {Number(pedido.delivery_longitud).toFixed(6)}</p>}<a href={mapa} target="_blank" rel="noreferrer" className="mt-2 inline-flex items-center gap-1 text-xs font-bold text-blue-700">Ver ubicación / ruta <ArrowUpRight size={13}/></a></div>
+    <div className="space-y-1 border-t pt-3 text-sm">{(Array.isArray(pedido.items) ? pedido.items : []).map((item, index) => <p key={`${pedido.id}-${index}`}>{item.cantidad} × {item.nombre}</p>)}</div>
+    {pedido.nota && <p className="rounded-lg bg-amber-50 p-2 text-sm text-amber-900">Nota: {pedido.nota}</p>}
+    <div className="flex flex-wrap items-end justify-between gap-2 border-t pt-3 text-sm"><div><p>Total: <b>{importe(pedido.total)}</b></p><p className="text-slate-500">Envío: {importe(pedido.delivery_costo)}{pedido.delivery_metodo_pago ? ` · ${pedido.delivery_metodo_pago}` : ''}</p>{pedido.delivery_efectivo_recibido != null && <p className="text-slate-500">Recibido: {importe(pedido.delivery_efectivo_recibido)} · Vuelto: {importe(pedido.delivery_vuelto)}</p>}</div></div>
+  </article>;
+}
+
 export default function RepartidorEntregas({ perfilUsuario }) {
   const empresa = useEmpresaInfo();
   const empresaId = perfilUsuario?.empresa_id || empresa?.id;
   const authUserId = perfilUsuario?.auth_user_id;
+  const nombreRol = String(perfilUsuario?.roles?.nombre || '').toLocaleLowerCase('es');
+  const esAdminDelivery = nombreRol.includes('admin')
+    || perfilUsuario?.roles?.permisos?.ventas_pos?.['Acceder al Punto de Venta'] === true;
   const { notificar } = useNotificacion();
   const [pedidos, setPedidos] = useState([]);
   const [repartidor, setRepartidor] = useState(null);
+  const [nombresRepartidores, setNombresRepartidores] = useState({});
+  const [filtroAdmin, setFiltroAdmin] = useState('activos');
+  const [busquedaAdmin, setBusquedaAdmin] = useState('');
   const [cargando, setCargando] = useState(true);
   const [guardandoId, setGuardandoId] = useState('');
   const [error, setError] = useState('');
@@ -81,6 +106,38 @@ export default function RepartidorEntregas({ perfilUsuario }) {
     if (!empresaId || !authUserId) { setCargando(false); return; }
     setCargando(true);
     setError('');
+    if (esAdminDelivery) {
+      const cargarTodosLosPedidos = async () => {
+        const todos = [];
+        for (let pagina = 0; pagina < 50; pagina += 1) {
+          const desde = pagina * 1000;
+          const { data, error } = await supabase.from('pedidos').select('*').eq('empresa_id', empresaId).eq('delivery_tipo', 'delivery').order('creado_en', { ascending: false }).range(desde, desde + 999);
+          if (error) return { data: null, error };
+          todos.push(...(data || []));
+          if ((data || []).length < 1000) break;
+        }
+        return { data: todos, error: null };
+      };
+      const [respuestaPedidos, respuestaRepartidores, respuestaUsuarios] = await Promise.all([
+        cargarTodosLosPedidos(),
+        supabase.from('delivery_repartidores').select('usuario_auth_id,vehiculo,activo').eq('empresa_id', empresaId),
+        supabase.from('usuarios').select('auth_user_id,nombre,apellido').eq('empresa_id', empresaId),
+      ]);
+      const fallo = respuestaPedidos.error || respuestaRepartidores.error || respuestaUsuarios.error;
+      if (fallo) {
+        setError(`No se pudieron cargar todas las entregas de la empresa: ${fallo.message}`);
+        setPedidos([]);
+        setNombresRepartidores({});
+        setCargando(false);
+        return;
+      }
+      const nombresUsuarios = new Map((respuestaUsuarios.data || []).map((usuario) => [usuario.auth_user_id, [usuario.nombre, usuario.apellido].filter(Boolean).join(' ').trim()]));
+      setNombresRepartidores(Object.fromEntries((respuestaRepartidores.data || []).map((item) => [item.usuario_auth_id, `${nombresUsuarios.get(item.usuario_auth_id) || 'Repartidor'}${item.vehiculo ? ` · ${item.vehiculo}` : ''}`])));
+      setPedidos(respuestaPedidos.data || []);
+      setRepartidor({ administrador: true });
+      setCargando(false);
+      return;
+    }
     const { data: asignacion, error: errorAsignacion } = await supabase
       .from('delivery_repartidores')
       .select('empresa_id, usuario_auth_id, vehiculo, activo')
@@ -108,7 +165,7 @@ export default function RepartidorEntregas({ perfilUsuario }) {
     if (errorPedidos) setError(`No se pudieron cargar tus entregas: ${errorPedidos.message}`);
     setPedidos(data || []);
     setCargando(false);
-  }, [empresaId, authUserId]);
+  }, [empresaId, authUserId, esAdminDelivery]);
 
   useEffect(() => { cargar(); }, [cargar]);
   useEffect(() => {
@@ -161,15 +218,30 @@ export default function RepartidorEntregas({ perfilUsuario }) {
 
   const activos = pedidos.filter((pedido) => !['entregado', 'cancelado'].includes(pedido.delivery_estado));
   const finalizados = pedidos.filter((pedido) => ['entregado', 'cancelado'].includes(pedido.delivery_estado));
+  const consultaAdmin = busquedaAdmin.trim().toLocaleLowerCase('es');
+  const pedidosAdminFiltrados = pedidos.filter((pedido) => {
+    const courier = nombresRepartidores[pedido.delivery_repartidor_id] || 'Sin repartidor';
+    const coincideFiltro = filtroAdmin === 'todos'
+      || (filtroAdmin === 'activos' && !['entregado', 'cancelado'].includes(pedido.delivery_estado))
+      || (filtroAdmin === 'sin_asignar' && !pedido.delivery_repartidor_id && !['entregado', 'cancelado'].includes(pedido.delivery_estado))
+      || (filtroAdmin === 'entregados' && pedido.delivery_estado === 'entregado')
+      || (filtroAdmin === 'cancelados' && pedido.delivery_estado === 'cancelado');
+    const texto = `${pedido.numero_pedido || ''} ${pedido.cliente_nombre || ''} ${pedido.cliente_telefono || ''} ${pedido.delivery_destinatario || ''} ${pedido.delivery_direccion || ''} ${courier}`.toLocaleLowerCase('es');
+    return coincideFiltro && (!consultaAdmin || texto.includes(consultaAdmin));
+  });
 
   return <div className="space-y-5">
     <header className="flex flex-wrap items-center justify-between gap-3 rounded-xl border bg-white p-4">
-      <div><h2 className="flex items-center gap-2 text-lg font-black"><Truck size={20}/>Mis entregas</h2><p className="mt-1 text-sm text-slate-500">Pedidos asignados a tu usuario{repartidor?.vehiculo ? ` · ${repartidor.vehiculo}` : ''}</p></div>
+      <div><h2 className="flex items-center gap-2 text-lg font-black"><Truck size={20}/>Mis entregas</h2><p className="mt-1 text-sm text-slate-500">{esAdminDelivery ? 'Vista de administrador · todas las entregas de la empresa y su repartidor asignado.' : `Pedidos asignados a tu usuario${repartidor?.vehiculo ? ` · ${repartidor.vehiculo}` : ''}`}</p></div>
       <button type="button" onClick={cargar} disabled={cargando} className="inline-flex items-center gap-2 rounded-lg border bg-white px-3 py-2 text-sm font-bold"><RefreshCw size={15} className={cargando ? 'animate-spin' : ''}/>Actualizar</button>
     </header>
     {error && <div role="alert" className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-800">{error}</div>}
     {!error && !cargando && !repartidor && <div className="rounded-xl border border-amber-200 bg-amber-50 p-5 text-sm text-amber-900">Tu usuario todavía no está habilitado como repartidor. Pedile al administrador que lo active en <b>Restaurante → Delivery · Repartidores</b>.</div>}
-    {repartidor && <>
+    {esAdminDelivery && repartidor?.administrador ? <section className="space-y-4">
+      <div className="grid gap-3 sm:grid-cols-4"><div className="rounded-xl border bg-white p-4"><p className="text-xs font-bold uppercase text-slate-500">Entregas en pantalla</p><p className="mt-1 text-2xl font-black">{pedidos.length}</p></div><div className="rounded-xl border border-amber-200 bg-amber-50 p-4"><p className="text-xs font-bold uppercase text-amber-800">Activas</p><p className="mt-1 text-2xl font-black text-amber-900">{activos.length}</p></div><div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4"><p className="text-xs font-bold uppercase text-emerald-800">Entregadas</p><p className="mt-1 text-2xl font-black text-emerald-900">{pedidos.filter((p) => p.delivery_estado === 'entregado').length}</p></div><div className="rounded-xl border border-rose-200 bg-rose-50 p-4"><p className="text-xs font-bold uppercase text-rose-800">Canceladas</p><p className="mt-1 text-2xl font-black text-rose-900">{pedidos.filter((p) => p.delivery_estado === 'cancelado').length}</p></div></div>
+      <div className="flex flex-col gap-2 sm:flex-row"><input value={busquedaAdmin} onChange={(event) => setBusquedaAdmin(event.target.value)} placeholder="Buscar pedido, cliente, destinatario, dirección o repartidor…" className="min-w-0 flex-1 rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm"/><select value={filtroAdmin} onChange={(event) => setFiltroAdmin(event.target.value)} className="rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm font-semibold"><option value="activos">Entregas activas</option><option value="sin_asignar">Sin repartidor asignado</option><option value="entregados">Entregadas</option><option value="cancelados">Canceladas</option><option value="todos">Todas las entregas</option></select></div>
+      {cargando ? <p className="rounded-xl border bg-white p-8 text-center text-slate-500">Cargando entregas de la empresa…</p> : pedidosAdminFiltrados.length ? <div className="grid gap-3 lg:grid-cols-2">{pedidosAdminFiltrados.map((pedido) => <PedidoAdminDelivery key={pedido.id} pedido={pedido} nombreRepartidor={nombresRepartidores[pedido.delivery_repartidor_id] || 'Sin repartidor asignado'}/>)}</div> : <div className="rounded-xl border border-dashed bg-white p-8 text-center text-sm text-slate-500">No hay entregas para este filtro.</div>}
+    </section> : repartidor && <>
       <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-blue-200 bg-blue-50 p-3">
         <p className="flex items-center gap-2 text-sm font-semibold text-blue-950"><Bell size={17}/>{avisosActivos ? 'Este celular recibirá avisos de nuevos pedidos.' : 'Activá los avisos para enterarte cuando te asignen una entrega.'}</p>
         {!avisosActivos && <button type="button" onClick={activarAvisos} disabled={activandoAvisos} className="rounded-lg bg-blue-700 px-3 py-2 text-sm font-bold text-white disabled:opacity-50">{activandoAvisos ? 'Activando…' : 'Activar avisos en este celular'}</button>}

@@ -4,11 +4,55 @@
   font-family: Aptos, "Segoe UI Variable", "Segoe UI", system-ui, sans-serif;
   color: #172033;
   background: #f8fafc;
+  --ui-brand: #f36b21;
+  --ui-brand-strong: #d95810;
+  --ui-nav: #1e1f35;
+  --ui-canvas: #f3f5f8;
   --ui-text: #172033;
   --ui-muted: #64748b;
   --ui-border: #d9e2ec;
   --ui-focus: #2563eb;
   --ui-surface: #ffffff;
+  --ui-radius-control: 9px;
+  --ui-radius-panel: 13px;
+  --ui-shadow-panel: 0 1px 3px rgb(15 23 42 / 7%), 0 8px 22px rgb(15 23 42 / 4%);
+}
+
+.restaurant-page > header:first-child {
+  border: 1px solid var(--ui-border);
+  border-radius: var(--ui-radius-panel);
+  background-color: var(--ui-surface);
+  background-image: none;
+  box-shadow: var(--ui-shadow-panel);
+  color: var(--ui-text);
+}
+
+.restaurant-page > header:first-child h1 {
+  color: var(--ui-text);
+  font-size: clamp(1.2rem, 2vw, 1.55rem);
+  font-weight: 750;
+  text-wrap: balance;
+}
+
+.restaurant-page > header:first-child > div > div > div > p:first-of-type {
+  color: var(--ui-brand-strong);
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.restaurant-page > header:first-child > p {
+  color: var(--ui-muted);
+}
+
+.restaurant-page > header:first-child > div > div > span {
+  background: #fff1e8;
+  color: var(--ui-brand-strong);
+}
+
+.restaurant-page :is(button, a) {
+  touch-action: manipulation;
 }
 
 /* Permite copiar texto en toda la aplicación. */
@@ -30,6 +74,20 @@
   border-right: 0;
 }
 
+.product-list-table {
+  border-collapse: separate;
+  border-spacing: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.product-list-table thead th {
+  white-space: nowrap;
+}
+
+.product-list-table tbody td {
+  font-size: 0.8125rem;
+}
+
 /* Permitir seleccionar y copiar texto en el chatbot */
 .n8n-chat,
 .n8n-chat *,
@@ -47,7 +105,7 @@
 body {
   margin: 0;
   min-height: 100vh;
-  background: #f8fafc;
+  background: var(--ui-canvas);
   overflow: hidden; /* Evita scrolls raros */
   overscroll-behavior-y: contain; /* Evita recarga por deslizamiento */
   text-rendering: optimizeLegibility;
@@ -65,14 +123,24 @@ textarea {
 /* Controles del alta/edición de productos: altura y foco uniformes como en Micdepos. */
 .product-create-form input:not([type="checkbox"]):not([type="radio"]):not([type="file"]),
 .product-create-form select {
-  min-height: 40px;
+  min-height: 44px;
   border-color: #cbd5e1;
-  border-radius: 6px;
+  border-radius: var(--ui-radius-control);
+  padding-inline: 0.75rem;
+  font-size: 0.875rem;
 }
 
 .product-create-form textarea {
   border-color: #cbd5e1;
-  border-radius: 6px;
+  border-radius: var(--ui-radius-control);
+  padding: 0.65rem 0.75rem;
+  font-size: 0.875rem;
+}
+
+.product-create-form label:not(:has(input[type="checkbox"], input[type="radio"])) {
+  color: #344256;
+  font-size: 0.8125rem;
+  font-weight: 650;
 }
 
 .product-create-form input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):focus,
@@ -84,7 +152,7 @@ textarea {
 }
 
 .product-create-form input[type="checkbox"] {
-  accent-color: #f97316;
+  accent-color: var(--ui-brand);
 }
 
 button:focus-visible,

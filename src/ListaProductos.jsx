@@ -710,9 +710,9 @@ export default function ListaProductos() {
 
           {/* 3. TABLA PRINCIPAL */}
           <div className="overflow-x-auto">
-            <table className="product-list-table w-full min-w-[1380px] text-left text-xs border-collapse">
+            <table className="product-list-table w-full min-w-[1380px] text-left text-[13px]">
               <thead>
-                <tr className="h-[52px] border-b border-[#e2e7ee] bg-[#f6f7f9] text-[10px] tracking-[0.035em] text-[#66748a] font-bold uppercase">
+                <tr className="h-12 border-b border-slate-200 bg-slate-50 text-[11px] text-slate-600 font-semibold">
                   <th className="w-10 px-2 py-3 align-middle">
                     <input type="checkbox" checked={todosSeleccionadosEnPagina} onChange={toggleSeleccionarTodos} />
                   </th>
