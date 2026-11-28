@@ -6,7 +6,7 @@ import { useNavigate } from 'react-router-dom';
 import { createPortal } from 'react-dom';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
-import { Check, ChevronDown, Columns3, FileDown, FileSpreadsheet, FileText, Image as ImageIcon, LoaderCircle, Pencil, Printer, X } from 'lucide-react';
+import { Boxes, Check, ChevronDown, Columns3, FileDown, FileSpreadsheet, FileText, Image as ImageIcon, LoaderCircle, Package, Pencil, Printer, X } from 'lucide-react';
 import { supabase } from './supabaseClient';
 import { useEmpresaInfo } from './utils/useEmpresa';
 import { useConfiguracionEmpresa } from './utils/useConfiguracionEmpresa';
@@ -639,14 +639,14 @@ export default function ListaProductos() {
             className={`px-4 py-2 text-xs font-bold border-b-2 transition-colors ${tabActiva === 'todos' ? 'border-[#004284] text-[#004284]' : 'border-transparent text-gray-400 hover:text-gray-600'
               }`}
           >
-            🐾 Todos los productos
+            <span className="inline-flex items-center gap-2"><Package size={15} aria-hidden="true" />Todos los productos</span>
           </button>
           <button
             onClick={() => setTabActiva('stock')}
             className={`px-4 py-2 text-xs font-bold border-b-2 transition-colors ${tabActiva === 'stock' ? 'border-[#004284] text-[#004284]' : 'border-transparent text-gray-400 hover:text-gray-600'
               }`}
           >
-            📊 Inventario / Stock
+            <span className="inline-flex items-center gap-2"><Boxes size={15} aria-hidden="true" />Inventario / Stock</span>
           </button>
         </div>
 
@@ -685,14 +685,14 @@ export default function ListaProductos() {
             <div className="flex items-center gap-3">
               <input
                 type="text"
-                className="border rounded p-1.5 w-64 outline-none focus:border-blue-500"
+                className="ds-field w-64"
                 placeholder={`${t('search')} ${t('name').toLowerCase()} o SKU...`}
                 value={busqueda}
                 onChange={(e) => setBusqueda(e.target.value)}
               />
               <button
                 onClick={() => setMostrarFormularioNuevo(true)}
-                className="bg-orange-500 hover:bg-orange-600 text-white font-bold px-3 py-1.5 rounded text-xs whitespace-nowrap"
+                className="ds-button ds-button-primary whitespace-nowrap"
               >
                 + {t('add')}
               </button>
@@ -710,7 +710,7 @@ export default function ListaProductos() {
 
           {/* 3. TABLA PRINCIPAL */}
           <div className="overflow-x-auto">
-            <table className="product-list-table w-full min-w-[1380px] text-left text-[13px]">
+            <table className="product-list-table ds-table w-full min-w-[1380px] text-left text-[13px]">
               <thead>
                 <tr className="h-12 border-b border-slate-200 bg-slate-50 text-[11px] text-slate-600 font-semibold">
                   <th className="w-10 px-2 py-3 align-middle">

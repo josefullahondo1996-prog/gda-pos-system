@@ -4,7 +4,6 @@ import Login from './Login';
 import CrearNegocio from './CrearNegocio';
 import ActualizarContrasena from './ActualizarContrasena';
 import Dashboard from './Dashboard';
-import ChatBotFlotante from './ChatBotFlotante';
 import { useLanguage } from './LanguageContext';
 import { useLocation } from 'react-router-dom';
 import { useNotificacion } from './NotificacionContext';
@@ -281,7 +280,6 @@ function App() {
   return (
     <>
       <Dashboard session={session} perfilUsuario={perfilUsuario} />
-      <ChatBotFlotante perfilUsuario={perfilUsuario} />
     </>
   );
 }

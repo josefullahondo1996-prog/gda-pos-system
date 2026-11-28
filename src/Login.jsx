@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { supabase } from './supabaseClient'; // Asegurate de que la ruta a tu cliente de Supabase sea la correcta
 import LogoPyPos from './LogoPyPos';
 import { LanguageSelector, useLanguage } from './LanguageContext';
+import { LockKeyhole, Mail } from 'lucide-react';
 
 const Login = ({ setSession, onCrearNegocio, errorExterno }) => {
   const { t } = useLanguage();
@@ -96,8 +97,8 @@ const Login = ({ setSession, onCrearNegocio, errorExterno }) => {
           <form onSubmit={solicitarRecuperacion} className="space-y-4 text-left">
             <p className="text-sm text-gray-600">Ingresá el correo de tu cuenta y te enviaremos un enlace para elegir una contraseña nueva.</p>
             <div className="relative">
-              <span className="absolute inset-y-0 left-0 flex items-center pl-3 text-gray-400">✉</span>
-              <input type="email" placeholder={t('email')} required autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} className="w-full rounded-xl border border-gray-200 bg-gray-50 py-3 pl-10 pr-4 text-sm transition-all focus:bg-white focus:outline-none focus:ring-2 focus:ring-orange-500" />
+              <span aria-hidden="true" className="absolute inset-y-0 left-0 flex items-center pl-3 text-gray-400"><Mail size={18} /></span>
+              <input type="email" name="email" aria-label={t('email')} placeholder={t('email')} required autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} className="ds-field w-full py-3 pl-10 pr-4 text-sm" />
             </div>
             <button type="submit" disabled={loading} className="mt-4 w-full rounded-xl bg-orange-500 py-3 text-sm font-bold uppercase tracking-wider text-white shadow-md transition-colors hover:bg-orange-600 disabled:cursor-not-allowed disabled:bg-gray-400">
               {loading ? 'Enviando…' : 'Enviar enlace'}
@@ -106,34 +107,35 @@ const Login = ({ setSession, onCrearNegocio, errorExterno }) => {
           </form>
         ) : <form onSubmit={handleSubmit} className="space-y-4 text-left">
           <div className="relative">
-            <span className="absolute inset-y-0 left-0 flex items-center pl-3 text-gray-400">
-              <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-              </svg>
+              <span aria-hidden="true" className="absolute inset-y-0 left-0 flex items-center pl-3 text-gray-400">
+                <Mail size={18} />
             </span>
             <input
               type="email"
+              name="email"
+              aria-label={t('email')}
               placeholder={t('email')}
               required
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              className="w-full pl-10 pr-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-orange-500 focus:bg-white transition-all text-sm"
+              className="ds-field w-full py-3 pl-10 pr-4 text-sm"
             />
           </div>
 
           <div className="relative">
             <span className="absolute inset-y-0 left-0 flex items-center pl-3 text-gray-400">
-              <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-              </svg>
+              <LockKeyhole size={18} aria-hidden="true" />
             </span>
             <input
               type="password"
+              name="password"
+              aria-label={t('password')}
               placeholder={t('password')}
               required
+              autoComplete="current-password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              className="w-full pl-10 pr-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-orange-500 focus:bg-white transition-all text-sm"
+              className="ds-field w-full py-3 pl-10 pr-4 text-sm"
             />
           </div>
 

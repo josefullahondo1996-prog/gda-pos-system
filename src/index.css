@@ -187,38 +187,10 @@ div {
   -webkit-text-stroke: 0 !important;
 }
 
-/* ============================================================
-   EFECTO "DINÁMICO" AL PASAR EL MOUSE — GLOBAL PARA TODA LA APP
-   No hace falta tocar ningún componente .jsx: esto se aplica
-   solo a cualquier botón, tarjeta o fila que ya exista o que
-   agregues después.
-   ============================================================ */
-
-/* Todos los botones (menos los deshabilitados) se "levantan" un poco */
-button:not(:disabled) {
-  transition: transform 0.15s ease, filter 0.15s ease, box-shadow 0.15s ease;
-}
-button:not(:disabled):hover {
-  filter: brightness(1.07);
-  transform: translateY(-1px);
-}
-button:not(:disabled):active {
-  transform: translateY(0) scale(0.97);
-}
-
-/* Todo lo que ya marcás como clickeable (tarjetas, checkboxes, filas) */
-.cursor-pointer {
-  transition: transform 0.2s ease, box-shadow 0.2s ease;
-}
-.cursor-pointer:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 6px 14px rgba(0, 0, 0, 0.08);
-}
-
-/* Filas de tablas: resaltado suave */
-table tbody tr {
-  transition: background-color 0.15s ease;
-}
+/* Estados discretos: el feedback de interacción no desplaza controles ni filas. */
+button:not(:disabled) { transition: color 140ms ease, background-color 140ms ease, border-color 140ms ease; }
+.cursor-pointer { transition: color 140ms ease, background-color 140ms ease, border-color 140ms ease; }
+table tbody tr { transition: background-color 140ms ease; }
 
 /* Inputs/selects: foco más suave */
 input,
@@ -310,10 +282,10 @@ textarea {
    ============================================================ */
 
 :root {
-  --chat--color-primary: #f97316;
-  --chat--color-primary-shade-50: #ea580c;
-  --chat--color-primary-shade-100: #c2410c;
-  --chat--color-secondary: #0f172a;
+  --chat--color-primary: #245a81;
+  --chat--color-primary-shade-50: #204b6d;
+  --chat--color-primary-shade-100: #19364f;
+  --chat--color-secondary: #19364f;
   --chat--color-white: #ffffff;
   --chat--color-light: #f8fafc;
   --chat--color-light-shade-50: #f1f5f9;
@@ -321,54 +293,50 @@ textarea {
   --chat--color-medium: #94a3b8;
   --chat--color-dark: #0f172a;
   --chat--color-disabled: #cbd5e1;
-  --chat--color-typing: #f97316;
-  --chat--border-radius: 20px;
+  --chat--color-typing: #245a81;
+  --chat--border-radius: 8px;
   --chat--window--width: 420px;
   --chat--window--height: 620px;
-  --chat--header--background: linear-gradient(135deg, #090d16 0%, #1e293b 60%, #ea580c 100%);
+  --chat--header--background: #19364f;
   --chat--header--color: #ffffff;
-  --chat--toggle--size: 66px;
+  --chat--toggle--size: 48px;
 }
 
-/* Botón flotante Pro con efecto 3D Avatar */
+/* Chat de soporte integrado al sistema visual de PyPos. */
 .chat-window-toggle,
 button[class*="chat-window-toggle"],
-.chat-toggle,
-button[class*="toggle"]:has(svg) {
-  width: 66px !important;
-  height: 66px !important;
-  border-radius: 50% !important;
-  box-shadow: 0 10px 25px rgba(249, 115, 22, 0.4), 0 0 15px rgba(6, 182, 212, 0.35) !important;
-  background-image: url('/bot-avatar.jpg') !important;
-  background-size: cover !important;
+.chat-toggle {
+  width: 48px !important;
+  height: 48px !important;
+  border-radius: 8px !important;
+  box-shadow: 0 2px 8px rgb(25 54 79 / 18%) !important;
+  background-color: #245a81 !important;
+  background-image: none !important;
+  background-size: auto !important;
   background-position: center !important;
   background-repeat: no-repeat !important;
-  border: 3px solid #ffffff !important;
-  transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275) !important;
-  animation: chatbot-pulse-glow 2.5s infinite, chatbot-float 4s ease-in-out infinite !important;
+  border: 1px solid #204b6d !important;
+  transition: background-color 140ms ease, border-color 140ms ease !important;
+  animation: none !important;
   cursor: pointer !important;
 }
 
 .chat-window-toggle:hover,
 button[class*="chat-window-toggle"]:hover {
-  transform: scale(1.12) translateY(-4px) !important;
-  box-shadow: 0 15px 35px rgba(249, 115, 22, 0.6), 0 0 25px rgba(6, 182, 212, 0.5) !important;
+  transform: none !important;
+  background-color: #204b6d !important;
+  box-shadow: 0 2px 8px rgb(25 54 79 / 18%) !important;
 }
 
-/* Cuando el botón está cerrado, ocultar el svg por defecto para ver el avatar 3D limpio */
-.chat-window-toggle:not([aria-expanded="true"]) svg,
-button[class*="chat-window-toggle"]:not([aria-expanded="true"]) svg {
-  opacity: 0 !important;
-}
-
-/* Cuando el botón está abierto para cerrar el chat (X) */
+/* El icono funcional del widget permanece visible en ambos estados. */
 .chat-window-toggle[aria-expanded="true"],
 button[class*="chat-window-toggle"][aria-expanded="true"],
 .chat-window-toggle:has(svg[class*="close"]),
 .chat-window-toggle:has(svg[class*="x"]),
 button[class*="chat-window-toggle"]:has(svg[class*="close"]),
 button[class*="chat-window-toggle"]:has(svg[class*="x"]) {
-  background-image: linear-gradient(135deg, #0f172a 0%, #ea580c 100%) !important;
+  background-color: #19364f !important;
+  background-image: none !important;
   animation: none !important;
 }
 
@@ -382,18 +350,18 @@ button[class*="chat-window-toggle"][aria-expanded="true"] svg,
   display: block !important;
 }
 
-/* Ventana de chat redondeada con sombra suave */
+/* Ventana de chat con borde y sombra discretos. */
 .chat-window,
 [class*="chat-window"] {
-  border-radius: 22px !important;
+  border-radius: 8px !important;
   overflow: hidden !important;
-  box-shadow: 0 25px 50px -12px rgba(15, 23, 42, 0.25), 0 0 0 1px rgba(226, 232, 240, 0.8) !important;
+  box-shadow: 0 8px 24px rgb(20 39 58 / 16%), 0 0 0 1px #d8e0e8 !important;
 }
 
-/* Cabecera Pro del Chat */
+/* Cabecera del Chat */
 .chat-header,
 [class*="chat-header"] {
-  background: linear-gradient(135deg, #090d16 0%, #1e293b 60%, #c2410c 100%) !important;
+  background: #19364f !important;
   padding: 16px 20px !important;
   border-bottom: 1px solid rgba(255, 255, 255, 0.1) !important;
   display: flex !important;
@@ -401,36 +369,25 @@ button[class*="chat-window-toggle"][aria-expanded="true"] svg,
 }
 
 .chat-header::before {
-  content: '';
-  display: inline-block;
-  width: 42px;
-  height: 42px;
-  min-width: 42px;
-  margin-right: 12px;
-  border-radius: 50%;
-  background-image: url('/bot-avatar.jpg');
-  background-size: cover;
-  background-position: center;
-  border: 2px solid #38bdf8;
-  box-shadow: 0 0 12px rgba(56, 189, 248, 0.6);
+  content: none;
+  display: none;
 }
 
 /* Modal de alta rápida de proveedores: comparte el lenguaje visual del registro de clientes. */
 .provider-modal-backdrop {
   background: rgba(15, 23, 42, 0.48);
-  backdrop-filter: blur(4px);
 }
 
 .provider-modal-shell {
   border: 1px solid rgba(226, 232, 240, 0.9);
-  border-radius: 18px;
-  box-shadow: 0 24px 70px rgba(15, 23, 42, 0.28), 0 0 0 1px rgba(255, 255, 255, 0.4);
+  border-radius: 10px;
+  box-shadow: 0 16px 44px rgb(20 39 58 / 18%);
 }
 
 .provider-modal-header {
   color: #ffffff;
-  background: linear-gradient(115deg, #1f2937, #172033 62%, #0f172a);
-  border-color: rgba(255, 255, 255, 0.1);
+  background: #19364f;
+  border-color: #19364f;
 }
 
 .provider-modal-icon {
@@ -459,38 +416,38 @@ button[class*="chat-window-toggle"][aria-expanded="true"] svg,
 }
 
 .provider-modal-content {
-  background: linear-gradient(180deg, #f8fafc 0%, #f1f5f9 100%);
+  background: #f4f6f8;
 }
 
 .provider-modal-content .bg-white.border.rounded-lg {
   border-color: #dbe4ee;
-  border-radius: 14px;
-  box-shadow: 0 2px 10px rgba(15, 23, 42, 0.05);
+  border-radius: 8px;
+  box-shadow: 0 1px 2px rgb(20 39 58 / 6%);
 }
 
 .provider-modal-content .bg-white.border.rounded-lg > .p-3 {
   padding: 14px 16px;
-  background: linear-gradient(90deg, #eff6ff, #f8fafc);
-  border-color: #dbeafe;
+  background: #f2f5f8;
+  border-color: #d8e0e8;
 }
 
 .provider-modal-content input,
 .provider-modal-content select {
   border-color: #cbd5e1;
-  border-radius: 10px;
+  border-radius: 6px;
   min-height: 42px;
   transition: border-color 0.15s ease, box-shadow 0.15s ease, background-color 0.15s ease;
 }
 
 .provider-modal-content input:focus,
 .provider-modal-content select:focus {
-  border-color: #f59e0b;
-  box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.16);
+  border-color: #2c6e9f;
+  box-shadow: 0 0 0 3px rgb(44 110 159 / 16%);
 }
 
 .provider-modal-footer {
-  background: rgba(248, 250, 252, 0.96);
-  border-color: #e2e8f0;
+  background: #f7f9fb;
+  border-color: #d8e0e8;
 }
 
 @media (max-width: 640px) {
@@ -515,21 +472,20 @@ button[class*="chat-window-toggle"][aria-expanded="true"] svg,
 /* El registro de clientes del POS usa la misma paleta que el alta de proveedores. */
 .pos-client-modal-backdrop {
   background: rgba(15, 23, 42, 0.48);
-  backdrop-filter: blur(4px);
 }
 
 .pos-client-modal-shell {
   border: 1px solid rgba(226, 232, 240, 0.9);
-  border-radius: 18px;
-  box-shadow: 0 24px 70px rgba(15, 23, 42, 0.28), 0 0 0 1px rgba(255, 255, 255, 0.4);
+  border-radius: 10px;
+  box-shadow: 0 16px 44px rgb(20 39 58 / 18%);
 }
 
 .pos-client-modal-header {
-  background: linear-gradient(115deg, #1f2937, #172033 62%, #0f172a);
+  background: #19364f;
 }
 
 .pos-client-modal-content {
-  background: linear-gradient(180deg, #f8fafc 0%, #f1f5f9 100%);
+  background: #f4f6f8;
 }
 
 .pos-client-modal-content .bg-white.border-slate-200 {
@@ -547,43 +503,10 @@ button[class*="chat-window-toggle"][aria-expanded="true"] svg,
   border-color: #e2e8f0;
 }
 
-/* Fondo de acceso: una atmósfera de punto de venta sin competir con el formulario. */
+/* El acceso usa la misma superficie clara que el resto del sistema. */
 .login-page {
   position: relative;
-  isolation: isolate;
-  overflow: hidden;
-  background:
-    linear-gradient(115deg, rgba(8, 18, 42, 0.92), rgba(21, 48, 96, 0.78)),
-    url('/login-store.jpg') center / cover no-repeat;
-}
-
-.login-page::before,
-.login-page::after {
-  content: '';
-  position: absolute;
-  z-index: -1;
-  pointer-events: none;
-}
-
-.login-page::before {
-  inset: 0;
-  opacity: 0.22;
-  background-image:
-    linear-gradient(rgba(255, 255, 255, 0.12) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(255, 255, 255, 0.12) 1px, transparent 1px);
-  background-size: 42px 42px;
-  mask-image: linear-gradient(135deg, black, transparent 72%);
-}
-
-.login-page::after {
-  width: 520px;
-  height: 520px;
-  right: -170px;
-  top: -180px;
-  border: 1px solid rgba(255, 255, 255, 0.14);
-  border-radius: 42% 58% 65% 35%;
-  transform: rotate(24deg);
-  box-shadow: 0 0 0 34px rgba(255, 255, 255, 0.035), 0 0 0 68px rgba(255, 255, 255, 0.025);
+  background: #f4f6f8;
 }
 
 .login-language {

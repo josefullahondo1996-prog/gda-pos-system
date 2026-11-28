@@ -6,6 +6,7 @@ import ErrorBoundary from './ErrorBoundary.jsx'
 import { NotificacionProvider } from './NotificacionContext.jsx'
 import { LanguageProvider } from './LanguageContext.jsx'
 import './index.css'
+import './design-system.css'
 
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>

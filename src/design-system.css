@@ -1,0 +1,218 @@
+/* PyPos Design System
+   Shared visual foundations. Keep business behavior in the feature components. */
+:root {
+  color-scheme: light;
+  font-family: Aptos, "Segoe UI Variable", "Segoe UI", system-ui, sans-serif;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+
+  --ds-blue-900: #19364f;
+  --ds-blue-800: #204b6d;
+  --ds-blue-700: #245a81;
+  --ds-blue-100: #e8f1f8;
+  --ds-orange-600: #e96b25;
+  --ds-canvas: #f4f6f8;
+  --ds-surface: #ffffff;
+  --ds-text: #202b38;
+  --ds-muted: #657386;
+  --ds-border: #d8e0e8;
+  --ds-border-strong: #b9c5d1;
+  --ds-success: #16794b;
+  --ds-success-bg: #e8f5ee;
+  --ds-warning: #946200;
+  --ds-warning-bg: #fff5dc;
+  --ds-danger: #b42318;
+  --ds-danger-bg: #fff0ee;
+  --ds-info: #245a81;
+  --ds-info-bg: #eaf3fa;
+  --ds-focus: #2c6e9f;
+  --ds-radius-sm: 4px;
+  --ds-radius-control: 6px;
+  --ds-radius-panel: 8px;
+  --ds-radius-dialog: 10px;
+  --ds-space-1: 4px;
+  --ds-space-2: 8px;
+  --ds-space-3: 12px;
+  --ds-space-4: 16px;
+  --ds-space-5: 20px;
+  --ds-space-6: 24px;
+  --ds-space-8: 32px;
+  --ds-font-xs: 0.75rem;
+  --ds-font-sm: 0.8125rem;
+  --ds-font-body: 0.875rem;
+  --ds-font-subtitle: 1rem;
+  --ds-font-title: 1.25rem;
+  --ds-font-display: 1.5rem;
+  --ds-shadow-menu: 0 8px 24px rgb(20 39 58 / 12%);
+  --ds-shadow-dialog: 0 20px 56px rgb(20 39 58 / 20%);
+
+  /* Compatibility tokens used by existing screens. */
+  --ui-brand: var(--ds-blue-700);
+  --ui-brand-strong: var(--ds-blue-800);
+  --ui-nav: var(--ds-blue-900);
+  --ui-canvas: var(--ds-canvas);
+  --ui-text: var(--ds-text);
+  --ui-muted: var(--ds-muted);
+  --ui-border: var(--ds-border);
+  --ui-focus: var(--ds-focus);
+  --ui-surface: var(--ds-surface);
+  --ui-radius-control: var(--ds-radius-control);
+  --ui-radius-panel: var(--ds-radius-panel);
+  --ui-shadow-panel: 0 1px 2px rgb(20 39 58 / 6%);
+}
+
+/* Small composable primitives for screens being migrated to the system. */
+.ds-page-title { color: var(--ds-text); font-size: 1.25rem; font-weight: 700; line-height: 1.3; text-wrap: balance; }
+.ds-page-description { color: var(--ds-muted); font-size: 0.875rem; line-height: 1.5; }
+.ds-panel { border: 1px solid var(--ds-border); border-radius: var(--ds-radius-panel); background: var(--ds-surface); }
+.ds-button { display: inline-flex; min-height: 36px; align-items: center; justify-content: center; gap: 8px; border: 1px solid transparent; border-radius: var(--ds-radius-control); padding: 7px 12px; font-size: 0.875rem; font-weight: 600; line-height: 1.25; transition: color 140ms ease, background-color 140ms ease, border-color 140ms ease; touch-action: manipulation; }
+.ds-button-primary { background: var(--ds-blue-700); color: #fff; }
+.ds-button-primary:hover:not(:disabled) { background: var(--ds-blue-800); }
+.ds-button-secondary { border-color: var(--ds-border-strong); background: var(--ds-surface); color: var(--ds-text); }
+.ds-button-secondary:hover:not(:disabled) { background: #f2f5f8; }
+.ds-button:disabled { cursor: not-allowed; opacity: 0.55; }
+.ds-field { display: block; width: 100%; min-height: 40px; border: 1px solid var(--ds-border-strong); border-radius: var(--ds-radius-control); background: #fff; padding: 8px 10px; color: var(--ds-text); font: inherit; font-size: 0.875rem; }
+.ds-field::placeholder { color: #8491a0; }
+.ds-field:focus-visible { border-color: var(--ds-focus); outline: 2px solid rgb(44 110 159 / 22%); outline-offset: 1px; }
+.ds-table { width: 100%; border-collapse: separate; border-spacing: 0; color: var(--ds-text); font-size: 0.8125rem; font-variant-numeric: tabular-nums; }
+.ds-table th { border-bottom: 1px solid var(--ds-border); background: #f2f5f8; color: #46576a; font-size: 0.75rem; font-weight: 650; text-align: left; }
+.ds-table td { border-bottom: 1px solid #e8edf1; }
+.ds-table tbody tr:hover { background: #f7f9fb; }
+.ds-status { display: inline-flex; min-height: 22px; align-items: center; border-radius: 4px; padding: 2px 7px; font-size: 0.75rem; font-weight: 600; line-height: 1.2; }
+.ds-status-success { background: var(--ds-success-bg); color: var(--ds-success); }
+.ds-status-warning { background: var(--ds-warning-bg); color: var(--ds-warning); }
+.ds-status-danger { background: var(--ds-danger-bg); color: var(--ds-danger); }
+.ds-status-info { background: var(--ds-info-bg); color: var(--ds-info); }
+.ds-empty-state { border: 1px dashed var(--ds-border-strong); border-radius: var(--ds-radius-panel); background: #fafbfc; padding: 24px; color: var(--ds-muted); text-align: center; }
+.ds-dialog-backdrop { position: fixed; inset: 0; z-index: 80; display: grid; place-items: center; overflow-y: auto; background: rgb(20 39 58 / 48%); padding: 16px; overscroll-behavior: contain; }
+.ds-dialog { width: min(100%, 640px); max-height: min(90dvh, 820px); overflow: auto; border: 1px solid var(--ds-border); border-radius: var(--ds-radius-dialog); background: #fff; box-shadow: var(--ds-shadow-dialog); }
+.ds-dialog-header { display: flex; align-items: center; justify-content: space-between; gap: 16px; border-bottom: 1px solid var(--ds-border); padding: 16px 20px; color: var(--ds-text); }
+.ds-dialog-content { padding: 20px; }
+.ds-dialog-footer { display: flex; justify-content: flex-end; gap: 8px; border-top: 1px solid var(--ds-border); padding: 12px 20px; }
+.ds-feedback { border: 1px solid transparent; border-radius: var(--ds-radius-control); padding: 10px 12px; font-size: 0.875rem; }
+.ds-feedback-error { border-color: #f2b8b3; background: var(--ds-danger-bg); color: var(--ds-danger); }
+.ds-feedback-success { border-color: #b7dfc7; background: var(--ds-success-bg); color: var(--ds-success); }
+.ds-feedback-info { border-color: #bfd7e8; background: var(--ds-info-bg); color: var(--ds-info); }
+
+.pypos-main { color: var(--ds-text); }
+.pypos-main :is(input:not([type="checkbox"]):not([type="radio"]):not([type="file"]), select, textarea) {
+  min-height: 38px;
+  border-color: var(--ds-border-strong);
+  border-radius: var(--ds-radius-control);
+  color: var(--ds-text);
+  box-shadow: none;
+}
+.pypos-main :is(input:not([type="checkbox"]):not([type="radio"]):not([type="file"]), select, textarea):focus-visible {
+  border-color: var(--ds-focus);
+  outline: 2px solid rgb(44 110 159 / 20%);
+  outline-offset: 1px;
+}
+.pypos-main :is(input, select, textarea) { transition: border-color 140ms ease, box-shadow 140ms ease; }
+.pypos-main button[class*="rounded"]:not([class*="rounded-full"]) { border-radius: var(--ds-radius-control); }
+.pypos-main table:not([data-no-design-system]) { border-collapse: separate; border-spacing: 0; font-variant-numeric: tabular-nums; }
+.pypos-main table:not([data-no-design-system]) thead th { border-bottom: 1px solid var(--ds-border); background-color: #f2f5f8; color: #46576a; font-size: 0.75rem; font-weight: 650; }
+.pypos-main table:not([data-no-design-system]) :is(th, td) { padding: 8px 10px; }
+.pypos-main table:not([data-no-design-system]) tbody td { border-bottom: 1px solid #e8edf1; }
+.pypos-main table:not([data-no-design-system]) tbody tr:hover { background-color: #f7f9fb; }
+.pypos-main button[class*="bg-orange-500"],
+.pypos-main button[class*="bg-orange-600"] { background-color: var(--ds-blue-700); color: #fff; }
+.pypos-main button[class*="bg-orange-500"]:hover:not(:disabled),
+.pypos-main button[class*="bg-orange-600"]:hover:not(:disabled) { background-color: var(--ds-blue-800); }
+.pypos-main button[class*="bg-gradient"] { background-image: none; background-color: var(--ds-blue-700); color: #fff; }
+.pypos-main button[class*="bg-gradient"]:hover:not(:disabled) { background-color: var(--ds-blue-800); }
+.pypos-main [class*="bg-gradient"]:not(button):not([class*="text-white"]) { background-image: none; background-color: var(--ds-surface); }
+.pypos-main [class*="bg-gradient"][class*="text-white"] { background-image: none; background-color: var(--ds-blue-800); }
+.pypos-main [role="dialog"] { overscroll-behavior: contain; }
+.pypos-main [role="dialog"] :is(header, div)[class*="text-white"][class*="bg-"] { background-image: none; background-color: var(--ds-blue-800) !important; }
+.pypos-main [role="dialog"] :is(header, div)[class*="text-white"][class*="bg-gradient"] { background-image: none !important; }
+.pypos-main .fixed.inset-0 > div.bg-white[class*="shadow-2xl"],
+.pypos-main .fixed.inset-0 > div.bg-white[class*="shadow-xl"] { border: 1px solid var(--ds-border); border-radius: var(--ds-radius-dialog); box-shadow: var(--ds-shadow-dialog); }
+.pypos-main button:not(:disabled) { transition: color 140ms ease, background-color 140ms ease, border-color 140ms ease; }
+
+.pypos-sidebar { background: var(--ds-surface); border-right: 1px solid var(--ds-border); box-shadow: none; }
+.pypos-sidebar > div:first-child { background: var(--ds-surface); box-shadow: none; }
+.pypos-sidebar > nav { background: #f7f9fb; }
+.pypos-sidebar .sidebar-submenu { border-left: 1px solid var(--ds-border); border-radius: 0; background: #eef2f6; }
+.pypos-topbar { background: #fff; box-shadow: none; backdrop-filter: none; }
+.pypos-nav-item { isolation: isolate; }
+.pypos-nav-item::before {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  inset: 0;
+  border-radius: inherit;
+  background: #e8f1f8;
+  transform: scaleX(.86) scaleY(.82);
+  opacity: 0;
+  transition: transform 260ms cubic-bezier(.22, 1, .36, 1), opacity 180ms ease;
+}
+.pypos-nav-active::before {
+  transform: scaleX(1) scaleY(1);
+  opacity: 1;
+  animation: pypos-nav-pill-in 420ms cubic-bezier(.22, 1, .36, 1);
+}
+.pypos-nav-inactive:hover::before {
+  background: #eef2f6;
+  transform: scaleX(.96) scaleY(.9);
+  opacity: 1;
+}
+.pypos-mobile-nav {
+  --pypos-mobile-count: 4;
+  --pypos-mobile-index: 0;
+  border-top: 1px solid rgb(255 255 255 / 8%);
+  background: #132a46;
+  box-shadow: 0 -10px 28px rgb(8 24 42 / 18%);
+}
+.pypos-mobile-nav-indicator {
+  position: absolute;
+  z-index: 0;
+  top: 7px;
+  bottom: 7px;
+  left: calc((100% / var(--pypos-mobile-count)) * var(--pypos-mobile-index) + 4px);
+  width: calc((100% / var(--pypos-mobile-count)) - 8px);
+  border-radius: 999px;
+  background: #d4f78a;
+  box-shadow: 0 8px 18px rgb(5 24 44 / 24%);
+  transition: left 430ms cubic-bezier(.22, 1, .36, 1);
+}
+.pypos-mobile-nav > button {
+  position: relative;
+  z-index: 1;
+  height: 52px;
+  color: #d8e3ef;
+  border-radius: 999px;
+  transition: color 220ms ease, transform 220ms cubic-bezier(.22, 1, .36, 1);
+}
+.pypos-mobile-nav > button[class*="text-[#245a81]"] {
+  color: #17334f;
+  background: transparent;
+  transform: translateY(-1px);
+}
+.pypos-mobile-nav > button[class*="text-gray-500"] {
+  background: transparent;
+}
+
+@keyframes pypos-nav-pill-in {
+  0% { transform: translateX(-9px) scaleX(.72) scaleY(.82); opacity: 0; }
+  100% { transform: translateX(0) scaleX(1) scaleY(1); opacity: 1; }
+}
+
+.login-page { isolation: auto; overflow: auto; background: var(--ds-canvas); }
+.login-page::before, .login-page::after { content: none; display: none; }
+.login-card { border-color: var(--ds-border); border-radius: var(--ds-radius-dialog); box-shadow: 0 8px 28px rgb(20 39 58 / 9%); }
+.login-card h2 { color: var(--ds-text); text-wrap: balance; }
+.login-card :is(input:not([type="checkbox"]), select) { min-height: 44px; border-color: var(--ds-border-strong); border-radius: var(--ds-radius-control); background: #fff; }
+.login-card :is(input, select):focus-visible { border-color: var(--ds-focus); outline: 2px solid rgb(44 110 159 / 20%); outline-offset: 1px; }
+.login-card button[type="submit"] { border-radius: var(--ds-radius-control); background: var(--ds-blue-700); box-shadow: none; letter-spacing: 0; text-transform: none; }
+.login-card button[type="submit"]:hover:not(:disabled) { background: var(--ds-blue-800); }
+.login-card .ds-field { padding-left: 40px; }
+
+.login-card button:not([type="submit"]) { transition: color 140ms ease, background-color 140ms ease, border-color 140ms ease; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { scroll-behavior: auto !important; animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; }
+}
+
+@media (max-width: 640px) {
+  .ds-button { min-height: 40px; }
+}

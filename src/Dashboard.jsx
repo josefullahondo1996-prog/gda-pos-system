@@ -970,19 +970,19 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
 
   // Estilos de los botones del Sidebar
   const estiloBotonSimple = (vista) => `
-    group relative w-full min-h-[42px] text-left text-[14px] font-semibold tracking-[0.01em] transition-all duration-300 ease-out flex items-center gap-3 overflow-hidden
+    pypos-nav-item group relative w-full min-h-[42px] text-left text-[14px] font-semibold tracking-[0.01em] transition-colors duration-150 flex items-center gap-3 overflow-hidden
     ${sidebarColapsado ? 'justify-center px-2 mx-1.5 rounded-xl' : 'justify-start px-3 py-2.5 mx-2 rounded-xl'}
     ${vistaActiva === vista
-      ? 'text-[#ff4d00] bg-[#1e1f35] shadow-[0_8px_18px_rgba(15,23,42,0.16)]'
-      : 'text-slate-600 hover:text-[#ff4d00] hover:bg-[#1e1f35] hover:shadow-[0_8px_18px_rgba(15,23,42,0.16)] active:bg-[#1e1f35]'}
+      ? 'pypos-nav-active text-[#245a81] border-l-2 border-[#245a81]'
+      : 'pypos-nav-inactive text-slate-600 hover:text-[#245a81]'}
   `;
 
   const estiloBotonDesplegable = (menuName) => `
-    group relative w-full min-h-[42px] text-left text-[14px] font-semibold tracking-[0.01em] transition-all duration-300 ease-out flex items-center justify-between overflow-hidden
+    pypos-nav-item group relative w-full min-h-[42px] text-left text-[14px] font-semibold tracking-[0.01em] transition-colors duration-150 flex items-center justify-between overflow-hidden
     ${sidebarColapsado ? 'justify-center px-2 mx-1.5 rounded-xl' : 'px-3 py-2.5 mx-2 rounded-xl'}
     ${menuExpandido === menuName
-      ? 'text-[#ff4d00] bg-[#1e1f35] shadow-[0_8px_18px_rgba(15,23,42,0.16)]'
-      : 'text-slate-600 hover:text-[#ff4d00] hover:bg-[#1e1f35] hover:shadow-[0_8px_18px_rgba(15,23,42,0.16)] active:bg-[#1e1f35]'}
+      ? 'pypos-nav-active text-[#245a81] border-l-2 border-[#245a81]'
+      : 'pypos-nav-inactive text-slate-600 hover:text-[#245a81]'}
   `;
 
   const indicadorDesplegable = (menuName) => (
@@ -999,12 +999,25 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
   const estiloSubItem = (vista, ruta) => `
     w-full text-left pl-6 pr-3 py-2 text-[13px] font-medium transition-colors duration-200 flex items-center gap-2 rounded-none mx-0 border-0
     ${(ruta ? location.pathname === ruta || (ruta === '/informes/stock' && location.pathname === '/informes-operativos') : vistaActiva === vista)
-      ? (vista === 'pos' ? 'text-white font-bold bg-[#ff4d00]/20 border-l-2 border-[#ff4d00]' : 'text-[#ff4d00] font-semibold bg-white/5')
-      : 'text-slate-400 hover:text-[#ff4d00] hover:bg-[#ff4d00]/10'}
+      ? 'text-[#245a81] font-semibold bg-white border-l-2 border-[#245a81]'
+      : 'text-slate-600 hover:text-[#245a81] hover:bg-white/70'}
   `;
 
+  const mobileNavKeys = esRepartidorHabilitado
+    ? ['repartidor_entregas', 'logout']
+    : [
+        puedeVerVista('pos') ? 'pos' : null,
+        puedeVerVista('catalogo') ? 'catalogo' : null,
+        puedeVerVista('cajas') ? 'cajas' : null,
+        puedeVerVista('clientes') ? 'clientes' : null,
+        puedeVerVista('ganancias_perdidas') ? 'ganancias_perdidas' : null,
+      ].filter(Boolean);
+  const mobileNavActiveKey = esRepartidorHabilitado
+    ? (vistaActiva === 'repartidor_entregas' ? 'repartidor_entregas' : 'logout')
+    : (mobileNavKeys.includes(vistaActiva) ? vistaActiva : mobileNavKeys[0]);
+
   return (
-    <div className="flex h-screen bg-[var(--ui-canvas)] font-sans flex-col md:flex-row overflow-hidden">
+    <div className="pypos-shell flex h-screen bg-[var(--ui-canvas)] font-sans flex-col md:flex-row overflow-hidden">
 
       {cargandoNavegacion && (
         <div className="gda-navigation-progress" role="progressbar" aria-label="Cargando módulo" aria-valuetext="Cargando módulo" />
@@ -1020,7 +1033,7 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
 
       {!posPantallaCompleta && menuMovilAbierto && (
         <aside className="fixed inset-y-0 left-0 z-30 w-[79vw] max-w-[570px] bg-white shadow-2xl flex flex-col md:hidden overflow-hidden">
-          <div className="bg-[#fff0e9] px-8 pt-8 pb-7 flex items-center gap-5 shrink-0">
+          <div className="bg-[#eaf3fa] px-8 pt-8 pb-7 flex items-center gap-5 shrink-0">
             <div className="w-[74px] h-[74px] rounded-full bg-[#f46b21] text-white flex items-center justify-center text-3xl font-bold">
               {(perfilUsuario?.empresas?.nombre || 'G').charAt(0).toUpperCase()}
             </div>
@@ -1169,14 +1182,14 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
       {/* MENÚ LATERAL IZQUIERDO (SIDEBAR COMPLETO)  */}
       {/* ========================================== */}
       {!posPantallaCompleta && (
-        <aside className={`
+        <aside className={`pypos-sidebar
           ${sidebarColapsado ? 'w-[78px]' : 'w-[250px]'}
           transition-[width,transform] duration-300 ease-out bg-white text-slate-800 flex flex-col h-full shadow-[4px_0_12px_rgba(15,23,42,0.06)] z-30
           fixed inset-y-0 left-0 transform ${menuMovilAbierto ? 'translate-x-0' : '-translate-x-full'}
           hidden md:relative md:translate-x-0 md:flex
         `}>
           {/* Logo Superior con botón de cerrar para móvil */}
-          <div className="relative z-10 h-16 flex items-center justify-between px-4 bg-gradient-to-r from-white via-slate-50/50 to-white shadow-[0_2px_6px_rgba(15,23,42,0.08)] backdrop-blur-sm overflow-hidden">
+          <div className="relative z-10 h-16 flex items-center justify-between px-4 bg-white border-b border-slate-200 overflow-hidden">
             <div className="flex-1 flex justify-center">
               <LogoPyPos variant={sidebarColapsado ? 'icon' : 'full'} size={sidebarColapsado ? 42 : 46} />
             </div>
@@ -1189,7 +1202,7 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
           </div>
 
           {/* Lista de Navegación */}
-          <nav className="scrollbar-none flex-1 overflow-y-auto overflow-x-hidden py-3 px-1 flex flex-col bg-gradient-to-b from-[#f8fafc] to-[#f3f5f8] gap-0.5">
+          <nav className="scrollbar-none flex-1 overflow-y-auto overflow-x-hidden py-3 px-1 flex flex-col bg-[#f7f9fb] gap-0.5">
             {!soloPOS && puedeVerVista('ot') && (
                 <PermittedLink to="/" onClick={() => irA('inicio', '/')} className={estiloBotonSimple('inicio')} title={t('home')}>
                   <LayoutDashboard size={18} strokeWidth={2} /> {!sidebarColapsado && t('home')}
@@ -1207,7 +1220,7 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
                   )}
                 </button>
                 {menuRenderizado === 'usuarios' && !sidebarColapsado && (
-                  <div aria-hidden={menuExpandido !== 'usuarios'} inert={menuExpandido !== 'usuarios'} style={estiloSubmenu('usuarios')} className="sidebar-submenu mx-1.5 flex flex-col rounded-b bg-[#1e1f35] py-1.5">
+                  <div aria-hidden={menuExpandido !== 'usuarios'} inert={menuExpandido !== 'usuarios'} style={estiloSubmenu('usuarios')} className="sidebar-submenu mx-1.5 flex flex-col py-1.5">
                     {puedeVerVista('usuarios') && (
                       <PermittedLink to="/usuarios" onClick={() => irA('usuarios', '/usuarios')} className={estiloSubItem('usuarios')}>{t('users')}</PermittedLink>
                     )}
@@ -1513,7 +1526,7 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
 
         {/* Header Superior */}
         {!posPantallaCompleta && (
-          <header className="relative z-50 h-14 md:h-16 bg-gradient-to-r from-white via-slate-50/50 to-white shadow-[0_2px_8px_rgba(15,23,42,0.08)] flex items-center justify-between px-4 md:px-6 border-b border-slate-200/60 backdrop-blur-sm">
+          <header className="pypos-topbar relative z-50 h-14 md:h-16 flex items-center justify-between px-4 md:px-6 border-b border-slate-200">
             <div className="flex items-center gap-3 flex-1">
               {/* BOTÓN HAMBURGUESA PARA MÓVIL */}
               <button
@@ -1527,7 +1540,7 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
               <button
                 onClick={() => setSidebarColapsado(!sidebarColapsado)}
                 title={sidebarColapsado ? 'Expandir menú' : 'Colapsar menú'}
-                className="hidden md:flex items-center justify-center w-10 h-10 rounded-xl border border-slate-200 bg-gradient-to-br from-white to-slate-50 text-slate-700 shadow-sm hover:bg-gradient-to-br hover:from-slate-50 hover:to-white hover:text-[#f59e0b] hover:shadow-[0_6px_16px_rgba(15,23,42,0.08)] transition-all duration-300"
+                className="hidden md:flex items-center justify-center w-9 h-9 rounded-md border border-slate-300 bg-white text-slate-700 hover:bg-slate-50 hover:text-[#245a81] transition-colors"
                 aria-label={sidebarColapsado ? 'Expandir menú' : 'Colapsar menú'}
               >
                 <span className="relative flex flex-col items-center justify-center w-5 h-4">
@@ -1546,7 +1559,7 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
             <div className="hidden md:flex items-center gap-2 lg:gap-3">
                 <LanguageSelector compact />
               <div className="relative">
-                <button type="button" onClick={() => { setMenuAlertasAbierto((abierto) => !abierto); setMenuAccionesAbierto(false); setMenuCuentaAbierto(false); }} className="relative flex h-9 w-9 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-700 shadow-sm transition hover:border-orange-200 hover:text-orange-600" aria-label={`Alertas de inventario: ${alertasInventario.length}`} aria-expanded={menuAlertasAbierto} aria-haspopup="menu">
+                <button type="button" onClick={() => { setMenuAlertasAbierto((abierto) => !abierto); setMenuAccionesAbierto(false); setMenuCuentaAbierto(false); }} className="relative flex h-9 w-9 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-700 shadow-sm transition hover:border-sky-200 hover:text-[#245a81]" aria-label={`Alertas de inventario: ${alertasInventario.length}`} aria-expanded={menuAlertasAbierto} aria-haspopup="menu">
                   <Bell size={18} />
                   {alertasInventario.length > 0 && <span className="absolute -right-1 -top-1 min-w-4 rounded-full bg-red-600 px-1 text-center text-[10px] font-bold leading-4 text-white shadow">{alertasInventario.length > 99 ? '99+' : alertasInventario.length}</span>}
                 </button>
@@ -1576,7 +1589,7 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
                 <button
                   type="button"
                   onClick={() => setMenuAccionesAbierto((abierto) => !abierto)}
-                  className="flex items-center justify-center w-9 h-9 rounded-xl border border-slate-200 bg-white text-slate-700 shadow-sm hover:border-orange-200 hover:text-orange-500 transition-all duration-200"
+                  className="flex items-center justify-center w-9 h-9 rounded-md border border-slate-200 bg-white text-slate-700 hover:border-sky-200 hover:text-[#245a81] transition-colors"
                   aria-label="Acciones rápidas"
                   aria-expanded={menuAccionesAbierto}
                   aria-haspopup="menu"
@@ -1600,12 +1613,12 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
                   </div>
                 )}
               </div>
-              <button className="flex items-center justify-center w-9 h-9 rounded-xl border border-slate-200 bg-white text-slate-700 shadow-sm hover:border-orange-200 hover:text-orange-500 transition-all duration-200">
+              <button className="flex items-center justify-center w-9 h-9 rounded-md border border-slate-200 bg-white text-slate-700 hover:border-sky-200 hover:text-[#245a81] transition-colors">
                 <ClipboardList size={17} />
               </button>
               <button
                 onClick={() => irA('pos', '/pos')}
-                className="flex items-center gap-2 bg-gradient-to-r from-[#f59e0b] to-[#f97316] text-white px-4 py-2.5 rounded-xl font-bold shadow-[0_10px_20px_rgba(245,158,11,0.28)] hover:shadow-[0_12px_22px_rgba(245,158,11,0.35)] transition-all duration-200"
+                className="flex items-center gap-2 bg-[#245a81] text-white px-4 py-2.5 rounded-md font-semibold hover:bg-[#204b6d] transition-colors"
               >
                 <ShoppingCart size={17} />
                 <span className="text-sm">Punto de venta</span>
@@ -1618,11 +1631,11 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
                 <button
                   type="button"
                   onClick={() => setMenuCuentaAbierto((abierto) => !abierto)}
-                  className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-bold text-slate-700 shadow-sm hover:border-orange-200 hover:text-orange-500 transition-all duration-200"
+                  className="flex items-center gap-2 rounded-md border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 hover:border-sky-200 hover:text-[#245a81] transition-colors"
                   aria-expanded={menuCuentaAbierto}
                   aria-haspopup="menu"
                 >
-                  <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-gradient-to-br from-[#f59e0b] to-[#f97316] text-white text-[10px] font-black shadow-[0_6px_12px_rgba(245,158,11,0.25)]">
+                  <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-[#e96b25] text-white text-[10px] font-bold">
                     {(perfilUsuario?.empresas?.nombre || 'N').charAt(0).toUpperCase()}
                   </span>
                   <span>{perfilUsuario?.empresas?.nombre || 'Mi Negocio'}</span>
@@ -1670,7 +1683,7 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
         )}
 
         {/* Inyección de los Módulos Activos */}
-        <main className={`flex-1 bg-[var(--ui-canvas)] ${posPantallaCompleta ? 'overflow-hidden pb-0' : restaurantePosPantallaCompleta ? 'min-h-0 overflow-hidden pb-16 md:pb-0' : 'overflow-y-auto pb-16 md:pb-0'} ${posPantallaCompleta || restaurantePosPantallaCompleta ? '' : 'p-3 md:p-6'}`}>
+        <main className={`pypos-main flex-1 bg-[var(--ui-canvas)] ${posPantallaCompleta ? 'overflow-hidden pb-0' : restaurantePosPantallaCompleta ? 'min-h-0 overflow-hidden pb-16 md:pb-0' : 'overflow-y-auto pb-16 md:pb-0'} ${posPantallaCompleta || restaurantePosPantallaCompleta ? '' : 'p-3 md:p-6'}`}>
           <div key={`${vistaActiva}-${refreshKey}`} className={restaurantePosPantallaCompleta ? 'h-full min-h-0' : undefined}>
             <Suspense fallback={<div className="p-10 text-center text-gray-500">{t('loading')}</div>}>
               {renderizarVista()}
@@ -1680,12 +1693,23 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
 
         {/* BARRA DE NAVEGACIÓN INFERIOR PARA MÓVIL */}
         {!posPantallaCompleta && (
-          <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-gray-300 h-16 flex items-center justify-around px-1 z-40">
+          <nav
+            className="pypos-mobile-nav md:hidden fixed bottom-0 left-0 right-0 h-16 flex items-center justify-around px-1 z-40"
+            style={{
+              '--pypos-mobile-count': esRepartidorHabilitado
+                ? 2
+                : Math.max(1, mobileNavKeys.length),
+              '--pypos-mobile-index': esRepartidorHabilitado
+                ? (vistaActiva === 'repartidor_entregas' ? 0 : 1)
+                : Math.max(0, mobileNavKeys.indexOf(mobileNavActiveKey)),
+            }}
+          >
+            <span className="pypos-mobile-nav-indicator" aria-hidden="true" />
             {esRepartidorHabilitado ? <>
               <button
                 type="button"
                 onClick={() => irA('repartidor_entregas', '/repartidor/entregas')}
-                className={`flex flex-col items-center justify-center gap-0.5 flex-1 py-2 px-2 rounded-2xl transition-all ${vistaActiva === 'repartidor_entregas' ? 'bg-[#ffebe5] text-orange-600' : 'text-gray-500 hover:text-gray-700'}`}
+                className={`flex flex-col items-center justify-center gap-0.5 flex-1 py-2 px-2 rounded-lg transition-colors ${vistaActiva === 'repartidor_entregas' ? 'bg-[#e8f1f8] text-[#245a81]' : 'text-gray-500 hover:text-gray-700'}`}
                 title="Mis pedidos"
               >
                 <Truck size={22} />
@@ -1705,9 +1729,9 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
             {/* VENDER */}
             {puedeVerVista('pos') && <button
               onClick={() => irA('pos', '/pos')}
-              className={`flex flex-col items-center justify-center gap-0.5 flex-1 py-2 px-2 rounded-2xl transition-all ${
+                className={`flex flex-col items-center justify-center gap-0.5 flex-1 py-2 px-2 rounded-lg transition-colors ${
                 vistaActiva === 'pos'
-                  ? 'bg-[#ffebe5] text-orange-600'
+                  ? 'bg-[#e8f1f8] text-[#245a81]'
                   : 'text-gray-500 hover:text-gray-700'
               }`}
               title="Vender"
@@ -1719,9 +1743,9 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
             {/* PRODUCTOS */}
             {puedeVerVista('catalogo') && <button
               onClick={() => irA('catalogo', '/catalogo')}
-              className={`flex flex-col items-center justify-center gap-0.5 flex-1 py-2 px-2 rounded-2xl transition-all ${
+                className={`flex flex-col items-center justify-center gap-0.5 flex-1 py-2 px-2 rounded-lg transition-colors ${
                 vistaActiva === 'catalogo'
-                  ? 'bg-[#ffebe5] text-orange-600'
+                  ? 'bg-[#e8f1f8] text-[#245a81]'
                   : 'text-gray-500 hover:text-gray-700'
               }`}
               title="Productos"
@@ -1733,9 +1757,9 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
             {/* CAJA */}
             {puedeVerVista('cajas') && <button
               onClick={() => irA('cajas', '/cajas')}
-              className={`flex flex-col items-center justify-center gap-0.5 flex-1 py-2 px-2 rounded-2xl transition-all ${
+                className={`flex flex-col items-center justify-center gap-0.5 flex-1 py-2 px-2 rounded-lg transition-colors ${
                 vistaActiva === 'cajas'
-                  ? 'bg-[#ffebe5] text-orange-600'
+                  ? 'bg-[#e8f1f8] text-[#245a81]'
                   : 'text-gray-500 hover:text-gray-700'
               }`}
               title="Caja"
@@ -1747,9 +1771,9 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
             {/* CLIENTES */}
             {puedeVerVista('clientes') && <button
               onClick={() => irA('clientes', '/clientes')}
-              className={`flex flex-col items-center justify-center gap-0.5 flex-1 py-2 px-2 rounded-2xl transition-all ${
+                className={`flex flex-col items-center justify-center gap-0.5 flex-1 py-2 px-2 rounded-lg transition-colors ${
                 vistaActiva === 'clientes'
-                  ? 'bg-[#ffebe5] text-orange-600'
+                  ? 'bg-[#e8f1f8] text-[#245a81]'
                   : 'text-gray-500 hover:text-gray-700'
               }`}
               title="Clientes"
@@ -1761,9 +1785,9 @@ export default function Dashboard({ session, perfilUsuario, initialView = 'inici
             {/* REPORTES */}
             {puedeVerVista('ganancias_perdidas') && <button
               onClick={() => irA('ganancias_perdidas', '/ganancias_perdidas')}
-              className={`flex flex-col items-center justify-center gap-0.5 flex-1 py-2 px-2 rounded-2xl transition-all ${
+                className={`flex flex-col items-center justify-center gap-0.5 flex-1 py-2 px-2 rounded-lg transition-colors ${
                 vistaActiva === 'ganancias_perdidas'
-                  ? 'bg-[#ffebe5] text-orange-600'
+                  ? 'bg-[#e8f1f8] text-[#245a81]'
                   : 'text-gray-500 hover:text-gray-700'
               }`}
               title="Reportes"

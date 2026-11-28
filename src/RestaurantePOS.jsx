@@ -19,7 +19,7 @@ const PESTANAS = [
   { label: 'Pedidos web', icon: Bell, path: null },
   { label: 'Comanda', icon: ShoppingBag, path: '/restaurante/pos' },
   { label: 'Cocina', icon: ChefHat, path: '/restaurante/cocina-pro' },
-  { label: 'Cuenta', icon: CircleDollarSign, path: '/restaurante/mapa' },
+  { label: 'Cuenta', icon: CircleDollarSign, path: null },
   { label: 'Turno', icon: Clock3, path: '/pos' },
 ];
 
@@ -95,9 +95,12 @@ export default function RestaurantePOS() {
   const [pedidosAbiertos, setPedidosAbiertos] = useState([]);
   const [mesaId, setMesaId] = useState('');
   const [tipoDestino, setTipoDestino] = useState('');
-  const [modalDestino, setModalDestino] = useState(false);
+  const [modalDestino, setModalDestino] = useState(true);
   const [filtroMesas, setFiltroMesas] = useState('todas');
   const [busquedaMesa, setBusquedaMesa] = useState('');
+  const [filtroCuenta, setFiltroCuenta] = useState('todas');
+  const [busquedaCuenta, setBusquedaCuenta] = useState('');
+  const [cuentaSeleccionadaId, setCuentaSeleccionadaId] = useState('');
   const [vistaProductos, setVistaProductos] = useState('menu');
   const [nombreCliente, setNombreCliente] = useState('');
   const [telefonoCliente, setTelefonoCliente] = useState('');
@@ -205,7 +208,7 @@ export default function RestaurantePOS() {
       setError('');
       const consultas = [
         supabase.from('catalogos_qr_mesas').select('id,nombre,public_token,activo').eq('empresa_id', empresaId).eq('catalogo_id', catalogo.id).eq('activo', true).order('nombre'),
-        supabase.from('pedidos').select('id,mesa_id,mesa_nombre,estado,total,creado_en').eq('empresa_id', empresaId).eq('origen', 'catalogo_qr_mesa').neq('estado', 'cancelado').order('creado_en', { ascending: false }).limit(250),
+        supabase.from('pedidos').select('id,numero_pedido,mesa_id,mesa_nombre,estado,total,creado_en,items,nota').eq('empresa_id', empresaId).eq('origen', 'catalogo_qr_mesa').neq('estado', 'cancelado').order('creado_en', { ascending: false }).limit(250),
         supabase.from('pedidos_qr_ventas').select('pedido_id').eq('empresa_id', empresaId),
         supabase.from('productos').select('id,nombre,codigo,descripcion,precio_venta,stock_actual,imagen_url,categoria,marca,activo').eq('empresa_id', empresaId).eq('activo', true).order('nombre').limit(1000),
         supabase.from('pizzas').select('id,producto_id,activo,destacado,visible_catalogo,permitir_mitad_mitad,max_sabores').eq('empresa_id', empresaId),
@@ -304,6 +307,22 @@ export default function RestaurantePOS() {
     });
     return agrupados;
   }, [pedidosAbiertos]);
+  const cuentasMesa = useMemo(() => mesas.flatMap((mesa) => {
+    const pedidos = pedidosPorMesa.get(mesa.id) || pedidosPorMesa.get(String(mesa.id)) || [];
+    if (!pedidos.length) return [];
+    return [{
+      id: `mesa:${mesa.id}`,
+      mesa,
+      pedidos,
+      total: pedidos.reduce((suma, pedido) => suma + Number(pedido.total || 0), 0),
+      lista: pedidos.every((pedido) => pedido.estado === 'completado'),
+      creadoEn: pedidos.reduce((ultimo, pedido) => Math.max(ultimo, new Date(pedido.creado_en).getTime() || 0), 0),
+    }];
+  }).sort((a, b) => b.creadoEn - a.creadoEn), [mesas, pedidosPorMesa]);
+  const cuentasFiltradas = cuentasMesa.filter((cuenta) => (filtroCuenta === 'todas' || cuenta.lista)
+    && `${cuenta.mesa.nombre} ${cuenta.pedidos.map((pedido) => pedido.numero_pedido || '').join(' ')}`
+      .toLocaleLowerCase('es').includes(busquedaCuenta.trim().toLocaleLowerCase('es')));
+  const cuentaSeleccionada = cuentasMesa.find((cuenta) => cuenta.id === cuentaSeleccionadaId) || null;
   const mesasFiltradas = mesas.filter((mesa) => {
     const ocupada = pedidosPorMesa.has(mesa.id);
     return (filtroMesas === 'todas' || (filtroMesas === 'ocupadas' ? ocupada : !ocupada))
@@ -421,10 +440,33 @@ export default function RestaurantePOS() {
       <div className="flex shrink-0 items-center gap-3"><span className="hidden text-slate-300 sm:inline">{empresa?.nombre_usuario || empresa?.usuario_nombre || 'Operación'}</span><span className="hidden font-mono text-emerald-300 sm:inline">{horaPOS.toLocaleTimeString('es-PY')}</span><button type="button" onClick={abrirPantallaCompleta} className="inline-flex items-center gap-1.5 rounded bg-slate-800 px-2.5 py-1.5 font-bold hover:bg-slate-700"><Maximize2 size={13}/>Pantalla completa</button></div>
     </header>
     <nav aria-label="Operación de restaurante" className="grid shrink-0 grid-cols-3 gap-1 border-b border-white/10 bg-[#111b2d] px-2 py-1 sm:grid-cols-4 lg:grid-cols-7">
-      {PESTANAS.map(({ label, icon: Icon, path }) => { const activa = label === 'Pedidos web' ? vistaPOS === 'pedidos-web' : vistaPOS === 'comanda' && label === 'Comanda'; const pendientesWeb = pedidosWeb.filter((pedido) => pedido.estado !== 'cancelado' && pedido.delivery_estado === 'recibido').length; return <button key={label} type="button" onClick={() => { if (label === 'Pedidos web') setVistaPOS('pedidos-web'); else if (label === 'Comanda') setVistaPOS('comanda'); else if (path) navigate(path); }} aria-current={activa ? 'page' : undefined} className={`relative flex items-center justify-center gap-1.5 rounded-md px-2 py-2.5 text-xs font-bold transition sm:text-sm ${activa ? 'bg-orange-600 text-white shadow-sm' : 'text-slate-300 hover:bg-white/10 hover:text-white'}`}><Icon size={16}/><span>{label}</span>{label === 'Comanda' && vistaPOS === 'comanda' && <span className="rounded-full bg-white/20 px-1.5">{carrito.length}</span>}{label === 'Pedidos web' && pendientesWeb > 0 && <span className="absolute -right-1 -top-1 grid h-5 min-w-5 place-items-center rounded-full bg-rose-600 px-1 text-[10px] text-white">{pendientesWeb > 99 ? '99+' : pendientesWeb}</span>}</button>; })}
+      {PESTANAS.map(({ label, icon: Icon, path }) => { const activa = label === 'Pedidos web' ? vistaPOS === 'pedidos-web' : label === 'Cuenta' ? vistaPOS === 'cuenta' : vistaPOS === 'comanda' && label === 'Comanda'; const pendientesWeb = pedidosWeb.filter((pedido) => pedido.estado !== 'cancelado' && pedido.delivery_estado === 'recibido').length; return <button key={label} type="button" onClick={() => { if (label === 'Pedidos web') setVistaPOS('pedidos-web'); else if (label === 'Cuenta') setVistaPOS('cuenta'); else if (label === 'Comanda') setVistaPOS('comanda'); else if (path) navigate(path); }} aria-current={activa ? 'page' : undefined} className={`relative flex items-center justify-center gap-1.5 rounded-md px-2 py-2.5 text-xs font-bold transition sm:text-sm ${activa ? 'bg-orange-600 text-white shadow-sm' : 'text-slate-300 hover:bg-white/10 hover:text-white'}`}><Icon size={16}/><span>{label}</span>{label === 'Comanda' && vistaPOS === 'comanda' && <span className="rounded-full bg-white/20 px-1.5">{carrito.length}</span>}{label === 'Pedidos web' && pendientesWeb > 0 && <span className="absolute -right-1 -top-1 grid h-5 min-w-5 place-items-center rounded-full bg-rose-600 px-1 text-[10px] text-white">{pendientesWeb > 99 ? '99+' : pendientesWeb}</span>}</button>; })}
     </nav>
 
-    {vistaPOS === 'pedidos-web' ? <section className="min-h-0 flex-1 space-y-4 overflow-y-auto bg-slate-100 p-4 text-slate-900">
+    {vistaPOS === 'cuenta' ? <section className="grid min-h-0 flex-1 grid-cols-1 overflow-hidden bg-[#111b2d] text-slate-100 lg:grid-cols-[300px_minmax(0,1fr)]">
+      <aside className="flex min-h-0 flex-col border-b border-white/10 bg-slate-950/35 lg:border-b-0 lg:border-r">
+        <div className="border-b border-white/10 p-3"><h1 className="text-sm font-bold">Cuentas <span className="ml-1 rounded-full bg-white/10 px-2 py-0.5 text-xs">{cuentasFiltradas.length}</span></h1>
+          <label className="mt-3 block"><span className="sr-only">Buscar mesa o número de pedido</span><input value={busquedaCuenta} onChange={(event) => setBusquedaCuenta(event.target.value)} placeholder="Buscar mesa o pedido…" className="w-full rounded-md border border-white/15 bg-slate-900 px-3 py-2 text-sm text-white placeholder:text-slate-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-500"/></label>
+          <div role="group" aria-label="Filtrar cuentas" className="mt-2 grid grid-cols-2 gap-1 rounded-md bg-slate-900 p-1"><button type="button" aria-pressed={filtroCuenta === 'todas'} onClick={() => setFiltroCuenta('todas')} className={`rounded px-2 py-1.5 text-xs font-semibold ${filtroCuenta === 'todas' ? 'bg-orange-600 text-white' : 'text-slate-300 hover:bg-white/10'}`}>Todas</button><button type="button" aria-pressed={filtroCuenta === 'listas'} onClick={() => setFiltroCuenta('listas')} className={`rounded px-2 py-1.5 text-xs font-semibold ${filtroCuenta === 'listas' ? 'bg-orange-600 text-white' : 'text-slate-300 hover:bg-white/10'}`}>Listas para cobrar</button></div>
+        </div>
+        <div className="min-h-0 flex-1 space-y-2 overflow-y-auto p-2" aria-live="polite">
+          {cuentasFiltradas.map((cuenta) => <button key={cuenta.id} type="button" aria-pressed={cuentaSeleccionadaId === cuenta.id} onClick={() => setCuentaSeleccionadaId(cuenta.id)} className={`w-full rounded-lg border-l-4 bg-white p-3 text-left text-slate-900 transition-colors hover:bg-orange-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-500 ${cuentaSeleccionadaId === cuenta.id ? 'border-orange-500 ring-1 ring-orange-200' : 'border-slate-300'}`}>
+            <span className="flex items-center justify-between gap-2"><strong className="truncate text-sm">{cuenta.mesa.nombre}</strong><strong className="shrink-0 text-sm tabular-nums text-emerald-700">{dinero(cuenta.total)}</strong></span>
+            <span className="mt-1 flex items-center justify-between gap-2 text-xs text-slate-500"><span>{cuenta.pedidos.length} {cuenta.pedidos.length === 1 ? 'comanda' : 'comandas'}</span><span>{Math.max(0, Math.floor((Date.now() - cuenta.creadoEn) / 60000))} min</span></span>
+            <span className={`mt-2 inline-flex rounded px-2 py-0.5 text-[11px] font-semibold ${cuenta.lista ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'}`}>{cuenta.lista ? 'Lista para cobrar' : 'En preparación'}</span>
+          </button>)}
+          {!cuentasFiltradas.length && <p className="rounded-lg border border-dashed border-white/15 p-5 text-center text-sm text-slate-400">{cargando ? 'Cargando cuentas…' : 'No hay cuentas que coincidan con la búsqueda.'}</p>}
+        </div>
+      </aside>
+      <section className="min-h-0 overflow-y-auto p-4 md:p-6">
+        {cuentaSeleccionada ? <div className="mx-auto max-w-4xl space-y-4">
+          <header className="flex flex-wrap items-start justify-between gap-3"><div><h2 className="text-xl font-bold text-white">{cuentaSeleccionada.mesa.nombre}</h2><p className="mt-1 text-sm text-slate-400">{cuentaSeleccionada.pedidos.length} {cuentaSeleccionada.pedidos.length === 1 ? 'comanda abierta' : 'comandas abiertas'}</p></div><span className="rounded-md bg-white/10 px-3 py-1.5 text-sm font-semibold text-slate-200">{cuentaSeleccionada.lista ? 'Lista para cobrar' : 'En preparación'}</span></header>
+          {cuentaSeleccionada.pedidos.map((pedido) => <article key={pedido.id} className="rounded-lg border border-slate-200 bg-white p-4 text-slate-900"><div className="flex flex-wrap items-start justify-between gap-2"><div><p className="text-xs font-semibold text-slate-500">{pedido.numero_pedido || `Pedido ${String(pedido.id).slice(0, 8)}`}</p><p className="mt-1 text-sm font-semibold">{new Date(pedido.creado_en).toLocaleString('es-PY')}</p></div><span className={`rounded px-2 py-1 text-xs font-semibold ${pedido.estado === 'completado' ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'}`}>{pedido.estado === 'completado' ? 'Lista' : 'En preparación'}</span></div>{Array.isArray(pedido.items) && pedido.items.length > 0 && <ul className="mt-3 divide-y divide-slate-100 border-y border-slate-100">{pedido.items.map((item, index) => <li key={`${pedido.id}-${index}`} className="flex justify-between gap-3 py-2 text-sm"><span><b>{item.cantidad}×</b> {item.nombre}</span><span className="shrink-0 tabular-nums text-slate-600">{dinero(item.subtotal ?? Number(item.precio_unitario || 0) * Number(item.cantidad || 0))}</span></li>)}</ul>}{pedido.nota && <p className="mt-3 rounded bg-amber-50 p-2 text-sm text-amber-900">Nota: {pedido.nota}</p>}<p className="mt-3 flex justify-between border-t border-slate-100 pt-3 text-sm"><span>Total de la comanda</span><strong className="tabular-nums">{dinero(pedido.total)}</strong></p></article>)}
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg bg-slate-950/50 p-4"><div><p className="text-sm text-slate-300">Total de la cuenta</p><p className="mt-1 text-2xl font-bold tabular-nums text-white">{dinero(cuentaSeleccionada.total)}</p></div><div className="flex flex-wrap gap-2"><button type="button" onClick={() => { elegirDestino('mesa', cuentaSeleccionada.mesa); setVistaPOS('comanda'); }} className="rounded-md border border-white/20 px-3 py-2 text-sm font-semibold text-white hover:bg-white/10">Añadir comanda</button><button type="button" disabled={!cuentaSeleccionada.lista} onClick={() => navigate('/pos', { state: { pedidoRestaurante: { ids: cuentaSeleccionada.pedidos.map((pedido) => pedido.id) } } })} className="inline-flex items-center gap-2 rounded-md bg-orange-600 px-4 py-2 text-sm font-bold text-white hover:bg-orange-700 disabled:cursor-not-allowed disabled:opacity-45"><CircleDollarSign size={16}/>Cobrar cuenta</button></div></div>
+          {!cuentaSeleccionada.lista && <p className="text-sm text-slate-400">El cobro se habilita cuando cocina marque todas las comandas como listas.</p>}
+        </div> : <div className="grid h-full min-h-64 place-items-center text-center text-slate-400"><div><CircleDollarSign className="mx-auto mb-3 text-slate-500" size={32}/><p className="font-semibold text-slate-200">Elegí una cuenta de la lista</p><p className="mt-1 text-sm">Acá podés revisar el detalle y cobrar cuando esté lista.</p></div></div>}
+      </section>
+    </section> : vistaPOS === 'pedidos-web' ? <section className="min-h-0 flex-1 space-y-4 overflow-y-auto bg-slate-100 p-4 text-slate-900">
       <div className="flex flex-wrap items-center justify-between gap-3"><div><h1 className="text-xl font-black text-slate-900">Pedidos web · Comanda</h1><p className="text-sm text-slate-600">Solicitudes para llevar recibidas desde la carta online de este negocio.</p></div><button type="button" onClick={cargarPedidosWeb} disabled={cargandoPedidosWeb} className="inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-bold"><LoaderCircle size={15} className={cargandoPedidosWeb ? 'animate-spin' : ''}/>Actualizar</button></div>
       {errorPedidosWeb && <p role="alert" className="rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm text-rose-800">{errorPedidosWeb}</p>}
       <div className="grid gap-3 sm:grid-cols-3"><div className="rounded-xl border border-amber-200 bg-amber-50 p-4"><p className="text-xs font-bold uppercase text-amber-700">Esperando respuesta</p><p className="mt-1 text-2xl font-black text-amber-900">{pedidosWeb.filter((p) => p.estado !== 'cancelado' && p.delivery_estado === 'recibido').length}</p></div><div className="rounded-xl border border-blue-200 bg-blue-50 p-4"><p className="text-xs font-bold uppercase text-blue-700">Aceptados / en cocina</p><p className="mt-1 text-2xl font-black text-blue-900">{pedidosWeb.filter((p) => p.estado !== 'cancelado' && ['preparando', 'listo'].includes(p.delivery_estado)).length}</p></div><div className="rounded-xl border border-rose-200 bg-rose-50 p-4"><p className="text-xs font-bold uppercase text-rose-700">Rechazados</p><p className="mt-1 text-2xl font-black text-rose-900">{pedidosWeb.filter((p) => p.estado === 'cancelado' || p.delivery_estado === 'cancelado').length}</p></div></div>
